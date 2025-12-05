@@ -468,6 +468,42 @@ class CodeForgeController implements DeltaTextInputClient {
   void updateEditingValue(TextEditingValue value) {}
   @override
   void updateFloatingCursor(RawFloatingCursorPoint point) {}
+  
+  /// Replace a range of text with new text.
+  /// Used for clipboard operations and text manipulation.
+  void replaceRange(int start, int end, String replacement) {
+    _flushBuffer();
+    final safeStart = start.clamp(0, _rope.length);
+    final safeEnd = end.clamp(safeStart, _rope.length);
+    
+    if (safeStart < safeEnd) {
+      _rope.delete(safeStart, safeEnd - safeStart);
+    }
+    if (replacement.isNotEmpty) {
+      _rope.insert(safeStart, replacement);
+    }
+    _currentVersion++;
+    _selection = TextSelection.collapsed(offset: safeStart + replacement.length);
+    dirtyLine = _rope.getLineAtOffset(safeStart);
+    dirtyRegion = TextRange(start: safeStart, end: safeStart + replacement.length);
+    
+    if (connection != null && connection!.attached) {
+      _lastSentText = text;
+      _lastSentSelection = _selection;
+      connection!.setEditingState(TextEditingValue(
+        text: _lastSentText!,
+        selection: _selection,
+      ));
+    }
+    
+    notifyListeners();
+  }
+  
+  /// Insert text at the current cursor position (or replace selection).
+  void insertAtCursor(String textToInsert) {
+    final sel = selection;
+    replaceRange(sel.start, sel.end, textToInsert);
+  }
 
   void dispose() {
     _listeners.clear();

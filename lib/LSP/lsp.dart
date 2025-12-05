@@ -34,6 +34,10 @@ sealed class LspConfig {
       StreamController.broadcast();
   int _nextId = 1;
   final _openDocuments = <String, int>{};
+  
+  /// Stream of responses from the LSP server.
+  /// Use this to listen for notifications like diagnostics.
+  Stream<Map<String, dynamic>> get responses => _responseController.stream;
 
   LspConfig({
     required this.filePath,
@@ -287,8 +291,6 @@ sealed class LspConfig {
 
     return _decodeSemanticTokens(tokens);
   }
-
-  Stream<Map<String, dynamic>> get responses => _responseController.stream;
 
   List<LspSemanticToken> _decodeSemanticTokens(List<dynamic> data) {
     final result = <LspSemanticToken>[];

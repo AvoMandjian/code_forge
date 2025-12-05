@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -76,7 +77,8 @@ class CodeForge extends StatefulWidget {
   State<CodeForge> createState() => _CodeForgeState();
 }
 
-class _CodeForgeState extends State<CodeForge> with SingleTickerProviderStateMixin {
+class _CodeForgeState extends State<CodeForge>
+    with SingleTickerProviderStateMixin {
   late final ScrollController _hscrollController, _vscrollController;
   late final CodeForgeController _controller;
   late final FocusNode _focusNode;
@@ -94,6 +96,20 @@ class _CodeForgeState extends State<CodeForge> with SingleTickerProviderStateMix
   DateTime? _lastSemanticTokenFetch;
   static const _semanticTokenDebounce = Duration(milliseconds: 500);
 
+  
+  final _isMobile = Platform.isAndroid || Platform.isIOS;
+  late final ValueNotifier<List<dynamic>?> _suggestionNotifier;
+  late final ValueNotifier<List<dynamic>?> _hoverNotifier;
+  late final ValueNotifier<List<LspErrors>> _diagnosticsNotifier;
+  late final ValueNotifier<String?> _aiNotifier;
+  late final ValueNotifier<Offset?> _aiOffsetNotifier;
+  late final ValueNotifier<Offset> _contextMenuOffsetNotifier;
+  late final ValueNotifier<bool> _selectionActiveNotifier;
+  late final ValueNotifier<bool> _isHoveringPopup;
+  int _suggestionSelectedIndex = 0;
+  Timer? _hoverTimer;
+  Timer? _suggestionDebounceTimer;
+
   @override
   void initState() {
     super.initState();
@@ -105,6 +121,16 @@ class _CodeForgeState extends State<CodeForge> with SingleTickerProviderStateMix
     _vscrollController = widget.verticalScrollController ?? ScrollController();
     _editorTheme = widget.editorTheme ?? vs2015Theme;
     _language = widget.language ?? langPython;
+
+    
+    _suggestionNotifier = ValueNotifier<List<dynamic>?>(null);
+    _hoverNotifier = ValueNotifier<List<dynamic>?>(null);
+    _diagnosticsNotifier = ValueNotifier<List<LspErrors>>([]);
+    _aiNotifier = ValueNotifier<String?>(null);
+    _aiOffsetNotifier = ValueNotifier<Offset?>(null);
+    _contextMenuOffsetNotifier = ValueNotifier<Offset>(const Offset(-1, -1));
+    _selectionActiveNotifier = ValueNotifier<bool>(false);
+    _isHoveringPopup = ValueNotifier<bool>(false);
 
     _selectionStyle = widget.selectionStyle ?? CodeSelectionStyle();
     _gutterStyle =
@@ -210,6 +236,38 @@ class _CodeForgeState extends State<CodeForge> with SingleTickerProviderStateMix
           'File path in LspConfig does not match the provided filePath in CodeForge.',
         );
       }
+
+      
+      widget.lspConfig!.responses.listen((data) {
+        if (data['method'] == 'textDocument/publishDiagnostics') {
+          final diagnostics = data['params']['diagnostics'] as List;
+          if (diagnostics.isNotEmpty) {
+            final List<LspErrors> errors = [];
+            for (final item in diagnostics) {
+              final d = item as Map<String, dynamic>;
+              int severity = d['severity'] ?? 0;
+              if (severity == 1 && widget.lspConfig!.disableError) {
+                severity = 0;
+              }
+              if (severity == 2 && widget.lspConfig!.disableWarning) {
+                severity = 0;
+              }
+              if (severity > 0) {
+                errors.add(
+                  LspErrors(
+                    severity: severity,
+                    range: d['range'],
+                    message: d['message'] ?? '',
+                  ),
+                );
+              }
+            }
+            _diagnosticsNotifier.value = errors;
+          } else {
+            _diagnosticsNotifier.value = [];
+          }
+        }
+      });
     }
 
     (() async {
@@ -234,19 +292,18 @@ class _CodeForgeState extends State<CodeForge> with SingleTickerProviderStateMix
       _resetCursorBlink();
 
       final text = _controller.text;
-      final currentValue = _controller.text;
-      final prevValue = _previousValue;
 
-      if (widget.lspConfig != null && _lspReady && currentValue != prevValue) {
+      if (widget.lspConfig != null && _lspReady && text != _previousValue) {
+        _previousValue = text;
         (() async => await widget.lspConfig!.updateDocument(text))();
         _scheduleSemantictokenRefresh();
       }
     });
   }
-  
+
   Future<void> _fetchSemanticTokens() async {
     if (widget.lspConfig == null || !_lspReady) return;
-    
+
     try {
       final tokens = await widget.lspConfig!.getSemanticTokensFull();
       setState(() {
@@ -257,7 +314,7 @@ class _CodeForgeState extends State<CodeForge> with SingleTickerProviderStateMix
       debugPrint('Error fetching semantic tokens: $e');
     }
   }
-  
+
   void _scheduleSemantictokenRefresh() {
     final now = DateTime.now();
     if (_lastSemanticTokenFetch == null ||
@@ -282,6 +339,16 @@ class _CodeForgeState extends State<CodeForge> with SingleTickerProviderStateMix
     _controller.removeListener(_resetCursorBlink);
     _connection?.close();
     _caretBlinkController.dispose();
+    _suggestionNotifier.dispose();
+    _hoverNotifier.dispose();
+    _diagnosticsNotifier.dispose();
+    _aiNotifier.dispose();
+    _aiOffsetNotifier.dispose();
+    _contextMenuOffsetNotifier.dispose();
+    _selectionActiveNotifier.dispose();
+    _isHoveringPopup.dispose();
+    _hoverTimer?.cancel();
+    _suggestionDebounceTimer?.cancel();
     super.dispose();
   }
 
@@ -355,7 +422,7 @@ class _CodeForgeState extends State<CodeForge> with SingleTickerProviderStateMix
     final prevLineText = _controller.getLineText(currentLine - 1);
     final prevLineLength = prevLineText.length;
     final newColumn = column.clamp(0, prevLineLength);
-    final newOffset = prevLineStart + newColumn;
+    final newOffset = (prevLineStart + newColumn).clamp(0, _controller.length);
 
     if (withShift) {
       _controller.setSelectionSilently(
@@ -393,7 +460,7 @@ class _CodeForgeState extends State<CodeForge> with SingleTickerProviderStateMix
     final nextLineText = _controller.getLineText(currentLine + 1);
     final nextLineLength = nextLineText.length;
     final newColumn = column.clamp(0, nextLineLength);
-    final newOffset = nextLineStart + newColumn;
+    final newOffset = (nextLineStart + newColumn).clamp(0, _controller.length);
 
     if (withShift) {
       _controller.setSelectionSilently(
@@ -440,105 +507,554 @@ class _CodeForgeState extends State<CodeForge> with SingleTickerProviderStateMix
     }
   }
 
+  
+  void _copy() {
+    final sel = _controller.selection;
+    if (sel.start == sel.end) return;
+    final selectedText = _controller.text.substring(sel.start, sel.end);
+    Clipboard.setData(ClipboardData(text: selectedText));
+  }
+
+  void _cut() {
+    final sel = _controller.selection;
+    if (sel.start == sel.end) return;
+    final selectedText = _controller.text.substring(sel.start, sel.end);
+    Clipboard.setData(ClipboardData(text: selectedText));
+    _controller.replaceRange(sel.start, sel.end, '');
+    _contextMenuOffsetNotifier.value = const Offset(-1, -1);
+  }
+
+  Future<void> _paste() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (data?.text == null || data!.text!.isEmpty) return;
+    final sel = _controller.selection;
+    _controller.replaceRange(sel.start, sel.end, data.text!);
+    _contextMenuOffsetNotifier.value = const Offset(-1, -1);
+  }
+
+  void _selectAll() {
+    _controller.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _controller.length,
+    );
+    _contextMenuOffsetNotifier.value = const Offset(-1, -1);
+  }
+
+  Widget _buildContextMenu() {
+    return ValueListenableBuilder<Offset>(
+      valueListenable: _contextMenuOffsetNotifier,
+      builder: (context, offset, _) {
+        if (offset.dx < 0 || offset.dy < 0) return const SizedBox.shrink();
+
+        final hasSelection =
+            _controller.selection.start != _controller.selection.end;
+
+        if (_isMobile) {
+          
+          return Positioned(
+            left: offset.dx,
+            top: offset.dy - 60,
+            child: Material(
+              elevation: 4,
+              borderRadius: BorderRadius.circular(8),
+              color: _editorTheme['root']?.backgroundColor ?? Colors.grey[900],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (hasSelection) ...[
+                    _buildContextMenuItem('Cut', Icons.cut, _cut),
+                    _buildContextMenuItem('Copy', Icons.copy, _copy),
+                  ],
+                  _buildContextMenuItem('Paste', Icons.paste, () => _paste()),
+                  _buildContextMenuItem(
+                    'Select All',
+                    Icons.select_all,
+                    _selectAll,
+                  ),
+                ],
+              ),
+            ),
+          );
+        } else {
+          
+          return Positioned(
+            left: offset.dx,
+            top: offset.dy,
+            child: Card(
+              elevation: 8,
+              color: _editorTheme['root']?.backgroundColor ?? Colors.grey[900],
+              shape: _suggestionStyle.shape,
+              child: IntrinsicWidth(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (hasSelection) ...[
+                      _buildDesktopContextMenuItem('Cut', 'Ctrl+X', _cut),
+                      _buildDesktopContextMenuItem('Copy', 'Ctrl+C', _copy),
+                    ],
+                    _buildDesktopContextMenuItem(
+                      'Paste',
+                      'Ctrl+V',
+                      () => _paste(),
+                    ),
+                    _buildDesktopContextMenuItem(
+                      'Select All',
+                      'Ctrl+A',
+                      _selectAll,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+      },
+    );
+  }
+
+  Widget _buildContextMenuItem(
+    String label,
+    IconData icon,
+    VoidCallback onTap,
+  ) {
+    return InkWell(
+      onTap: () {
+        onTap();
+        _contextMenuOffsetNotifier.value = const Offset(-1, -1);
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 18, color: _editorTheme['root']?.color),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: _editorTheme['root']?.color,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopContextMenuItem(
+    String label,
+    String shortcut,
+    VoidCallback onTap,
+  ) {
+    return InkWell(
+      onTap: () {
+        onTap();
+        _contextMenuOffsetNotifier.value = const Offset(-1, -1);
+      },
+      hoverColor: _suggestionStyle.hoverColor,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: _suggestionStyle.textStyle),
+            const SizedBox(width: 24),
+            Text(
+              shortcut,
+              style: _suggestionStyle.textStyle.copyWith(
+                color: _suggestionStyle.textStyle.color!.withAlpha(150),
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (_, constraints) {
-        return GestureDetector(
-          onTap: _focusNode.requestFocus,
-          child: RawScrollbar(
-            controller: _vscrollController,
-            thumbVisibility: true,
-            child: RawScrollbar(
-              thumbVisibility: true,
-              controller: _hscrollController,
-              child: TwoDimensionalScrollable(
-                horizontalDetails: ScrollableDetails.horizontal(
+        return Stack(
+          children: [
+            
+            GestureDetector(
+              onTap: () {
+                _focusNode.requestFocus();
+                _contextMenuOffsetNotifier.value = const Offset(-1, -1);
+              },
+              child: RawScrollbar(
+                controller: _vscrollController,
+                thumbVisibility: true,
+                child: RawScrollbar(
+                  thumbVisibility: true,
                   controller: _hscrollController,
-                  physics: const ClampingScrollPhysics(),
-                ),
-                verticalDetails: ScrollableDetails.vertical(
-                  controller: _vscrollController,
-                  physics: const ClampingScrollPhysics(),
-                ),
-                viewportBuilder: (_, voffset, hoffset) => CustomViewport(
-                  verticalOffset: voffset,
-                  verticalAxisDirection: AxisDirection.down,
-                  horizontalOffset: hoffset,
-                  horizontalAxisDirection: AxisDirection.right,
-                  mainAxis: Axis.vertical,
-                  delegate: TwoDimensionalChildBuilderDelegate(
-                    maxXIndex: 0,
-                    maxYIndex: 0,
-                    builder: (_, vic) {
-                      return Focus(
-                        focusNode: _focusNode,
-                        onKeyEvent: (node, event) {
-                          if (event is KeyDownEvent ||
-                              event is KeyRepeatEvent) {
-                            final isShiftPressed =
-                                HardwareKeyboard.instance.isShiftPressed;
-                            switch (event.logicalKey) {
-                              case LogicalKeyboardKey.backspace:
-                                _controller.backspace();
-                                _resetCursorBlink();
-                                return KeyEventResult.handled;
-                              case LogicalKeyboardKey.delete:
-                                _controller.delete();
-                                _resetCursorBlink();
-                                return KeyEventResult.handled;
-                              case LogicalKeyboardKey.arrowDown:
-                                _handleArrowDown(isShiftPressed);
-                                _resetCursorBlink();
-                                return KeyEventResult.handled;
-                              case LogicalKeyboardKey.arrowUp:
-                                _handleArrowUp(isShiftPressed);
-                                _resetCursorBlink();
-                                return KeyEventResult.handled;
-                              case LogicalKeyboardKey.arrowRight:
-                                _handleArrowRight(isShiftPressed);
-                                _resetCursorBlink();
-                                return KeyEventResult.handled;
-                              case LogicalKeyboardKey.arrowLeft:
-                                _handleArrowLeft(isShiftPressed);
-                                _resetCursorBlink();
-                                return KeyEventResult.handled;
-                              case LogicalKeyboardKey.home:
-                                _handleHome(isShiftPressed);
-                                _resetCursorBlink();
-                                return KeyEventResult.handled;
-                              case LogicalKeyboardKey.end:
-                                _handleEnd(isShiftPressed);
-                                _resetCursorBlink();
-                                return KeyEventResult.handled;
-                              default:
-                            }
-                          }
-                          return KeyEventResult.ignored;
+                  child: TwoDimensionalScrollable(
+                    horizontalDetails: ScrollableDetails.horizontal(
+                      controller: _hscrollController,
+                      physics: const ClampingScrollPhysics(),
+                    ),
+                    verticalDetails: ScrollableDetails.vertical(
+                      controller: _vscrollController,
+                      physics: const ClampingScrollPhysics(),
+                    ),
+                    viewportBuilder: (_, voffset, hoffset) => CustomViewport(
+                      verticalOffset: voffset,
+                      verticalAxisDirection: AxisDirection.down,
+                      horizontalOffset: hoffset,
+                      horizontalAxisDirection: AxisDirection.right,
+                      mainAxis: Axis.vertical,
+                      delegate: TwoDimensionalChildBuilderDelegate(
+                        maxXIndex: 0,
+                        maxYIndex: 0,
+                        builder: (_, vic) {
+                          return Focus(
+                            focusNode: _focusNode,
+                            onKeyEvent: (node, event) {
+                              if (event is KeyDownEvent ||
+                                  event is KeyRepeatEvent) {
+                                final isShiftPressed =
+                                    HardwareKeyboard.instance.isShiftPressed;
+                                final isCtrlPressed =
+                                    HardwareKeyboard
+                                        .instance
+                                        .isControlPressed ||
+                                    HardwareKeyboard.instance.isMetaPressed;
+
+                                
+                                if (_suggestionNotifier.value != null &&
+                                    _suggestionNotifier.value!.isNotEmpty) {
+                                  switch (event.logicalKey) {
+                                    case LogicalKeyboardKey.arrowDown:
+                                      setState(() {
+                                        _suggestionSelectedIndex =
+                                            (_suggestionSelectedIndex + 1) %
+                                            _suggestionNotifier.value!.length;
+                                      });
+                                      return KeyEventResult.handled;
+                                    case LogicalKeyboardKey.arrowUp:
+                                      setState(() {
+                                        _suggestionSelectedIndex =
+                                            (_suggestionSelectedIndex -
+                                                1 +
+                                                _suggestionNotifier
+                                                    .value!
+                                                    .length) %
+                                            _suggestionNotifier.value!.length;
+                                      });
+                                      return KeyEventResult.handled;
+                                    case LogicalKeyboardKey.enter:
+                                    case LogicalKeyboardKey.tab:
+                                      _acceptSuggestion();
+                                      return KeyEventResult.handled;
+                                    case LogicalKeyboardKey.escape:
+                                      _suggestionNotifier.value = null;
+                                      return KeyEventResult.handled;
+                                    default:
+                                      break;
+                                  }
+                                }
+
+                                
+                                if (_aiNotifier.value != null &&
+                                    event.logicalKey ==
+                                        LogicalKeyboardKey.tab) {
+                                  _acceptAiCompletion();
+                                  return KeyEventResult.handled;
+                                }
+
+                                
+                                if (isCtrlPressed) {
+                                  switch (event.logicalKey) {
+                                    case LogicalKeyboardKey.keyC:
+                                      _copy();
+                                      return KeyEventResult.handled;
+                                    case LogicalKeyboardKey.keyX:
+                                      _cut();
+                                      return KeyEventResult.handled;
+                                    case LogicalKeyboardKey.keyV:
+                                      _paste();
+                                      return KeyEventResult.handled;
+                                    case LogicalKeyboardKey.keyA:
+                                      _selectAll();
+                                      return KeyEventResult.handled;
+                                    default:
+                                      break;
+                                  }
+                                }
+
+                                switch (event.logicalKey) {
+                                  case LogicalKeyboardKey.backspace:
+                                    _controller.backspace();
+                                    _resetCursorBlink();
+                                    return KeyEventResult.handled;
+                                  case LogicalKeyboardKey.delete:
+                                    _controller.delete();
+                                    _resetCursorBlink();
+                                    return KeyEventResult.handled;
+                                  case LogicalKeyboardKey.arrowDown:
+                                    _handleArrowDown(isShiftPressed);
+                                    _resetCursorBlink();
+                                    return KeyEventResult.handled;
+                                  case LogicalKeyboardKey.arrowUp:
+                                    _handleArrowUp(isShiftPressed);
+                                    _resetCursorBlink();
+                                    return KeyEventResult.handled;
+                                  case LogicalKeyboardKey.arrowRight:
+                                    _handleArrowRight(isShiftPressed);
+                                    _resetCursorBlink();
+                                    return KeyEventResult.handled;
+                                  case LogicalKeyboardKey.arrowLeft:
+                                    _handleArrowLeft(isShiftPressed);
+                                    _resetCursorBlink();
+                                    return KeyEventResult.handled;
+                                  case LogicalKeyboardKey.home:
+                                    _handleHome(isShiftPressed);
+                                    _resetCursorBlink();
+                                    return KeyEventResult.handled;
+                                  case LogicalKeyboardKey.end:
+                                    _handleEnd(isShiftPressed);
+                                    _resetCursorBlink();
+                                    return KeyEventResult.handled;
+                                  case LogicalKeyboardKey.escape:
+                                    _contextMenuOffsetNotifier.value =
+                                        const Offset(-1, -1);
+                                    _aiNotifier.value = null;
+                                    return KeyEventResult.handled;
+                                  default:
+                                }
+                              }
+                              return KeyEventResult.ignored;
+                            },
+                            child: _CodeField(
+                              controller: _controller,
+                              editorTheme: _editorTheme,
+                              language: _language,
+                              languageId: widget.lspConfig?.languageId,
+                              semanticTokens: _semanticTokens,
+                              innerPadding: widget.innerPadding,
+                              vscrollController: _vscrollController,
+                              hscrollController: _hscrollController,
+                              focusNode: _focusNode,
+                              readOnly: widget.readOnly,
+                              caretBlinkController: _caretBlinkController,
+                              textStyle: widget.textStyle,
+                              enableFolding: widget.enableFolding,
+                              enableGuideLines: widget.enableGuideLines,
+                              enableGutter: widget.enableGutter,
+                              enableGutterDivider: widget.enableGutterDivider,
+                              gutterStyle: _gutterStyle,
+                              selectionStyle: _selectionStyle,
+                              diagnostics: _diagnosticsNotifier.value,
+                              aiText: _aiNotifier.value,
+                              isMobile: _isMobile,
+                              selectionActiveNotifier: _selectionActiveNotifier,
+                              contextMenuOffsetNotifier:
+                                  _contextMenuOffsetNotifier,
+                              hoverNotifier: _hoverNotifier,
+                            ),
+                          );
                         },
-                        child: _CodeField(
-                          _controller,
-                          _editorTheme,
-                          _language,
-                          widget.lspConfig?.languageId,
-                          _semanticTokens,
-                          widget.innerPadding,
-                          _vscrollController,
-                          _hscrollController,
-                          _focusNode,
-                          widget.readOnly,
-                          _caretBlinkController,
-                          widget.textStyle,
-                          widget.enableFolding,
-                          widget.enableGuideLines,
-                          widget.enableGutter,
-                          widget.enableGutterDivider,
-                          _gutterStyle,
-                          _selectionStyle,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            
+            _buildContextMenu(),
+
+            
+            _buildSuggestionPopup(),
+
+            
+            _buildHoverPopup(),
+          ],
+        );
+      },
+    );
+  }
+
+  void _acceptSuggestion() {
+    final suggestions = _suggestionNotifier.value;
+    if (suggestions == null || suggestions.isEmpty) return;
+
+    final selected = suggestions[_suggestionSelectedIndex];
+    String insertText = '';
+
+    if (selected is Map) {
+      insertText = selected['insertText'] ?? selected['label'] ?? '';
+    } else if (selected is String) {
+      insertText = selected;
+    }
+
+    if (insertText.isNotEmpty) {
+      
+      final sel = _controller.selection;
+      final text = _controller.text;
+      int start = sel.extentOffset;
+      while (start > 0 && RegExp(r'[\w_]').hasMatch(text[start - 1])) {
+        start--;
+      }
+      _controller.replaceRange(start, sel.extentOffset, insertText);
+    }
+
+    _suggestionNotifier.value = null;
+    _suggestionSelectedIndex = 0;
+  }
+
+  void _acceptAiCompletion() {
+    final aiText = _aiNotifier.value;
+    if (aiText == null || aiText.isEmpty) return;
+
+    _controller.insertAtCursor(aiText);
+    _aiNotifier.value = null;
+    _aiOffsetNotifier.value = null;
+  }
+
+  Widget _buildSuggestionPopup() {
+    return ValueListenableBuilder<List<dynamic>?>(
+      valueListenable: _suggestionNotifier,
+      builder: (context, suggestions, _) {
+        if (suggestions == null || suggestions.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        
+        
+        final caretOffset = _aiOffsetNotifier.value ?? const Offset(100, 100);
+
+        return Positioned(
+          left: caretOffset.dx,
+          top: caretOffset.dy + 20,
+          child: Material(
+            elevation: _suggestionStyle.elevation,
+            color: _suggestionStyle.backgroundColor,
+            shape: _suggestionStyle.shape,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 200, maxWidth: 350),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: suggestions.length,
+                itemBuilder: (context, index) {
+                  final item = suggestions[index];
+                  final label = item is Map
+                      ? (item['label'] ?? '')
+                      : item.toString();
+                  final detail = item is Map ? (item['detail'] ?? '') : '';
+                  final isSelected = index == _suggestionSelectedIndex;
+
+                  return InkWell(
+                    onTap: () {
+                      _suggestionSelectedIndex = index;
+                      _acceptSuggestion();
+                    },
+                    hoverColor: _suggestionStyle.hoverColor,
+                    child: Container(
+                      color: isSelected ? _suggestionStyle.focusColor : null,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              label,
+                              style: _suggestionStyle.textStyle,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (detail.isNotEmpty)
+                            Text(
+                              detail,
+                              style: _suggestionStyle.textStyle.copyWith(
+                                color: _suggestionStyle.textStyle.color!
+                                    .withAlpha(150),
+                                fontSize: 11,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildHoverPopup() {
+    return ValueListenableBuilder<List<dynamic>?>(
+      valueListenable: _hoverNotifier,
+      builder: (context, hoverData, _) {
+        if (hoverData == null || hoverData.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final position = hoverData[0] as Offset;
+        final lineChar = hoverData[1] as Map<String, int>;
+
+        return Positioned(
+          left: position.dx,
+          top: position.dy - 80,
+          child: MouseRegion(
+            onEnter: (_) => _isHoveringPopup.value = true,
+            onExit: (_) {
+              _isHoveringPopup.value = false;
+              _hoverNotifier.value = null;
+            },
+            child: Material(
+              elevation: 6,
+              color: _hoverDetailsStyle.backgroundColor,
+              shape: _hoverDetailsStyle.shape,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: 400,
+                  maxHeight: 250,
+                ),
+                child: FutureBuilder<String?>(
+                  future: _getHoverContent(
+                    lineChar['line']!,
+                    lineChar['character']!,
+                  ),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: _hoverDetailsStyle.textStyle.color,
+                          ),
                         ),
                       );
-                    },
-                  ),
+                    }
+
+                    final content = snapshot.data;
+                    if (content == null || content.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+
+                    return Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: SingleChildScrollView(
+                        child: Text(
+                          content,
+                          style: _hoverDetailsStyle.textStyle,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -546,6 +1062,18 @@ class _CodeForgeState extends State<CodeForge> with SingleTickerProviderStateMix
         );
       },
     );
+  }
+
+  Future<String?> _getHoverContent(int line, int character) async {
+    if (widget.lspConfig == null || !_lspReady) return null;
+
+    try {
+      final hover = await widget.lspConfig!.getHover(line, character);
+      if (hover.isNotEmpty) return hover;
+    } catch (e) {
+      debugPrint('Error getting hover: $e');
+    }
+    return null;
   }
 }
 
@@ -565,48 +1093,66 @@ class _CodeField extends LeafRenderObjectWidget {
   final bool enableGutterDivider;
   final GutterStyle gutterStyle;
   final CodeSelectionStyle selectionStyle;
+  final List<LspErrors> diagnostics;
+  final String? aiText;
+  final bool isMobile;
+  final ValueNotifier<bool> selectionActiveNotifier;
+  final ValueNotifier<Offset> contextMenuOffsetNotifier;
+  final ValueNotifier<List<dynamic>?> hoverNotifier;
 
-  const _CodeField(
-    this.controller,
-    this.editorTheme,
-    this.language,
+  const _CodeField({
+    required this.controller,
+    required this.editorTheme,
+    required this.language,
     this.languageId,
     this.semanticTokens,
     this.innerPadding,
-    this.vscrollController,
-    this.hscrollController,
-    this.focusNode,
-    this.readOnly,
-    this.caretBlinkController,
+    required this.vscrollController,
+    required this.hscrollController,
+    required this.focusNode,
+    required this.readOnly,
+    required this.caretBlinkController,
     this.textStyle,
-    this.enableFolding,
-    this.enableGuideLines,
-    this.enableGutter,
-    this.enableGutterDivider,
-    this.gutterStyle,
-    this.selectionStyle,
-  );
+    required this.enableFolding,
+    required this.enableGuideLines,
+    required this.enableGutter,
+    required this.enableGutterDivider,
+    required this.gutterStyle,
+    required this.selectionStyle,
+    required this.diagnostics,
+    this.aiText,
+    required this.isMobile,
+    required this.selectionActiveNotifier,
+    required this.contextMenuOffsetNotifier,
+    required this.hoverNotifier,
+  });
 
   @override
   RenderObject createRenderObject(BuildContext context) {
     return _CodeFieldRenderer(
-      controller,
-      editorTheme,
-      language,
-      languageId,
-      innerPadding,
-      vscrollController,
-      hscrollController,
-      focusNode,
-      readOnly,
-      caretBlinkController,
-      textStyle,
-      enableFolding,
-      enableGuideLines,
-      enableGutter,
-      enableGutterDivider,
-      gutterStyle,
-      selectionStyle,
+      controller: controller,
+      editorTheme: editorTheme,
+      language: language,
+      languageId: languageId,
+      innerPadding: innerPadding,
+      vscrollController: vscrollController,
+      hscrollController: hscrollController,
+      focusNode: focusNode,
+      readOnly: readOnly,
+      caretBlinkController: caretBlinkController,
+      textStyle: textStyle,
+      enableFolding: enableFolding,
+      enableGuideLines: enableGuideLines,
+      enableGutter: enableGutter,
+      enableGutterDivider: enableGutterDivider,
+      gutterStyle: gutterStyle,
+      selectionStyle: selectionStyle,
+      diagnostics: diagnostics,
+      aiText: aiText,
+      isMobile: isMobile,
+      selectionActiveNotifier: selectionActiveNotifier,
+      contextMenuOffsetNotifier: contextMenuOffsetNotifier,
+      hoverNotifier: hoverNotifier,
     );
   }
 
@@ -618,10 +1164,13 @@ class _CodeField extends LeafRenderObjectWidget {
     if (semanticTokens != null) {
       renderObject.updateSemanticTokens(semanticTokens!);
     }
+    renderObject
+      ..updateDiagnostics(diagnostics)
+      ..updateAiText(aiText);
   }
 }
 
-class _CodeFieldRenderer extends RenderBox {
+class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   final CodeForgeController controller;
   final Map<String, TextStyle> editorTheme;
   final Mode language;
@@ -636,6 +1185,13 @@ class _CodeFieldRenderer extends RenderBox {
   final bool enableGutterDivider;
   final GutterStyle gutterStyle;
   final CodeSelectionStyle selectionStyle;
+  final bool isMobile;
+  final ValueNotifier<bool> selectionActiveNotifier;
+  final ValueNotifier<Offset> contextMenuOffsetNotifier;
+  final ValueNotifier<List<dynamic>?> hoverNotifier;
+
+  List<LspErrors> _diagnostics;
+  String? _aiText;
 
   final Map<int, double> _lineWidthCache = {};
   final Map<int, String> _lineTextCache = {};
@@ -653,11 +1209,39 @@ class _CodeFieldRenderer extends RenderBox {
   int _cachedLineCount = 0;
   int _cachedCaretOffset = -1, _cachedCaretLine = 0, _cachedCaretLineStart = 0;
 
-  /// Update semantic tokens from LSP
+  
+  int? _dragStartOffset;
+  Timer? _selectionTimer, _hoverTimer;
+  bool _selectionActive = false, _isDragging = false;
+  Offset? _pointerDownPosition;
+  Offset _currentPosition = Offset.zero;
+  bool _draggingStartHandle = false,
+      _draggingEndHandle = false,
+      _draggingCHandle = false;
+  bool _showBubble = false;
+  Rect? _startHandleRect, _endHandleRect, _normalHandle;
+
+  
   void updateSemanticTokens(List<LspSemanticToken> tokens) {
     _syntaxHighlighter.updateSemanticTokens(tokens, controller.text);
     _paragraphCache.clear();
     markNeedsPaint();
+  }
+
+  
+  void updateDiagnostics(List<LspErrors> diagnostics) {
+    if (_diagnostics != diagnostics) {
+      _diagnostics = diagnostics;
+      markNeedsPaint();
+    }
+  }
+
+  
+  void updateAiText(String? aiText) {
+    if (_aiText != aiText) {
+      _aiText = aiText;
+      markNeedsPaint();
+    }
   }
 
   ui.Paragraph _buildParagraph(String text) {
@@ -681,25 +1265,32 @@ class _CodeFieldRenderer extends RenderBox {
     );
   }
 
-  _CodeFieldRenderer(
-    this.controller,
-    this.editorTheme,
-    this.language,
+  _CodeFieldRenderer({
+    required this.controller,
+    required this.editorTheme,
+    required this.language,
     this.languageId,
     this.innerPadding,
-    this.vscrollController,
-    this.hscrollController,
-    this.focusNode,
-    this.readOnly,
-    this.caretBlinkController,
+    required this.vscrollController,
+    required this.hscrollController,
+    required this.focusNode,
+    required this.readOnly,
+    required this.caretBlinkController,
     this.textStyle,
-    this.enableFolding,
-    this.enableGuideLines,
-    this.enableGutter,
-    this.enableGutterDivider,
-    this.gutterStyle,
-    this.selectionStyle,
-  ) {
+    required this.enableFolding,
+    required this.enableGuideLines,
+    required this.enableGutter,
+    required this.enableGutterDivider,
+    required this.gutterStyle,
+    required this.selectionStyle,
+    required List<LspErrors> diagnostics,
+    String? aiText,
+    required this.isMobile,
+    required this.selectionActiveNotifier,
+    required this.contextMenuOffsetNotifier,
+    required this.hoverNotifier,
+  }) : _diagnostics = diagnostics,
+       _aiText = aiText {
     final fontSize = textStyle?.fontSize ?? 14.0;
     final fontFamily = textStyle?.fontFamily;
     final color =
@@ -1270,6 +1861,16 @@ class _CodeFieldRenderer extends RenderBox {
       }
     }
 
+    
+    _drawSelection(
+      canvas,
+      offset,
+      firstVisibleLine,
+      lastVisibleLine,
+      firstVisibleLineY,
+      hasActiveFolds,
+    );
+
     if (enableGuideLines && (lastVisibleLine - firstVisibleLine) < 200) {
       _drawIndentGuides(
         canvas,
@@ -1345,6 +1946,28 @@ class _CodeFieldRenderer extends RenderBox {
       currentY += _lineHeight;
     }
 
+    
+    _drawDiagnostics(
+      canvas,
+      offset,
+      firstVisibleLine,
+      lastVisibleLine,
+      firstVisibleLineY,
+      hasActiveFolds,
+    );
+
+    
+    if (_aiText != null && _aiText!.isNotEmpty) {
+      _drawAiGhostText(
+        canvas,
+        offset,
+        firstVisibleLine,
+        lastVisibleLine,
+        firstVisibleLineY,
+        hasActiveFolds,
+      );
+    }
+
     if (enableGutter) {
       _drawGutter(
         canvas,
@@ -1399,6 +2022,16 @@ class _CodeFieldRenderer extends RenderBox {
         _caretPainter,
       );
     }
+
+    
+    _drawMobileSelectionHandles(
+      canvas,
+      offset,
+      firstVisibleLine,
+      lastVisibleLine,
+      firstVisibleLineY,
+      hasActiveFolds,
+    );
 
     canvas.restore();
   }
@@ -1877,6 +2510,618 @@ class _CodeFieldRenderer extends RenderBox {
     canvas.drawRect(bracketRect, _bracketHighlightPainter);
   }
 
+  
+  void _drawDiagnostics(
+    Canvas canvas,
+    Offset offset,
+    int firstVisibleLine,
+    int lastVisibleLine,
+    double firstVisibleLineY,
+    bool hasActiveFolds,
+  ) {
+    if (_diagnostics.isEmpty) return;
+
+    for (final diagnostic in _diagnostics) {
+      final range = diagnostic.range;
+      final startPos = range['start'] as Map<String, dynamic>;
+      final endPos = range['end'] as Map<String, dynamic>;
+
+      final startLine = startPos['line'] as int;
+      final startChar = startPos['character'] as int;
+      final endLine = endPos['line'] as int;
+      final endChar = endPos['character'] as int;
+
+      
+      if (endLine < firstVisibleLine || startLine > lastVisibleLine) continue;
+
+      
+      
+      final Color underlineColor;
+      switch (diagnostic.severity) {
+        case 1:
+          underlineColor = Colors.red;
+          break;
+        case 2:
+          underlineColor = Colors.yellow.shade700;
+          break;
+        case 3:
+          underlineColor = Colors.blue;
+          break;
+        case 4:
+          underlineColor = Colors.grey;
+          break;
+        default:
+          underlineColor = Colors.red;
+      }
+
+      final paint = Paint()
+        ..color = underlineColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5;
+
+      
+      for (int lineIndex = startLine; lineIndex <= endLine; lineIndex++) {
+        if (lineIndex < firstVisibleLine || lineIndex > lastVisibleLine)
+          continue;
+        if (hasActiveFolds && _isLineFolded(lineIndex)) continue;
+
+        String lineText;
+        if (_lineTextCache.containsKey(lineIndex)) {
+          lineText = _lineTextCache[lineIndex]!;
+        } else {
+          lineText = controller.getLineText(lineIndex);
+          _lineTextCache[lineIndex] = lineText;
+        }
+
+        if (lineText.isEmpty) continue;
+
+        ui.Paragraph para;
+        if (_paragraphCache.containsKey(lineIndex)) {
+          para = _paragraphCache[lineIndex]!;
+        } else {
+          para = _buildHighlightedParagraph(lineIndex, lineText);
+          _paragraphCache[lineIndex] = para;
+        }
+
+        final lineStartChar = (lineIndex == startLine) ? startChar : 0;
+        final lineEndChar = (lineIndex == endLine)
+            ? endChar.clamp(0, lineText.length)
+            : lineText.length;
+
+        if (lineStartChar >= lineEndChar || lineStartChar >= lineText.length) {
+          continue;
+        }
+
+        final boxes = para.getBoxesForRange(
+          lineStartChar.clamp(0, lineText.length),
+          lineEndChar.clamp(0, lineText.length),
+        );
+
+        if (boxes.isEmpty) continue;
+
+        double lineY;
+        if (!hasActiveFolds) {
+          lineY = lineIndex * _lineHeight;
+        } else {
+          lineY = 0;
+          for (int i = 0; i < lineIndex; i++) {
+            if (!_isLineFolded(i)) lineY += _lineHeight;
+          }
+        }
+
+        for (final box in boxes) {
+          final screenX =
+              offset.dx +
+              _gutterWidth +
+              (innerPadding?.left ?? 0) +
+              box.left -
+              hscrollController.offset;
+          final screenY =
+              offset.dy +
+              (innerPadding?.top ?? 0) +
+              lineY + _lineHeight - 3 - vscrollController.offset;
+
+          final width = box.right - box.left;
+          _drawSquigglyLine(canvas, screenX, screenY, width, paint);
+        }
+      }
+    }
+  }
+
+  void _drawSquigglyLine(
+    Canvas canvas,
+    double x,
+    double y,
+    double width,
+    Paint paint,
+  ) {
+    if (width <= 0) return;
+
+    final path = Path();
+    const waveHeight = 2.0;
+    const waveWidth = 4.0;
+
+    path.moveTo(x, y);
+
+    double currentX = x;
+    bool up = true;
+
+    while (currentX < x + width) {
+      final nextX = (currentX + waveWidth).clamp(x, x + width);
+      final controlY = up ? y - waveHeight : y + waveHeight;
+
+      path.quadraticBezierTo((currentX + nextX) / 2, controlY, nextX, y);
+
+      currentX = nextX;
+      up = !up;
+    }
+
+    canvas.drawPath(path, paint);
+  }
+
+  void _drawSelection(
+    Canvas canvas,
+    Offset offset,
+    int firstVisibleLine,
+    int lastVisibleLine,
+    double firstVisibleLineY,
+    bool hasActiveFolds,
+  ) {
+    final selection = controller.selection;
+    if (selection.isCollapsed) return;
+
+    final start = selection.start;
+    final end = selection.end;
+
+    final selectionPaint = Paint()
+      ..color = selectionStyle.selectionColor
+      ..style = PaintingStyle.fill;
+
+    int startLine = controller.getLineAtOffset(start);
+    int endLine = controller.getLineAtOffset(end);
+
+    if (endLine < firstVisibleLine || startLine > lastVisibleLine) return;
+
+    for (int lineIndex = startLine; lineIndex <= endLine; lineIndex++) {
+      if (lineIndex < firstVisibleLine || lineIndex > lastVisibleLine) continue;
+      if (hasActiveFolds && _isLineFolded(lineIndex)) continue;
+
+      final lineStartOffset = controller.getLineStartOffset(lineIndex);
+      final lineText =
+          _lineTextCache[lineIndex] ?? controller.getLineText(lineIndex);
+      final lineLength = lineText.length;
+
+      int lineSelStart = 0;
+      int lineSelEnd = lineLength;
+
+      if (lineIndex == startLine) {
+        lineSelStart = start - lineStartOffset;
+      }
+      if (lineIndex == endLine) {
+        lineSelEnd = end - lineStartOffset;
+      }
+
+      lineSelStart = lineSelStart.clamp(0, lineLength);
+      lineSelEnd = lineSelEnd.clamp(0, lineLength);
+
+      if (lineSelStart >= lineSelEnd && lineIndex != endLine) {
+        lineSelEnd = lineLength;
+      }
+
+      ui.Paragraph para;
+      if (_paragraphCache.containsKey(lineIndex)) {
+        para = _paragraphCache[lineIndex]!;
+      } else {
+        para = _buildHighlightedParagraph(lineIndex, lineText);
+        _paragraphCache[lineIndex] = para;
+      }
+
+      double lineY;
+      if (!hasActiveFolds) {
+        lineY = lineIndex * _lineHeight;
+      } else {
+        lineY = 0;
+        for (int i = 0; i < lineIndex; i++) {
+          if (!_isLineFolded(i)) lineY += _lineHeight;
+        }
+      }
+
+      final screenY =
+          offset.dy +
+          (innerPadding?.top ?? 0) +
+          lineY -
+          vscrollController.offset;
+
+      if (lineSelStart < lineSelEnd && lineText.isNotEmpty) {
+        final boxes = para.getBoxesForRange(
+          lineSelStart.clamp(0, lineText.length),
+          lineSelEnd.clamp(0, lineText.length),
+        );
+
+        for (final box in boxes) {
+          final screenX =
+              offset.dx +
+              _gutterWidth +
+              (innerPadding?.left ?? 0) +
+              box.left -
+              hscrollController.offset;
+
+          canvas.drawRect(
+            Rect.fromLTWH(screenX, screenY, box.right - box.left, _lineHeight),
+            selectionPaint,
+          );
+        }
+      } else if (lineIndex < endLine) {
+        final screenX =
+            offset.dx +
+            _gutterWidth +
+            (innerPadding?.left ?? 0) -
+            hscrollController.offset;
+
+        canvas.drawRect(
+          Rect.fromLTWH(screenX, screenY, 8, _lineHeight),
+          selectionPaint,
+        );
+      }
+    }
+
+    _updateSelectionHandleRects(
+      offset,
+      start,
+      end,
+      startLine,
+      endLine,
+      hasActiveFolds,
+    );
+  }
+
+  
+  void _updateSelectionHandleRects(
+    Offset offset,
+    int start,
+    int end,
+    int startLine,
+    int endLine,
+    bool hasActiveFolds,
+  ) {
+    final handleRadius = (_lineHeight / 2).clamp(6.0, 12.0);
+
+    
+    final startLineOffset = controller.getLineStartOffset(startLine);
+    final startLineText =
+        _lineTextCache[startLine] ?? controller.getLineText(startLine);
+    final startCol = start - startLineOffset;
+
+    double startY;
+    if (!hasActiveFolds) {
+      startY = startLine * _lineHeight;
+    } else {
+      startY = 0;
+      for (int i = 0; i < startLine; i++) {
+        if (!_isLineFolded(i)) startY += _lineHeight;
+      }
+    }
+
+    double startX;
+    if (startLineText.isNotEmpty && startCol > 0) {
+      final para =
+          _paragraphCache[startLine] ??
+          _buildHighlightedParagraph(startLine, startLineText);
+      final boxes = para.getBoxesForRange(
+        0,
+        startCol.clamp(0, startLineText.length),
+      );
+      startX = boxes.isNotEmpty ? boxes.last.right : 0;
+    } else {
+      startX = 0;
+    }
+
+    final startScreenX =
+        offset.dx +
+        _gutterWidth +
+        (innerPadding?.left ?? 0) +
+        startX -
+        hscrollController.offset;
+    final startScreenY =
+        offset.dy +
+        (innerPadding?.top ?? 0) +
+        startY -
+        vscrollController.offset;
+
+    _startHandleRect = Rect.fromCenter(
+      center: Offset(startScreenX, startScreenY + _lineHeight + handleRadius),
+      width: handleRadius * 2,
+      height: handleRadius * 2,
+    );
+
+    
+    final endLineOffset = controller.getLineStartOffset(endLine);
+    final endLineText =
+        _lineTextCache[endLine] ?? controller.getLineText(endLine);
+    final endCol = end - endLineOffset;
+
+    double endY;
+    if (!hasActiveFolds) {
+      endY = endLine * _lineHeight;
+    } else {
+      endY = 0;
+      for (int i = 0; i < endLine; i++) {
+        if (!_isLineFolded(i)) endY += _lineHeight;
+      }
+    }
+
+    double endX;
+    if (endLineText.isNotEmpty && endCol > 0) {
+      final para =
+          _paragraphCache[endLine] ??
+          _buildHighlightedParagraph(endLine, endLineText);
+      final boxes = para.getBoxesForRange(
+        0,
+        endCol.clamp(0, endLineText.length),
+      );
+      endX = boxes.isNotEmpty ? boxes.last.right : 0;
+    } else {
+      endX = 0;
+    }
+
+    final endScreenX =
+        offset.dx +
+        _gutterWidth +
+        (innerPadding?.left ?? 0) +
+        endX -
+        hscrollController.offset;
+    final endScreenY =
+        offset.dy + (innerPadding?.top ?? 0) + endY - vscrollController.offset;
+
+    _endHandleRect = Rect.fromCenter(
+      center: Offset(endScreenX, endScreenY + _lineHeight + handleRadius),
+      width: handleRadius * 2,
+      height: handleRadius * 2,
+    );
+  }
+
+  
+  void _drawMobileSelectionHandles(
+    Canvas canvas,
+    Offset offset,
+    int firstVisibleLine,
+    int lastVisibleLine,
+    double firstVisibleLineY,
+    bool hasActiveFolds,
+  ) {
+    if (!isMobile) return;
+
+    final selection = controller.selection;
+    final handleColor = selectionStyle.cursorBubbleColor;
+    final handleRadius = (_lineHeight / 2).clamp(6.0, 12.0);
+
+    final handlePaint = Paint()
+      ..color = handleColor
+      ..style = PaintingStyle.fill;
+
+    if (selection.isCollapsed) {
+      
+      if (_showBubble || _selectionActive) {
+        final caretInfo = _getCaretInfo();
+
+        double caretY;
+        if (!hasActiveFolds) {
+          caretY = caretInfo.lineIndex * _lineHeight;
+        } else {
+          caretY = 0;
+          for (int i = 0; i < caretInfo.lineIndex; i++) {
+            if (!_isLineFolded(i)) caretY += _lineHeight;
+          }
+        }
+
+        final handleX =
+            offset.dx +
+            _gutterWidth +
+            (innerPadding?.left ?? 0) +
+            caretInfo.offset.dx -
+            hscrollController.offset;
+        final handleY =
+            offset.dy +
+            (innerPadding?.top ?? 0) +
+            caretY +
+            _lineHeight -
+            vscrollController.offset;
+
+        
+        _drawTeardropHandle(
+          canvas,
+          handleX,
+          handleY,
+          handleRadius,
+          handlePaint,
+        );
+
+        
+        _normalHandle = Rect.fromCenter(
+          center: Offset(handleX, handleY + handleRadius),
+          width: handleRadius * 2,
+          height: handleRadius * 2,
+        );
+      }
+    } else {
+      
+      if (_startHandleRect != null) {
+        _drawTeardropHandle(
+          canvas,
+          _startHandleRect!.center.dx,
+          _startHandleRect!.center.dy - handleRadius,
+          handleRadius,
+          handlePaint,
+          isStart: true,
+        );
+      }
+
+      if (_endHandleRect != null) {
+        _drawTeardropHandle(
+          canvas,
+          _endHandleRect!.center.dx,
+          _endHandleRect!.center.dy - handleRadius,
+          handleRadius,
+          handlePaint,
+          isStart: false,
+        );
+      }
+    }
+  }
+
+  
+  void _drawTeardropHandle(
+    Canvas canvas,
+    double x,
+    double y,
+    double radius,
+    Paint paint, {
+    bool isStart = false,
+  }) {
+    final path = Path();
+
+    
+    canvas.drawCircle(Offset(x, y + radius), radius, paint);
+
+    
+    final stemWidth = radius * 0.5;
+    path.moveTo(x - stemWidth / 2, y + radius);
+    path.lineTo(x, y);
+    path.lineTo(x + stemWidth / 2, y + radius);
+    path.close();
+
+    canvas.drawPath(path, paint);
+  }
+
+  
+  void _drawAiGhostText(
+    Canvas canvas,
+    Offset offset,
+    int firstVisibleLine,
+    int lastVisibleLine,
+    double firstVisibleLineY,
+    bool hasActiveFolds,
+  ) {
+    if (_aiText == null || _aiText!.isEmpty) return;
+    if (!controller.selection.isValid || !controller.selection.isCollapsed)
+      return;
+
+    final cursorOffset = controller.selection.extentOffset;
+    final cursorLine = controller.getLineAtOffset(cursorOffset);
+
+    
+    if (cursorLine < firstVisibleLine || cursorLine > lastVisibleLine) return;
+    if (hasActiveFolds && _isLineFolded(cursorLine)) return;
+
+    
+    final lineStartOffset = controller.getLineStartOffset(cursorLine);
+    final cursorCol = cursorOffset - lineStartOffset;
+
+    
+    final lineText =
+        _lineTextCache[cursorLine] ?? controller.getLineText(cursorLine);
+
+    
+    double cursorX;
+    if (lineText.isNotEmpty && cursorCol > 0) {
+      final para =
+          _paragraphCache[cursorLine] ??
+          _buildHighlightedParagraph(cursorLine, lineText);
+      final boxes = para.getBoxesForRange(
+        0,
+        cursorCol.clamp(0, lineText.length),
+      );
+      cursorX = boxes.isNotEmpty ? boxes.last.right : 0;
+    } else {
+      cursorX = 0;
+    }
+
+    
+    double cursorY;
+    if (!hasActiveFolds) {
+      cursorY = cursorLine * _lineHeight;
+    } else {
+      cursorY = 0;
+      for (int i = 0; i < cursorLine; i++) {
+        if (!_isLineFolded(i)) cursorY += _lineHeight;
+      }
+    }
+
+    
+    final ghostColor =
+        (textStyle?.color ?? editorTheme['root']?.color ?? Colors.white)
+            .withAlpha(100);
+    final ghostStyle = ui.TextStyle(
+      color: ghostColor,
+      fontSize: textStyle?.fontSize ?? 14.0,
+      fontFamily: textStyle?.fontFamily,
+      fontStyle: FontStyle.italic,
+    );
+
+    
+    final aiLines = _aiText!.split('\n');
+
+    
+    for (int i = 0; i < aiLines.length; i++) {
+      final aiLineText = aiLines[i];
+      if (aiLineText.isEmpty && i < aiLines.length - 1) continue;
+
+      final lineIndex = cursorLine + i;
+
+      
+      if (lineIndex < firstVisibleLine || lineIndex > lastVisibleLine) continue;
+
+      
+      double lineY;
+      if (i == 0) {
+        lineY = cursorY;
+      } else {
+        if (!hasActiveFolds) {
+          lineY = lineIndex * _lineHeight;
+        } else {
+          lineY = 0;
+          for (int j = 0; j < lineIndex; j++) {
+            if (!_isLineFolded(j)) lineY += _lineHeight;
+          }
+        }
+      }
+
+      
+      final lineX = (i == 0) ? cursorX : 0;
+
+      
+      final builder =
+          ui.ParagraphBuilder(
+              ui.ParagraphStyle(
+                fontFamily: textStyle?.fontFamily,
+                fontSize: textStyle?.fontSize ?? 14.0,
+                height: textStyle?.height ?? 1.2,
+              ),
+            )
+            ..pushStyle(ghostStyle)
+            ..addText(aiLineText);
+
+      final para = builder.build();
+      para.layout(const ui.ParagraphConstraints(width: double.infinity));
+
+      
+      final screenX =
+          offset.dx +
+          _gutterWidth +
+          (innerPadding?.left ?? 0) +
+          lineX -
+          hscrollController.offset;
+      final screenY =
+          offset.dy +
+          (innerPadding?.top ?? 0) +
+          lineY -
+          vscrollController.offset;
+
+      
+      canvas.drawParagraph(para, Offset(screenX, screenY));
+    }
+  }
+
   @override
   void dispose() {
     controller.removeListener(_onControllerChange);
@@ -1889,16 +3134,57 @@ class _CodeFieldRenderer extends RenderBox {
 
   @override
   void handleEvent(PointerEvent event, covariant BoxHitTestEntry entry) {
-    if (event is PointerDownEvent && event.buttons == kPrimaryButton) {
-      focusNode.requestFocus();
-      final localPosition = event.localPosition;
+    final localPosition = event.localPosition;
+    _currentPosition = localPosition;
 
+    final contentPosition = Offset(
+      localPosition.dx -
+          _gutterWidth -
+          (innerPadding?.left ?? 0) +
+          hscrollController.offset,
+      localPosition.dy - (innerPadding?.top ?? 0) + vscrollController.offset,
+    );
+    final textOffset = _getTextOffsetFromPosition(contentPosition);
+
+    
+    if (event is PointerHoverEvent && !isMobile) {
+      _hoverTimer?.cancel();
+      if (hoverNotifier.value == null && _isOffsetOverWord(textOffset)) {
+        _hoverTimer = Timer(const Duration(milliseconds: 800), () {
+          final lineChar = _offsetToLineChar(textOffset);
+          hoverNotifier.value = [localPosition, lineChar];
+        });
+      }
+    }
+
+    
+    if (event is PointerDownEvent && event.buttons == kSecondaryButton) {
+      contextMenuOffsetNotifier.value = localPosition;
+      return;
+    }
+
+    
+    if (event is PointerUpEvent && isMobile && _selectionActive) {
+      if (controller.selection.start != controller.selection.end) {
+        contextMenuOffsetNotifier.value = localPosition;
+      }
+    }
+
+    
+    if (event is PointerDownEvent && event.buttons == kPrimaryButton) {
+      
+      if (contextMenuOffsetNotifier.value.dx >= 0) {
+        contextMenuOffsetNotifier.value = const Offset(-1, -1);
+      }
+
+      focusNode.requestFocus();
+
+      
       if (enableFolding && enableGutter && localPosition.dx < _gutterWidth) {
         final clickY =
             localPosition.dy +
             vscrollController.offset -
             (innerPadding?.top ?? 0);
-
         final hasActiveFolds = _foldRanges.any((f) => f.isFolded);
         int clickedLine;
 
@@ -1912,7 +3198,6 @@ class _CodeFieldRenderer extends RenderBox {
           double currentY = 0;
           for (int i = 0; i < controller.lineCount; i++) {
             if (_isLineFolded(i)) continue;
-
             if (clickY >= currentY && clickY < currentY + _lineHeight) {
               clickedLine = i;
               break;
@@ -1929,20 +3214,210 @@ class _CodeFieldRenderer extends RenderBox {
         return;
       }
 
-      final contentPosition = Offset(
-        localPosition.dx -
-            _gutterWidth -
-            (innerPadding?.left ?? 0) +
-            hscrollController.offset,
-        localPosition.dy - (innerPadding?.top ?? 0) + vscrollController.offset,
+      
+      if (isMobile) {
+        _draggingCHandle = false;
+        _draggingStartHandle = false;
+        _draggingEndHandle = false;
+
+        if (controller.selection.start != controller.selection.end) {
+          if (_startHandleRect?.contains(localPosition) ?? false) {
+            _draggingStartHandle = true;
+            _selectionActive = true;
+            selectionActiveNotifier.value = true;
+            _pointerDownPosition = localPosition;
+            return;
+          }
+          if (_endHandleRect?.contains(localPosition) ?? false) {
+            _draggingEndHandle = true;
+            _selectionActive = true;
+            selectionActiveNotifier.value = true;
+            _pointerDownPosition = localPosition;
+            return;
+          }
+        } else if (_normalHandle?.contains(localPosition) ?? false) {
+          _draggingCHandle = true;
+          _selectionActive = true;
+          selectionActiveNotifier.value = true;
+          controller.selection = TextSelection.collapsed(offset: textOffset);
+          _pointerDownPosition = localPosition;
+          return;
+        }
+
+        _dragStartOffset = textOffset;
+        _isDragging = false;
+        _pointerDownPosition = localPosition;
+        _selectionActive = false;
+        selectionActiveNotifier.value = false;
+
+        
+        _selectionTimer?.cancel();
+        _selectionTimer = Timer(const Duration(milliseconds: 500), () {
+          _selectWordAtOffset(textOffset);
+        });
+      } else {
+        
+        _dragStartOffset = textOffset;
+        controller.selection = TextSelection.collapsed(offset: textOffset);
+      }
+    }
+
+    
+    if (event is PointerMoveEvent && _dragStartOffset != null) {
+      if (isMobile) {
+        if (_draggingCHandle) {
+          controller.selection = TextSelection.collapsed(offset: textOffset);
+          markNeedsPaint();
+          return;
+        }
+
+        if (_draggingStartHandle || _draggingEndHandle) {
+          final base = controller.selection.start;
+          final extent = controller.selection.end;
+
+          if (_draggingStartHandle) {
+            controller.selection = TextSelection(
+              baseOffset: textOffset,
+              extentOffset: extent,
+            );
+            if (textOffset > extent) {
+              _draggingStartHandle = false;
+              _draggingEndHandle = true;
+            }
+          } else {
+            controller.selection = TextSelection(
+              baseOffset: base,
+              extentOffset: textOffset,
+            );
+            if (textOffset < base) {
+              _draggingEndHandle = false;
+              _draggingStartHandle = true;
+            }
+          }
+          markNeedsPaint();
+          return;
+        }
+
+        
+        if ((localPosition - (_pointerDownPosition ?? localPosition)).distance >
+            10) {
+          _isDragging = true;
+        }
+
+        if (!_selectionActive) return;
+      }
+
+      
+      controller.selection = TextSelection(
+        baseOffset: _dragStartOffset!,
+        extentOffset: textOffset,
       );
-      final textOffset = _getTextOffsetFromPosition(contentPosition);
-      controller.selection = TextSelection.collapsed(offset: textOffset);
+    }
+
+    
+    if (event is PointerUpEvent || event is PointerCancelEvent) {
+      if (!_isDragging && isMobile && !_selectionActive) {
+        controller.selection = TextSelection.collapsed(offset: textOffset);
+      }
+
+      _draggingStartHandle = false;
+      _draggingEndHandle = false;
+      _draggingCHandle = false;
+      _pointerDownPosition = null;
+      _dragStartOffset = null;
+      _selectionTimer?.cancel();
+      _selectionActive = false;
+      selectionActiveNotifier.value = false;
+
+      if (!readOnly && !isMobile) {
+        controller.notifyListeners();
+      }
+
+      _isDragging = false;
+
+      
+      if (isMobile && controller.selection.isCollapsed) {
+        _showBubble = true;
+        markNeedsPaint();
+      }
     }
   }
+
+  void _selectWordAtOffset(int offset) {
+    _selectionActive = true;
+    selectionActiveNotifier.value = true;
+
+    final text = controller.text;
+    int start = offset, end = offset;
+
+    while (start > 0 && !_isWordBoundary(text[start - 1])) {
+      start--;
+    }
+    while (end < text.length && !_isWordBoundary(text[end])) {
+      end++;
+    }
+
+    controller.selection = TextSelection(baseOffset: start, extentOffset: end);
+    markNeedsPaint();
+  }
+
+  bool _isWordBoundary(String char) {
+    return char.trim().isEmpty || !RegExp(r'\w').hasMatch(char);
+  }
+
+  bool _isOffsetOverWord(int offset) {
+    final text = controller.text;
+    if (offset < 0 || offset >= text.length) return false;
+    return RegExp(r'\w').hasMatch(text[offset]);
+  }
+
+  Map<String, int> _offsetToLineChar(int offset) {
+    int accum = 0;
+    for (int i = 0; i < controller.lineCount; i++) {
+      final lineLen = controller.getLineText(i).length;
+      if (offset >= accum && offset <= accum + lineLen) {
+        return {'line': i, 'character': offset - accum};
+      }
+      accum += lineLen + 1;
+    }
+    final last = controller.lineCount - 1;
+    return {'line': last, 'character': controller.getLineText(last).length};
+  }
+
+  
+  @override
+  MouseCursor get cursor {
+    if (_currentPosition.dx >= 0 && _currentPosition.dx < _gutterWidth) {
+      
+      for (final fold in _foldRanges) {
+        if (fold.startIndex >= controller.lineCount) continue;
+        final foldY =
+            fold.startIndex * _lineHeight +
+            (innerPadding?.top ?? 0) -
+            vscrollController.offset;
+        if (_currentPosition.dy >= foldY &&
+            _currentPosition.dy <= foldY + _lineHeight) {
+          return SystemMouseCursors.click;
+        }
+      }
+      return MouseCursor.defer;
+    }
+    return SystemMouseCursors.text;
+  }
+
+  @override
+  PointerEnterEventListener? get onEnter => null;
+
+  @override
+  PointerExitEventListener? get onExit => (event) {
+    _hoverTimer?.cancel();
+  };
+
+  @override
+  bool get validForMouseTracker => true;
 }
 
-/// Represents a foldable code region
+
 class FoldRange {
   final int startIndex;
   final int endIndex;
