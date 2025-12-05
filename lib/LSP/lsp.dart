@@ -57,7 +57,7 @@ sealed class LspConfig {
 
   /// This method is used to initialize the LSP server.
   ///
-  /// This method is used internally by the [CodeForge] widget and calling it directly is not recommended.
+  /// This method is used internally by the [CodeCrafter] widget and calling it directly is not recommended.
   /// It may crash the LSP server if called multiple times.
   Future<void> initialize() async {
     final workspaceUri = Uri.directory(workspacePath).toString();
@@ -74,9 +74,18 @@ sealed class LspConfig {
             'completion': {
               'completionItem': {'snippetSupport': false},
             },
-          },
-          'hover': {
-            'contentFormat': ['markdown'],
+            'synchronization': {'didSave': true},
+            'hover': {
+              'contentFormat': ['markdown'],
+            },
+            'semanticTokens': {
+              'dynamicRegistration': false,
+              'tokenTypes': sematicMap['tokenTypes'],
+              'tokenModifiers': sematicMap['tokenModifiers'],
+              'formats': ['relative'],
+              'requests': {'full': true, 'range': true},
+              'multilineTokenSupport': true,
+            },
           },
         },
       },
@@ -98,7 +107,7 @@ sealed class LspConfig {
 
   /// Opens the document in the LSP server.
   ///
-  /// This method is used internally by the [CodeForge] widget and calling it directly is not recommended.
+  /// This method is used internally by the [CodeCrafter] widget and calling it directly is not recommended.
   Future<void> openDocument() async {
     final version = (_openDocuments[filePath] ?? 0) + 1;
     _openDocuments[filePath] = version;
@@ -119,7 +128,7 @@ sealed class LspConfig {
 
   Future<void> updateDocument(String content) async {
     if (!_openDocuments.containsKey(filePath)) {
-      return;
+      return;  // Apply language-specific overrides
     }
 
     final version = _openDocuments[filePath]! + 1;
@@ -139,9 +148,19 @@ sealed class LspConfig {
     );
   }
 
+  Future<void> saveDocument(String content) async {
+    await _sendNotification(
+      method: 'textDocument/didSave',
+      params: {
+        'textDocument': {'uri': Uri.file(filePath).toString()},
+        'text': content,
+      },
+    );
+  }
+
   /// Updates the document in the LSP server if there is any change.
   /// ///
-  /// This method is used internally by the [CodeForge] widget and calling it directly is not recommended.
+  /// This method is used internally by the [CodeCrafter] widget and calling it directly is not recommended.
   Future<void> closeDocument() async {
     if (!_openDocuments.containsKey(filePath)) return;
 
@@ -154,9 +173,17 @@ sealed class LspConfig {
     _openDocuments.remove(filePath);
   }
 
+  Future<void> shutdown() async {
+    await _sendRequest(method: 'shutdown', params: {});
+  }
+
+  Future<void> exitServer() async {
+    await _sendNotification(method: 'exit', params: {});
+  }
+
   /// This method is used to get completions at a specific position in the document.
   ///
-  /// This method is used internally by the [CodeForge], calling this with appropriate parameters will returns a [List] of [LspCompletion].
+  /// This method is used internally by the [CodeCrafter], calling this with appropriate parameters will returns a [List] of [LspCompletion].
   Future<List<LspCompletion>> getCompletions(int line, int character) async {
     List<LspCompletion> completion = [];
     final response = await _sendRequest(
@@ -179,7 +206,7 @@ sealed class LspConfig {
 
   /// This method is used to get details at a specific position in the document.
   ///
-  /// This method is used internally by the [CodeForge], calling this with appropriate parameters will returns a [String].
+  /// This method is used internally by the [CodeCrafter], calling this with appropriate parameters will returns a [String].
   /// If the LSP server does not support hover or the location provided is invalid, it will return an empty string.
   Future<String> getHover(int line, int character) async {
     final response = await _sendRequest(
@@ -204,13 +231,13 @@ sealed class LspConfig {
     return '';
   }
 
-  Future<String> getDefinition(int line, int character) async {
+  Future<Map<String, dynamic>> getDefinition(int line, int character) async {
     final response = await _sendRequest(
       method: 'textDocument/definition',
       params: _commonParams(line, character),
     );
-    if (response['result'] == null || response['result'].isEmpty) return '';
-    return response['result'][1]['uri'] ?? '';
+    if (response['result'] == null) return {};
+    return response['result'][0] ?? '';
   }
 
   Future<List<dynamic>> getReferences(int line, int character) async {
@@ -224,52 +251,74 @@ sealed class LspConfig {
     return response['result'];
   }
 
+  Future<List<LspSemanticToken>> getSemanticTokensFull() async {
+    final response = await _sendRequest(
+      method: 'textDocument/semanticTokens/full',
+      params: {
+        'textDocument': {'uri': Uri.file(filePath).toString()},
+      },
+    );
+
+    final tokens = response['result']?['data'];
+    if (tokens is! List) return [];
+
+    return _decodeSemanticTokens(tokens);
+  }
+
+  Future<List<LspSemanticToken>> getSemanticTokensRange(
+    int startLine,
+    int startChar,
+    int endLine,
+    int endChar,
+  ) async {
+    final response = await _sendRequest(
+      method: 'textDocument/semanticTokens/range',
+      params: {
+        'textDocument': {'uri': Uri.file(filePath).toString()},
+        'range': {
+          'start': {'line': startLine, 'character': startChar},
+          'end': {'line': endLine, 'character': endChar},
+        },
+      },
+    );
+
+    final tokens = response['result']?['data'];
+    if (tokens is! List) return [];
+
+    return _decodeSemanticTokens(tokens);
+  }
+
   Stream<Map<String, dynamic>> get responses => _responseController.stream;
-}
 
-/// Represents a completion item in the LSP (Language Server Protocol).
-/// This class is used internally by the [CodeForge] widget to display completion suggestions.
-class LspCompletion {
-  /// The label of the completion item, which is displayed in the completion suggestions.
-  final String label;
+  List<LspSemanticToken> _decodeSemanticTokens(List<dynamic> data) {
+    final result = <LspSemanticToken>[];
 
-  /// The type of the completion item, which determines the icon and color used to represent it.
-  /// The icon is determined by the [completionItemIcons] map.
-  final CompletionItemType itemType;
+    int line = 0;
+    int start = 0;
 
-  /// The icon associated with the completion item, determined by its type.
-  final Icon icon;
+    for (int i = 0; i < data.length; i += 5) {
+      final deltaLine = data[i];
+      final deltaStart = data[i + 1];
+      final length = data[i + 2];
+      final tokenType = data[i + 3];
+      final tokenModifiers = data[i + 4];
 
-  LspCompletion({required this.label, required this.itemType})
-    : icon = Icon(
-        completionItemIcons[itemType]!.icon,
-        color: completionItemIcons[itemType]!.color,
-        size: 18,
+      line += deltaLine as int;
+      start = deltaLine == 0 ? start + deltaStart : deltaStart;
+
+      result.add(
+        LspSemanticToken(
+          line: line,
+          start: start,
+          length: length,
+          typeIndex: tokenType,
+          modifierBitmask: tokenModifiers,
+        ),
       );
-}
+    }
 
-/// Represents an error in the LSP (Language Server Protocol).
-/// This class is used internally by the [CodeForge] widget to display errors in the editor.
-class LspErrors {
-  /// The severity of the error, which can be one of the following:
-  /// - 1: Error
-  /// - 2: Warning
-  /// - 3: Information
-  /// - 4: Hint
-  final int severity;
-
-  /// The range of the error in the document, represented as a map with keys 'start' and 'end'.
-  /// The 'start' and 'end' keys are maps with 'line' and 'character' keys.
-  final Map<String, dynamic> range;
-
-  /// The message describing the error.
-  String message;
-
-  LspErrors({
-    required this.severity,
-    required this.range,
-    required this.message,
-  });
+    return result;
+  }
 }
 
 enum CompletionItemType {
@@ -382,4 +431,180 @@ class CustomIcons {
   static const IconData snippet = IconData(0x900, fontFamily: 'Snippet');
   static const IconData interface = IconData(0x900, fontFamily: 'Interface');
   static const IconData field = IconData(0x900, fontFamily: 'Field');
+}
+
+/// Represents a completion item in the LSP (Language Server Protocol).
+/// This class is used internally by the [CodeCrafter] widget to display completion suggestions.
+class LspCompletion {
+  /// The label of the completion item, which is displayed in the completion suggestions.
+  final String label;
+
+  /// The type of the completion item, which determines the icon and color used to represent it.
+  /// The icon is determined by the [completionItemIcons] map.
+  final CompletionItemType itemType;
+
+  /// The icon associated with the completion item, determined by its type.
+  final Icon icon;
+
+  LspCompletion({required this.label, required this.itemType})
+    : icon = Icon(
+        completionItemIcons[itemType]!.icon,
+        color: completionItemIcons[itemType]!.color,
+        size: 18,
+      );
+}
+
+/// Represents an error in the LSP (Language Server Protocol).
+/// This class is used internally by the [CodeCrafter] widget to display errors in the editor.
+class LspErrors {
+  /// The severity of the error, which can be one of the following:
+  /// - 1: Error
+  /// - 2: Warning
+  /// - 3: Information
+  /// - 4: Hint
+  final int severity;
+
+  /// The range of the error in the document, represented as a map with keys 'start' and 'end'.
+  /// The 'start' and 'end' keys are maps with 'line' and 'character' keys.
+  final Map<String, dynamic> range;
+
+  /// The message describing the error.
+  String message;
+
+  LspErrors({
+    required this.severity,
+    required this.range,
+    required this.message,
+  });
+}
+
+class LspSemanticToken {
+  final int line;
+  final int start;
+  final int length;
+  final int typeIndex;
+  final int modifierBitmask;
+
+  LspSemanticToken({
+    required this.line,
+    required this.start,
+    required this.length,
+    required this.typeIndex,
+    required this.modifierBitmask,
+  });
+
+  int get end => start + length;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'line': line,
+      'start': start,
+      'length': length,
+      'typeIndex': typeIndex,
+      'modifierBitmask': modifierBitmask,
+    };
+  }
+
+  @override
+  String toString() => toJson().toString();
+}
+
+const sematicMap = {
+  'requests': {'full': true, 'range': true},
+  'tokenTypes': [
+    'namespace',
+    'type',
+    'class',
+    'enum',
+    'interface',
+    'struct',
+    'typeParameter',
+    'parameter',
+    'variable',
+    'property',
+    'enumMember',
+    'event',
+    'function',
+    'method',
+    'macro',
+    'keyword',
+    'modifier',
+    'comment',
+    'string',
+    'number',
+    'regexp',
+    'operator',
+    'decorator',
+  ],
+  'tokenModifiers': [
+    'declaration',
+    'definition',
+    'readonly',
+    'static',
+    'deprecated',
+    'abstract',
+    'async',
+    'modification',
+    'documentation',
+    'defaultLibrary',
+  ],
+};
+
+const Map<String, List<String>> semanticToHljs = {
+  'class': ['built_in', 'type'],
+  'type': ['built_in', 'type'],
+  'namespace': ['built_in', 'type'],
+  'interface': ['built_in', 'type'],
+  'struct': ['built_in', 'type'],
+  'enum': ['built_in', 'type'],
+  'function': ['section', 'bullet'],
+  'method': ['section', 'bullet'],
+  'decorator': ['meta', 'meta-keyword'],
+  'variable': ['attr', 'attribute'],
+  'parameter': ['attr', 'attribute'],
+  'property': ['attr', 'attribute'],
+  'typeParameter': ['attr', 'attribute'],
+  'enumMember': ['attr', 'attribute'],
+  'operator': ['keyword'],
+  'keyword': ['keyword'],
+  'modifier': ['keyword'],
+  'string': ['string'],
+  'comment': ['comment'],
+  'number': ['number'],
+  'regexp': ['regexp'],
+  'macro': ['meta', 'meta-keyword'],
+  'event': ['attr', 'attribute'],
+};
+
+/// Pyright-specific overrides for semantic token mappings.
+/// Pyright uses some token types differently than the LSP standard.
+const Map<String, List<String>> pyrightSemanticOverrides = {
+  // Pyright uses 'enumMember' for function/method names
+  'enumMember': ['section', 'bullet'],
+  // Pyright uses 'method' for 'self' parameter
+  'method': ['attr', 'attribute'],
+};
+
+/// Get the semantic token mapping for a specific language server.
+/// Returns the standard mapping with any server-specific overrides applied.
+Map<String, List<String>> getSemanticMapping(String languageId) {
+  final baseMap = Map<String, List<String>>.from(semanticToHljs);
+
+  // Apply language-specific overrides
+  switch (languageId) {
+    case 'python':
+      // Pyright/Pylance specific overrides
+      baseMap.addAll(pyrightSemanticOverrides);
+      break;
+    // Add other language servers as needed:
+    // case 'rust':
+    //   baseMap.addAll(rustAnalyzerOverrides);
+    //   break;
+    // case 'typescript':
+    // case 'javascript':
+    //   // typescript-language-server follows standard mappings
+    //   break;
+  }
+
+  return baseMap;
 }

@@ -1,3 +1,4 @@
+import 'package:code_forge/LSP/lsp.dart';
 import 'package:code_forge/code_forge.dart';
 import 'package:example/big_code.dart';
 import 'package:example/little_code.dart';
@@ -30,13 +31,19 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       home: SafeArea(
         child: CodeForge(
-          language: langDart,
+          filePath: "/home/athul/Projects/EhEh/sample.py",
           controller: _controller,
           /* textStyle: const TextStyle(
             fontFamily: 'monospace',
             fontSize: 14,
             color: Color(0xFFD4D4D4),
           ), */
+          lspConfig: LspSocketConfig(
+            filePath: "/home/athul/Projects/EhEh/sample.py",
+            languageId: "python",
+            serverUrl: "ws://0.0.0.0:3031",
+            workspacePath: "/home/athul/Projects/EhEh",
+          ),
           gutterStyle: GutterStyle(
             backgroundColor: Color(0xFF252526),
             lineNumberStyle: TextStyle(

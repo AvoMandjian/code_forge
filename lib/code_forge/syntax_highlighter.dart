@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:re_highlight/re_highlight.dart';
 
+import '../LSP/lsp.dart';
+
 /// Cached highlighting result for a single line
 class HighlightedLine {
   final String text;
@@ -22,15 +24,24 @@ class _SpanData {
   _SpanData(this.text, this.scope, [this.children = const []]);
 }
 
-/// Efficient syntax highlighter with caching and optional isolate support
+/// List of semantic token type names (must match sematicMap['tokenTypes'] order)
+final List<String> _semanticTokenTypes = 
+    (sematicMap['tokenTypes'] as List).cast<String>();
+
+/// Efficient syntax highlighter with caching, LSP semantic tokens, and optional isolate support
 class SyntaxHighlighter {
   final Mode language;
   final Map<String, TextStyle> editorTheme;
   final TextStyle? baseTextStyle;
+  final String? languageId;
   late final String _langId;
   late final Highlight _highlight;
-  final Map<int, HighlightedLine> _cache = {};
-  final Set<int> _dirtyLines = {};
+  late final Map<String, List<String>> _semanticMapping;
+  final Map<int, HighlightedLine> _grammarCache = {};
+  final Map<int, HighlightedLine> _mergedCache = {};
+  List<LspSemanticToken> _semanticTokens = [];
+  List<int> _lineOffsets = [0];
+  
   int _version = 0;
   static const int isolateThreshold = 500;
   VoidCallback? onHighlightComplete;
@@ -39,24 +50,44 @@ class SyntaxHighlighter {
     required this.language,
     required this.editorTheme,
     this.baseTextStyle,
+    this.languageId,
     this.onHighlightComplete,
   }) {
     _langId = language.hashCode.toString();
     _highlight = Highlight();
     _highlight.registerLanguage(_langId, language);
+    _semanticMapping = getSemanticMapping(languageId ?? '');
+  }
+  
+  /// Update semantic tokens from LSP (call after getSemanticTokensFull or getSemanticTokensRange)
+  void updateSemanticTokens(List<LspSemanticToken> tokens, String fullText) {
+    _semanticTokens = tokens;
+    _updateLineOffsets(fullText);
+    _mergedCache.clear(); // Force re-merge
+    _version++;
+    onHighlightComplete?.call();
+  }
+  
+  void _updateLineOffsets(String text) {
+    _lineOffsets = [0];
+    final lines = text.split('\n');
+    for (int i = 0; i < lines.length; i++) {
+      _lineOffsets.add(_lineOffsets.last + lines[i].length + 1); // +1 for newline
+    }
   }
   
   /// Mark all lines as dirty (full rehighlight needed)
   void invalidateAll() {
-    _cache.clear();
+    _grammarCache.clear();
+    _mergedCache.clear();
     _version++;
   }
   
   /// Mark specific lines as dirty
   void invalidateLines(Set<int> lines) {
     for (final line in lines) {
-      _cache.remove(line);
-      _dirtyLines.add(line);
+      _grammarCache.remove(line);
+      _mergedCache.remove(line);
     }
     _version++;
   }
@@ -64,30 +95,156 @@ class SyntaxHighlighter {
   /// Mark a range of lines as dirty (for insertions/deletions)
   void invalidateRange(int startLine, int endLine) {
     for (int i = startLine; i <= endLine; i++) {
-      _cache.remove(i);
-      _dirtyLines.add(i);
+      _grammarCache.remove(i);
+      _mergedCache.remove(i);
     }
-    final keysToRemove = _cache.keys.where((k) => k > endLine).toList();
+    final keysToRemove = _grammarCache.keys.where((k) => k > endLine).toList();
     for (final key in keysToRemove) {
-      _cache.remove(key);
+      _grammarCache.remove(key);
+      _mergedCache.remove(key);
     }
     _version++;
   }
   
   /// Get highlighted TextSpan for a line, using cache if available
+  /// This returns merged grammar + semantic highlighting
   TextSpan? getLineSpan(int lineIndex, String lineText) {
-    final cached = _cache[lineIndex];
-    if (cached != null && cached.text == lineText && cached.version == _version) {
-      return cached.span;
+    final mergedCached = _mergedCache[lineIndex];
+    if (mergedCached != null && mergedCached.text == lineText && mergedCached.version == _version) {
+      return mergedCached.span;
     }
     
-    final span = _highlightLine(lineText);
-    _cache[lineIndex] = HighlightedLine(lineText, span, _version);
-    _dirtyLines.remove(lineIndex);
-    return span;
+    TextSpan? grammarSpan;
+    final grammarCached = _grammarCache[lineIndex];
+    if (grammarCached != null && grammarCached.text == lineText) {
+      grammarSpan = grammarCached.span;
+    } else {
+      grammarSpan = _highlightLine(lineText);
+      _grammarCache[lineIndex] = HighlightedLine(lineText, grammarSpan, _version);
+    }
+    
+    TextSpan? mergedSpan;
+    if (_semanticTokens.isNotEmpty && lineText.isNotEmpty) {
+      mergedSpan = _applySemanticTokensToLine(lineIndex, lineText, grammarSpan);
+    } else {
+      mergedSpan = grammarSpan;
+    }
+    
+    _mergedCache[lineIndex] = HighlightedLine(lineText, mergedSpan, _version);
+    return mergedSpan;
   }
   
-  /// Highlight a single line synchronously
+  TextSpan? _applySemanticTokensToLine(int lineIndex, String lineText, TextSpan? grammarSpan) {
+    if (lineText.isEmpty) return grammarSpan;
+    
+    final lineTokens = _semanticTokens.where((t) => t.line == lineIndex).toList();
+    if (lineTokens.isEmpty) return grammarSpan;
+    
+    final styles = List<TextStyle?>.filled(lineText.length, null);
+    if (grammarSpan != null) {
+      _collectStyles(grammarSpan, styles, 0, grammarSpan.style);
+    }
+    
+    final defaultColor = editorTheme['root']?.color ?? Colors.white;
+    
+    for (final token in lineTokens) {
+      final semanticStyle = _resolveSemanticStyle(token.typeIndex);
+      if (semanticStyle == null) continue;
+      
+      final start = token.start;
+      final end = (token.start + token.length).clamp(0, lineText.length);
+      
+      for (int i = start; i < end && i < styles.length; i++) {
+        final currentStyle = styles[i];
+        if (currentStyle == null ||
+            currentStyle.color == null ||
+            currentStyle.color == defaultColor) {
+          styles[i] = semanticStyle;
+        }
+      }
+    }
+    
+    return _buildSpanFromStyles(lineText, styles);
+  }
+  
+  int _collectStyles(
+    TextSpan span,
+    List<TextStyle?> styles,
+    int offset,
+    TextStyle? parentStyle,
+  ) {
+    final effectiveStyle = span.style ?? parentStyle;
+    
+    if (span.text != null) {
+      for (int i = 0; i < span.text!.length && offset + i < styles.length; i++) {
+        styles[offset + i] = effectiveStyle;
+      }
+      offset += span.text!.length;
+    }
+    
+    if (span.children != null) {
+      for (final child in span.children!) {
+        if (child is TextSpan) {
+          offset = _collectStyles(child, styles, offset, effectiveStyle);
+        }
+      }
+    }
+    
+    return offset;
+  }
+  
+  TextSpan _buildSpanFromStyles(String text, List<TextStyle?> styles) {
+    if (text.isEmpty) return TextSpan(style: baseTextStyle);
+    
+    final children = <TextSpan>[];
+    int start = 0;
+    
+    while (start < text.length) {
+      final currentStyle = styles[start];
+      int end = start + 1;
+      
+      while (end < text.length && _stylesEqual(styles[end], currentStyle)) {
+        end++;
+      }
+      
+      children.add(TextSpan(
+        text: text.substring(start, end),
+        style: currentStyle ?? baseTextStyle,
+      ));
+      
+      start = end;
+    }
+    
+    if (children.length == 1) {
+      return children.first;
+    }
+    
+    return TextSpan(style: baseTextStyle, children: children);
+  }
+  
+  bool _stylesEqual(TextStyle? a, TextStyle? b) {
+    if (a == null && b == null) return true;
+    if (a == null || b == null) return false;
+    return a.color == b.color && 
+           a.fontWeight == b.fontWeight && 
+           a.fontStyle == b.fontStyle;
+  }
+  
+  TextStyle? _resolveSemanticStyle(int typeIndex) {
+    if (typeIndex < 0 || typeIndex >= _semanticTokenTypes.length) return null;
+    
+    final tokenType = _semanticTokenTypes[typeIndex];
+    final hljsKeys = _semanticMapping[tokenType];
+    if (hljsKeys == null) return null;
+    
+    for (final key in hljsKeys) {
+      final style = editorTheme[key];
+      if (style != null) return style;
+    }
+    
+    return null;
+  }
+  
   TextSpan? _highlightLine(String lineText) {
     if (lineText.isEmpty) return null;
     
@@ -128,7 +285,6 @@ class SyntaxHighlighter {
     return p;
   }
   
-  /// Recursively add TextSpan children to paragraph builder
   void _addTextSpanToBuilder(
     ui.ParagraphBuilder builder,
     TextSpan span,
@@ -153,7 +309,6 @@ class SyntaxHighlighter {
     builder.pop();
   }
   
-  /// Convert Flutter TextStyle to ui.TextStyle
   ui.TextStyle _textStyleToUiStyle(TextStyle? style, double fontSize, String? fontFamily) {
     final baseStyle = style ?? baseTextStyle ?? editorTheme['root'];
     
@@ -166,7 +321,6 @@ class SyntaxHighlighter {
     );
   }
   
-  /// Get ui.TextStyle for a className (kept for compatibility)
   ui.TextStyle _getUiTextStyle(String? className, double fontSize, String? fontFamily) {
     final themeStyle = className != null ? editorTheme[className] : null;
     final baseStyle = themeStyle ?? baseTextStyle ?? editorTheme['root'];
@@ -181,6 +335,7 @@ class SyntaxHighlighter {
   }
   
   /// Pre-highlight visible lines asynchronously (for smoother scrolling)
+  /// Note: This only does grammar-based highlighting. Call updateSemanticTokens separately.
   Future<void> preHighlightLines(
     int startLine,
     int endLine,
@@ -190,7 +345,7 @@ class SyntaxHighlighter {
     
     for (int i = startLine; i <= endLine; i++) {
       final lineText = getLineText(i);
-      final cached = _cache[i];
+      final cached = _grammarCache[i];
       if (cached == null || cached.text != lineText || cached.version != _version) {
         linesToProcess[i] = lineText;
       }
@@ -201,7 +356,7 @@ class SyntaxHighlighter {
     if (linesToProcess.length < 50) {
       for (final entry in linesToProcess.entries) {
         final span = _highlightLine(entry.value);
-        _cache[entry.key] = HighlightedLine(entry.value, span, _version);
+        _grammarCache[entry.key] = HighlightedLine(entry.value, span, _version);
       }
       onHighlightComplete?.call();
       return;
@@ -218,13 +373,12 @@ class SyntaxHighlighter {
     for (final entry in results.entries) {
       final spanData = entry.value;
       final textSpan = spanData != null ? _spanDataToTextSpan(spanData) : null;
-      _cache[entry.key] = HighlightedLine(linesToProcess[entry.key]!, textSpan, _version);
+      _grammarCache[entry.key] = HighlightedLine(linesToProcess[entry.key]!, textSpan, _version);
     }
     
     onHighlightComplete?.call();
   }
   
-  /// Convert serializable span data back to TextSpan
   TextSpan? _spanDataToTextSpan(_SpanData? data) {
     if (data == null) return null;
     
@@ -241,9 +395,10 @@ class SyntaxHighlighter {
     );
   }
   
-  /// Dispose resources
   void dispose() {
-    _cache.clear();
+    _grammarCache.clear();
+    _mergedCache.clear();
+    _semanticTokens.clear();
   }
 }
 
@@ -264,8 +419,6 @@ class _BackgroundHighlightData {
   });
 }
 
-/// Background highlighting function (runs in isolate via compute)
-/// Returns serializable span data since TextSpan can't cross isolate boundaries
 Map<int, _SpanData?> _highlightLinesInBackground(_BackgroundHighlightData data) {
   final highlight = Highlight();
   highlight.registerLanguage(data.langId, data.languageMode);

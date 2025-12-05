@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import '../AI_completion/ai.dart';
@@ -75,8 +76,7 @@ class CodeForge extends StatefulWidget {
   State<CodeForge> createState() => _CodeForgeState();
 }
 
-class _CodeForgeState extends State<CodeForge>
-    with SingleTickerProviderStateMixin {
+class _CodeForgeState extends State<CodeForge> with SingleTickerProviderStateMixin {
   late final ScrollController _hscrollController, _vscrollController;
   late final CodeForgeController _controller;
   late final FocusNode _focusNode;
@@ -88,6 +88,11 @@ class _CodeForgeState extends State<CodeForge>
   late final SuggestionStyle _suggestionStyle;
   late final HoverDetailsStyle _hoverDetailsStyle;
   TextInputConnection? _connection;
+  bool _lspReady = false;
+  String _previousValue = "";
+  List<LspSemanticToken>? _semanticTokens;
+  DateTime? _lastSemanticTokenFetch;
+  static const _semanticTokenDebounce = Duration(milliseconds: 500);
 
   @override
   void initState() {
@@ -186,7 +191,83 @@ class _CodeForgeState extends State<CodeForge>
       }
     });
 
-    _controller.addListener(_resetCursorBlink);
+    if (widget.filePath != null) {
+      if (widget.initialText != null) {
+        throw ArgumentError(
+          'Cannot provide both filePath and initialText to CodeForge.',
+        );
+      } else if (widget.filePath!.isNotEmpty) {
+        _controller.text = File(widget.filePath!).readAsStringSync();
+      }
+    } else if (widget.initialText != null && widget.initialText!.isNotEmpty) {
+      _controller.text = widget.initialText!;
+    }
+
+    if (widget.lspConfig != null) {
+      if ((widget.lspConfig!.filePath != widget.filePath) ||
+          widget.filePath == null) {
+        throw Exception(
+          'File path in LspConfig does not match the provided filePath in CodeForge.',
+        );
+      }
+    }
+
+    (() async {
+      final lspConfig = widget.lspConfig;
+      try {
+        if (lspConfig is LspSocketConfig) {
+          await lspConfig.connect();
+        }
+        await lspConfig!.initialize();
+        await Future.delayed(const Duration(milliseconds: 300));
+        await lspConfig.openDocument();
+        setState(() {
+          _lspReady = true;
+        });
+        _fetchSemanticTokens();
+      } catch (e) {
+        debugPrint('Error initializing LSP: $e');
+      }
+    })();
+
+    _controller.addListener(() {
+      _resetCursorBlink();
+
+      final text = _controller.text;
+      final currentValue = _controller.text;
+      final prevValue = _previousValue;
+
+      if (widget.lspConfig != null && _lspReady && currentValue != prevValue) {
+        (() async => await widget.lspConfig!.updateDocument(text))();
+        _scheduleSemantictokenRefresh();
+      }
+    });
+  }
+  
+  Future<void> _fetchSemanticTokens() async {
+    if (widget.lspConfig == null || !_lspReady) return;
+    
+    try {
+      final tokens = await widget.lspConfig!.getSemanticTokensFull();
+      setState(() {
+        _semanticTokens = tokens;
+        _lastSemanticTokenFetch = DateTime.now();
+      });
+    } catch (e) {
+      debugPrint('Error fetching semantic tokens: $e');
+    }
+  }
+  
+  void _scheduleSemantictokenRefresh() {
+    final now = DateTime.now();
+    if (_lastSemanticTokenFetch == null ||
+        now.difference(_lastSemanticTokenFetch!) > _semanticTokenDebounce) {
+      Future.delayed(_semanticTokenDebounce, () {
+        if (mounted && _lspReady) {
+          _fetchSemanticTokens();
+        }
+      });
+    }
   }
 
   void _resetCursorBlink() {
@@ -439,6 +520,8 @@ class _CodeForgeState extends State<CodeForge>
                           _controller,
                           _editorTheme,
                           _language,
+                          widget.lspConfig?.languageId,
+                          _semanticTokens,
                           widget.innerPadding,
                           _vscrollController,
                           _hscrollController,
@@ -470,6 +553,8 @@ class _CodeField extends LeafRenderObjectWidget {
   final CodeForgeController controller;
   final Map<String, TextStyle> editorTheme;
   final Mode language;
+  final String? languageId;
+  final List<LspSemanticToken>? semanticTokens;
   final EdgeInsets? innerPadding;
   final ScrollController vscrollController, hscrollController;
   final FocusNode focusNode;
@@ -485,6 +570,8 @@ class _CodeField extends LeafRenderObjectWidget {
     this.controller,
     this.editorTheme,
     this.language,
+    this.languageId,
+    this.semanticTokens,
     this.innerPadding,
     this.vscrollController,
     this.hscrollController,
@@ -506,6 +593,7 @@ class _CodeField extends LeafRenderObjectWidget {
       controller,
       editorTheme,
       language,
+      languageId,
       innerPadding,
       vscrollController,
       hscrollController,
@@ -525,14 +613,19 @@ class _CodeField extends LeafRenderObjectWidget {
   @override
   void updateRenderObject(
     BuildContext context,
-    covariant RenderObject renderObject,
-  ) {}
+    covariant _CodeFieldRenderer renderObject,
+  ) {
+    if (semanticTokens != null) {
+      renderObject.updateSemanticTokens(semanticTokens!);
+    }
+  }
 }
 
 class _CodeFieldRenderer extends RenderBox {
   final CodeForgeController controller;
   final Map<String, TextStyle> editorTheme;
   final Mode language;
+  final String? languageId;
   final EdgeInsets? innerPadding;
   final ScrollController vscrollController, hscrollController;
   final FocusNode focusNode;
@@ -560,6 +653,13 @@ class _CodeFieldRenderer extends RenderBox {
   int _cachedLineCount = 0;
   int _cachedCaretOffset = -1, _cachedCaretLine = 0, _cachedCaretLineStart = 0;
 
+  /// Update semantic tokens from LSP
+  void updateSemanticTokens(List<LspSemanticToken> tokens) {
+    _syntaxHighlighter.updateSemanticTokens(tokens, controller.text);
+    _paragraphCache.clear();
+    markNeedsPaint();
+  }
+
   ui.Paragraph _buildParagraph(String text) {
     final builder = ui.ParagraphBuilder(_paragraphStyle)
       ..pushStyle(_uiTextStyle)
@@ -585,6 +685,7 @@ class _CodeFieldRenderer extends RenderBox {
     this.controller,
     this.editorTheme,
     this.language,
+    this.languageId,
     this.innerPadding,
     this.vscrollController,
     this.hscrollController,
@@ -611,6 +712,7 @@ class _CodeFieldRenderer extends RenderBox {
       language: language,
       editorTheme: editorTheme,
       baseTextStyle: textStyle,
+      languageId: languageId,
       onHighlightComplete: markNeedsPaint,
     );
 
@@ -1652,8 +1754,9 @@ class _CodeFieldRenderer extends RenderBox {
           hscrollController.offset;
 
       if (screenGuideX < offset.dx + _gutterWidth ||
-          screenGuideX > offset.dx + size.width)
+          screenGuideX > offset.dx + size.width) {
         continue;
+      }
 
       final clampedYTop = screenYTop.clamp(0.0, viewBottom - viewTop);
       final clampedYBottom = screenYBottom.clamp(0.0, viewBottom - viewTop);
