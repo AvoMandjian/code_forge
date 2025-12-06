@@ -17,7 +17,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
-//TODO: enhance ai suggestion
 //TODO: implement LSP hover
 
 class CodeForge extends StatefulWidget {
@@ -314,14 +313,11 @@ class _CodeForgeState extends State<CodeForge>
 
       _aiDebounceTimer?.cancel();
 
-      if(_suggestionNotifier.value != null && _aiNotifier.value != null){
-        _aiNotifier.value = null;
-      }
-
       if(
         widget.aiCompletion != null &&
         _controller.selection.isValid &&
-        widget.aiCompletion!.enableCompletion
+        widget.aiCompletion!.enableCompletion &&
+        _aiNotifier.value == null
       ){
         if(_suggestionNotifier.value != null) return;
         final text = _controller.text;
@@ -510,6 +506,11 @@ class _CodeForgeState extends State<CodeForge>
   }
 
   void _handleArrowRight(bool withShift) {
+    if(_aiNotifier.value != null){
+      _acceptAiCompletion();
+      return;
+    }
+
     final sel = _controller.selection;
     final textLength = _controller.length;
 
@@ -969,6 +970,12 @@ class _CodeForgeState extends State<CodeForge>
                                         _controller.insertAtCurrentCursor('\t');
                                       }
                                       return KeyEventResult.handled;
+
+                                    case LogicalKeyboardKey.enter:
+                                      if(_aiNotifier.value != null){
+                                        _aiNotifier.value = null;
+                                      }
+                                      break;
                                     default:
                                   }
                                 }
@@ -995,7 +1002,6 @@ class _CodeForgeState extends State<CodeForge>
                                 gutterStyle: _gutterStyle,
                                 selectionStyle: _selectionStyle,
                                 diagnostics: _diagnosticsNotifier.value,
-                                aiText: _aiNotifier.value,
                                 isMobile: _isMobile,
                                 selectionActiveNotifier:
                                     _selectionActiveNotifier,
@@ -1005,6 +1011,7 @@ class _CodeForgeState extends State<CodeForge>
                                 lineWrap: widget.lineWrap,
                                 offsetNotifier: _offsetNotifier,
                                 aiNotifier: _aiNotifier,
+                                aiOffsetNotifier: _aiOffsetNotifier,
                               ),
                             );
                           },
@@ -1019,6 +1026,7 @@ class _CodeForgeState extends State<CodeForge>
             ValueListenableBuilder(
               valueListenable: _suggestionNotifier,
               builder: (_, sugg, child) {
+                if(_aiNotifier.value != null) return SizedBox.shrink();
                 if (sugg == null) {
                   _sugSelIndex = 0;
                   return SizedBox.shrink();
@@ -1146,7 +1154,6 @@ class _CodeForgeState extends State<CodeForge>
     return aiResponse;
   }
 
-  //FIXME
   void _acceptAiCompletion() {
     final aiText = _aiNotifier.value;
     if (aiText == null || aiText.isEmpty) return;
@@ -1257,11 +1264,11 @@ class _CodeField extends LeafRenderObjectWidget {
   final GutterStyle gutterStyle;
   final CodeSelectionStyle selectionStyle;
   final List<LspErrors> diagnostics;
-  final String? aiText;
   final ValueNotifier<bool> selectionActiveNotifier;
   final ValueNotifier<Offset> contextMenuOffsetNotifier, offsetNotifier;
   final ValueNotifier<List<dynamic>?> hoverNotifier;
   final ValueNotifier<String?> aiNotifier;
+  final ValueNotifier<Offset?> aiOffsetNotifier;
   final BuildContext context;
 
   const _CodeField({
@@ -1286,9 +1293,9 @@ class _CodeField extends LeafRenderObjectWidget {
     required this.offsetNotifier,
     required this.hoverNotifier,
     required this.aiNotifier,
+    required this.aiOffsetNotifier,
     required this.context,
     required this.lineWrap,
-    this.aiText,
     this.textStyle,
     this.languageId,
     this.semanticTokens,
@@ -1323,7 +1330,8 @@ class _CodeField extends LeafRenderObjectWidget {
       hoverNotifier: hoverNotifier,
       lineWrap: lineWrap,
       offsetNotifier: offsetNotifier,
-      aiNotifier: aiNotifier
+      aiNotifier: aiNotifier,
+      aiOffsetNotifier: aiOffsetNotifier
     );
   }
 
@@ -1359,6 +1367,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   final ValueNotifier<bool> selectionActiveNotifier;
   final ValueNotifier<Offset> contextMenuOffsetNotifier, offsetNotifier;
   final ValueNotifier<List<dynamic>?> hoverNotifier;
+  final ValueNotifier<Offset?> aiOffsetNotifier;
   final ValueNotifier<String?> aiNotifier;
   final BuildContext context;
   final Map<int, double> _lineWidthCache = {};
@@ -1387,6 +1396,12 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   bool _showBubble = false, _draggingCHandle = false;
   Rect? _startHandleRect, _endHandleRect, _normalHandle;
   double _longLineWidth = 0.0, _wrapWidth = double.infinity;
+  int _extraSpaceToAdd = 0;
+  String? _aiResponse, _lastProcessedText;
+  TextSelection? _lastSelectionForAi;
+  bool _insertingPlaceholder = false;
+  int? _placeholderInsertOffset;
+  int _placeholderLineCount = 0;
 
   void updateSemanticTokens(List<LspSemanticToken> tokens) {
     _syntaxHighlighter.updateSemanticTokens(tokens, controller.text);
@@ -1449,6 +1464,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     required this.offsetNotifier,
     required this.hoverNotifier,
     required this.aiNotifier,
+    required this.aiOffsetNotifier,
     required this.context,
     required this.lineWrap,
     this.languageId,
@@ -1511,6 +1527,72 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     hscrollController.addListener(markNeedsPaint);
     caretBlinkController.addListener(markNeedsPaint);
     controller.addListener(_onControllerChange);
+    aiNotifier.addListener((){
+      final previousAiResponse = _aiResponse;
+      _aiResponse = aiNotifier.value;
+      aiOffsetNotifier.value = _getCaretInfo().offset;
+      
+      final isNewSuggestion = _aiResponse != null && 
+        (previousAiResponse == null ||
+        !previousAiResponse.endsWith(_aiResponse!));
+      
+      if(isNewSuggestion){
+        final aiLines = _aiResponse!.split('\n');
+        final aiLineslen = aiLines.length;
+        if(aiLineslen > 1){
+          
+          if (_placeholderInsertOffset != null && _placeholderLineCount > 0) {
+            final placehldr = '\n' * _placeholderLineCount;
+            _insertingPlaceholder = true;
+            controller.replaceRange(
+              _placeholderInsertOffset!,
+              _placeholderInsertOffset! + placehldr.length,
+              ''
+            );
+            _insertingPlaceholder = false;
+          }
+          
+          final placehldr = '\n' * (aiLineslen - 1);
+          _extraSpaceToAdd = aiLineslen;
+          final lastSelection = controller.selection;
+          
+          _insertingPlaceholder = true;
+          _placeholderInsertOffset = controller.selection.extentOffset;
+          _placeholderLineCount = aiLineslen - 1;
+          controller.insertAtCurrentCursor(placehldr);
+          controller.selection = lastSelection;
+          _insertingPlaceholder = false;
+          
+        }
+      } else if (_aiResponse == null && previousAiResponse != null) {
+        
+        if (_placeholderInsertOffset != null && _placeholderLineCount > 0) {
+          final currentOffset = controller.selection.extentOffset;
+          final placehldr = '\n' * _placeholderLineCount;
+          
+          _insertingPlaceholder = true;
+          
+          controller.replaceRange(
+            _placeholderInsertOffset!,
+            _placeholderInsertOffset! + placehldr.length,
+            ''
+          );
+          
+          if (currentOffset > _placeholderInsertOffset!) {
+            final adjustedOffset = (currentOffset - placehldr.length).clamp(0, controller.length);
+            controller.selection = TextSelection.collapsed(offset: adjustedOffset);
+          }
+          _insertingPlaceholder = false;
+          
+          _placeholderInsertOffset = null;
+          _placeholderLineCount = 0;
+        }
+        _extraSpaceToAdd = 0;
+      }
+      
+      markNeedsLayout();
+      markNeedsPaint();
+    });
   }
 
   void _ensureCaretVisible() {
@@ -1624,7 +1706,58 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       markNeedsPaint();
     }
 
+    final newText = controller.text;
+    final oldText = _lastProcessedText ?? '';
+    final cursorPosition = controller.selection.extentOffset.clamp(0, controller.length);
+    final textBeforeCursor = newText.substring(0, cursorPosition);
+
+    if (_lastProcessedText == newText &&
+      _aiResponse != null &&
+      _aiResponse!.isNotEmpty &&
+      _lastSelectionForAi != controller.selection &&
+      !_insertingPlaceholder
+    ){
+      aiNotifier.value = null;
+      aiOffsetNotifier.value = null;
+    }
+    _lastSelectionForAi = controller.selection;
+      
+    if (_aiResponse != null && _aiResponse!.isNotEmpty && !_insertingPlaceholder) {
+      final textLengthDiff = newText.length - oldText.length;
+      
+      if (textLengthDiff > 0 && cursorPosition >= textLengthDiff) {
+        final newlyTypedChars = textBeforeCursor.substring(
+          cursorPosition - textLengthDiff,
+          cursorPosition
+        );
+        
+        if (_aiResponse!.startsWith(newlyTypedChars)) {
+          
+          if (_placeholderInsertOffset != null) {
+            _placeholderInsertOffset = _placeholderInsertOffset! + newlyTypedChars.length;
+          }
+          
+          _aiResponse = _aiResponse!.substring(newlyTypedChars.length);
+          if (_aiResponse!.isEmpty) {
+            aiNotifier.value = null;
+            aiOffsetNotifier.value = null;
+          } else {
+            aiNotifier.value = _aiResponse;
+          }
+        } else {
+          _aiResponse = null;
+          aiNotifier.value = null;
+          aiOffsetNotifier.value = null;
+        }
+      } else if (textLengthDiff < 0) {
+        _aiResponse = null;
+        aiNotifier.value = null;
+        aiOffsetNotifier.value = null;
+      }
+    }
     _ensureCaretVisible();
+    if (_lastProcessedText == newText) return;
+    _lastProcessedText = newText;
   }
 
   FoldRange? _computeFoldRangeForLine(int lineIndex) {
@@ -2042,12 +2175,12 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
     _longLineWidth = maxLineWidth;
 
-    final contentHeight = visibleHeight + (innerPadding?.vertical ?? 0);
+    final contentHeight = visibleHeight + (innerPadding?.vertical ?? 0) + _extraSpaceToAdd;
     final contentWidth = lineWrap
-        ? constraints.maxWidth.isFinite
-              ? constraints.maxWidth
-              : MediaQuery.of(context).size.width
-        : maxLineWidth + (innerPadding?.horizontal ?? 0) + _gutterWidth;
+      ? constraints.maxWidth.isFinite
+        ? constraints.maxWidth
+        : MediaQuery.of(context).size.width
+      : maxLineWidth + (innerPadding?.horizontal ?? 0) + _gutterWidth;
 
     size = constraints.constrain(Size(contentWidth, contentHeight));
   }
@@ -2252,7 +2385,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       hasActiveFolds,
     );
 
-    if (aiNotifier.value != null) {
+    if (_aiResponse != null && _aiResponse!.isNotEmpty) {
       _drawAiGhostText(
         canvas,
         offset,
@@ -3263,12 +3396,11 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     double firstVisibleLineY,
     bool hasActiveFolds,
   ) {
-    if (aiNotifier.value == null) return;
+    if (_aiResponse == null || _aiResponse!.isEmpty) return;
     if (!controller.selection.isValid || !controller.selection.isCollapsed) {
       return;
     }
 
-    final aiText = aiNotifier.value!;
     final cursorOffset = controller.selection.extentOffset;
     final cursorLine = controller.getLineAtOffset(cursorOffset);
 
@@ -3317,15 +3449,17 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       fontStyle: FontStyle.italic,
     );
 
-    final aiLines = aiText.split('\n');
+    final aiLines = _aiResponse?.split('\n') ?? [];
 
     for (int i = 0; i < aiLines.length; i++) {
+      if(aiLines.isEmpty) break;
       final aiLineText = aiLines[i];
       if (aiLineText.isEmpty && i < aiLines.length - 1) continue;
 
       final lineIndex = cursorLine + i;
 
-      if (lineIndex < firstVisibleLine || lineIndex > lastVisibleLine) continue;
+      
+      if (lineIndex < firstVisibleLine) continue;
 
       double lineY;
       if (i == 0) {
