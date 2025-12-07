@@ -20,7 +20,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 //TODO: Arrow key navigation in suggestion bar.
-//TODO: Store text in a before.
+//TODO: Store text in a buffer.
 //TODO: Rangse wise LSP semantic highlight.
 //TODO: Keyboard shortcuts
 //TODO: Public API methods in controller.
