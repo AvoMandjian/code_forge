@@ -19,6 +19,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
+//TODO: Arrow key navigation in suggestion bar.
+//TODO: Store text in a before.
+//TODO: Rangse wise LSP semantic highlight.
+//TODO: Keyboard shortcuts
+//TODO: Public API methods in controller.
+//FIXME: Dart analyzer not returning completions.
+
 class CodeForge extends StatefulWidget {
   final CodeForgeController? controller;
   final Map<String, TextStyle>? editorTheme;
@@ -130,6 +137,7 @@ class _CodeForgeState extends State<CodeForge>
     _selectionActiveNotifier = ValueNotifier(false);
     _isHoveringPopup = ValueNotifier<bool>(false);
     _controller.manualAiCompletion = getManualAiSuggestion;
+    _controller.readOnly = widget.readOnly;
     _selectionStyle = widget.selectionStyle ?? CodeSelectionStyle();
 
     _gutterStyle =
@@ -462,6 +470,7 @@ class _CodeForgeState extends State<CodeForge>
   }
 
   void _resetCursorBlink() {
+    if (!mounted) return;
     _caretBlinkController.value = 1.0;
     _caretBlinkController
       ..stop()
@@ -1037,86 +1046,92 @@ class _CodeForgeState extends State<CodeForge>
             ),
             _buildContextMenu(),
             ValueListenableBuilder(
-              valueListenable: _suggestionNotifier,
-              builder: (_, sugg, child) {
-                if(_aiNotifier.value != null) return SizedBox.shrink();
-                if (sugg == null) {
-                  _sugSelIndex = 0;
-                  return SizedBox.shrink();
-                }
-                return Positioned(
-                  width: screenWidth < 700
-                      ? screenWidth * 0.63
-                      : screenWidth * 0.3,
-                  top:
-                      _offsetNotifier.value.dy +
-                      (widget.textStyle?.fontSize ?? 14) +
-                      10,
-                  left: _offsetNotifier.value.dx,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxHeight: 400,
-                      maxWidth: 400,
-                      minWidth: 70,
-                    ),
-                    child: Card(
-                      shape: _suggestionStyle.shape,
-                      elevation: _suggestionStyle.elevation,
-                      color: _suggestionStyle.backgroundColor,
-                      margin: EdgeInsets.zero,
-                      child: RawScrollbar(
-                        thumbVisibility: true,
-                        thumbColor: _editorTheme['root']!.color!.withAlpha(80),
-                        controller: _suggScrollController,
-                        child: ListView.builder(
-                          itemExtent: (widget.textStyle?.fontSize ?? 14) + 6.5,
-                          controller: _suggScrollController,
-                          padding: EdgeInsets.all(6),
-                          shrinkWrap: true,
-                          itemCount: sugg.length,
-                          itemBuilder: (_, indx) {
-                            final item = sugg[indx];
-                            return Container(
-                              color: _sugSelIndex == indx
-                                ? Color(0xff024281)
-                                : Colors.transparent,
-                              child: InkWell(
-                                canRequestFocus: false,
-                                hoverColor: _suggestionStyle.hoverColor,
-                                focusColor: _suggestionStyle.focusColor,
-                                splashColor: _suggestionStyle.splashColor,
-                                onTap: () => setState(() {
-                                  _sugSelIndex = indx;
-                                  final text = item is LspCompletion ? item.label : item as String;
-                                  _controller.insertAtCurrentCursor(text, replaceTypedChar: true);
-                                  _suggestionNotifier.value = null;
-                                }),
-                                child: Row(
-                                  children: [
-                                    if (item is LspCompletion) ...[
-                                      item.icon,
-                                      const SizedBox(width: 10),
-                                      Text(
-                                        item.label,
-                                        style: _suggestionStyle.textStyle,
-                                      ),
-                                    ],
-                                    if (item is String)
-                                      Text(
-                                        item,
-                                        style: _suggestionStyle.textStyle,
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
+              valueListenable: _offsetNotifier,
+              builder: (context, offset, child) {
+                if(offset.dy < 0 || offset.dx < 0) return SizedBox.shrink();
+                return ValueListenableBuilder(
+                  valueListenable: _suggestionNotifier,
+                  builder: (_, sugg, child) {
+                    if(_aiNotifier.value != null) return SizedBox.shrink();
+                    if (sugg == null) {
+                      _sugSelIndex = 0;
+                      return SizedBox.shrink();
+                    }
+                    return Positioned(
+                      width: screenWidth < 700
+                          ? screenWidth * 0.63
+                          : screenWidth * 0.3,
+                      top:
+                          offset.dy +
+                          (widget.textStyle?.fontSize ?? 14) +
+                          10,
+                      left: offset.dx,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: 400,
+                          maxWidth: 400,
+                          minWidth: 70,
+                        ),
+                        child: Card(
+                          shape: _suggestionStyle.shape,
+                          elevation: _suggestionStyle.elevation,
+                          color: _suggestionStyle.backgroundColor,
+                          margin: EdgeInsets.zero,
+                          child: RawScrollbar(
+                            thumbVisibility: true,
+                            thumbColor: _editorTheme['root']!.color!.withAlpha(80),
+                            controller: _suggScrollController,
+                            child: ListView.builder(
+                              itemExtent: (widget.textStyle?.fontSize ?? 14) + 6.5,
+                              controller: _suggScrollController,
+                              padding: EdgeInsets.all(6),
+                              shrinkWrap: true,
+                              itemCount: sugg.length,
+                              itemBuilder: (_, indx) {
+                                final item = sugg[indx];
+                                return Container(
+                                  color: _sugSelIndex == indx
+                                    ? Color(0xff024281)
+                                    : Colors.transparent,
+                                  child: InkWell(
+                                    canRequestFocus: false,
+                                    hoverColor: _suggestionStyle.hoverColor,
+                                    focusColor: _suggestionStyle.focusColor,
+                                    splashColor: _suggestionStyle.splashColor,
+                                    onTap: () => setState(() {
+                                      _sugSelIndex = indx;
+                                      final text = item is LspCompletion ? item.label : item as String;
+                                      _controller.insertAtCurrentCursor(text, replaceTypedChar: true);
+                                      _suggestionNotifier.value = null;
+                                    }),
+                                    child: Row(
+                                      children: [
+                                        if (item is LspCompletion) ...[
+                                          item.icon,
+                                          const SizedBox(width: 10),
+                                          Text(
+                                            item.label,
+                                            style: _suggestionStyle.textStyle,
+                                          ),
+                                        ],
+                                        if (item is String)
+                                          Text(
+                                            item,
+                                            style: _suggestionStyle.textStyle,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 );
-              },
+              }
             ),
             ValueListenableBuilder(
               valueListenable: _hoverNotifier,
@@ -1613,8 +1628,31 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       fontFamily: fontFamily,
     );
 
-    vscrollController.addListener(markNeedsPaint);
-    hscrollController.addListener(markNeedsPaint);
+    vscrollController.addListener((){
+      if(
+        suggestionNotifier.value != null &&
+        offsetNotifier.value.dy >= 0
+      ){
+        offsetNotifier.value = Offset(
+          offsetNotifier.value.dx,
+          _getCaretInfo().offset.dy - vscrollController.offset
+        );
+      }
+      markNeedsPaint();
+    });
+
+    hscrollController.addListener((){
+      if(
+        suggestionNotifier.value != null &&
+        offsetNotifier.value.dx >= 0
+      ){
+        offsetNotifier.value = Offset(
+          _getCaretInfo().offset.dx - hscrollController.offset,
+          offsetNotifier.value.dy
+        );
+      }
+      markNeedsPaint();
+    });
     caretBlinkController.addListener(markNeedsPaint);
     controller.addListener(_onControllerChange);
     aiNotifier.addListener((){
@@ -1827,7 +1865,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     final viewportHeight = vscrollController.position.viewportDimension;
     final viewportWidth = hscrollController.position.viewportDimension;
 
-    offsetNotifier.value = Offset(caretX, caretY);
+    offsetNotifier.value = Offset(
+      (caretX - hScrollOffset) % viewportWidth,
+      (caretY - vScrollOffset) % viewportHeight
+    );
 
     if (caretY > 0 && caretY <= vScrollOffset + (innerPadding?.top ?? 0)) {
       vscrollController.animateTo(
@@ -3868,9 +3909,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         return;
       }
 
+      _onetap.addPointer(event);
       if (isMobile) {
         _dtap.addPointer(event);
-        _onetap.addPointer(event);
         _draggingCHandle = false;
         _draggingStartHandle = false;
         _draggingEndHandle = false;
@@ -3931,6 +3972,11 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         });
       } else {
         _dragStartOffset = textOffset;
+        _onetap.onTap = (){
+          if(suggestionNotifier.value != null){
+            suggestionNotifier.value = null;
+          }
+        };
         controller.selection = TextSelection.collapsed(offset: textOffset);
       }
     }

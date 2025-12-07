@@ -71,6 +71,7 @@ class LspStdioConfig extends LspConfig {
 
   late Process _process;
   final _buffer = <int>[];
+  bool _isSending = false;
 
   LspStdioConfig._({
     required this.executable,
@@ -189,11 +190,34 @@ class LspStdioConfig extends LspConfig {
   }
 
   Future<void> _sendLspMessage(Map<String, dynamic> message) async {
-    final body = utf8.encode(jsonEncode(message));
-    final header = 'Content-Length: ${body.length}\r\n\r\n';
-    _process.stdin.add(utf8.encode(header));
-    _process.stdin.add(body);
-    await _process.stdin.flush();
+    final completer = Completer<void>();
+    Future<void> sendOperation() async {
+      try {
+        final body = utf8.encode(jsonEncode(message));
+        final header = utf8.encode('Content-Length: ${body.length}\r\n\r\n');
+        final combined = <int>[...header, ...body];
+        _process.stdin.add(combined);
+        await _process.stdin.flush();
+        completer.complete();
+      } catch (e) {
+        completer.completeError(e);
+      }
+    }
+    
+    if (!_isSending) {
+      _isSending = true;
+      await sendOperation();
+      _isSending = false;
+    } else {
+      while (_isSending) {
+        await Future.delayed(const Duration(microseconds: 100));
+      }
+      _isSending = true;
+      await sendOperation();
+      _isSending = false;
+    }
+    
+    return completer.future;
   }
 
   @override

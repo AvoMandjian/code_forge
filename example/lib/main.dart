@@ -7,6 +7,7 @@ import 'package:example/small_code.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:re_highlight/languages/dart.dart';
+import 'package:re_highlight/languages/python.dart';
 
 void main() {
   runApp(const MyApp());
@@ -22,12 +23,23 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   final _controller = CodeForgeController();
 
-  Future<LspConfig> getLsp() async{
+/*   Future<LspConfig> getLsp() async{
     final data = await LspStdioConfig.start(
       executable: "/home/athul/flutter/flutter/bin//dart",
       args: ["language-server", "--protocol=lsp"],
       filePath: "/home/athul/Projects/code_forge/lib/code_forge/code_area.dart",
       workspacePath: "/home/athul/Projects/code_forge/lib/",
+      languageId: "dart"
+    );
+    return data;
+  } */
+
+   Future<LspConfig> getLsp() async{
+    final data = await LspStdioConfig.start(
+      executable: "/home/athul/.nvm/versions/node/v20.19.2/bin/basedpyright-langserver",
+      args: ["--stdio"],
+      filePath: "/home/athul/Projects/EhEh/numpy_source.py",
+      workspacePath: "/home/athul/Projects/EhEh",
       languageId: "dart"
     );
     return data;
@@ -50,7 +62,7 @@ class _MyAppState extends State<MyApp> {
               return CircularProgressIndicator();
             }
             return CodeForge(
-              language: langDart,
+              language: langPython,
               // filePath: "/home/athul/Projects/EhEh/sample.py",
               controller: _controller,
               textStyle: GoogleFonts.jetBrainsMono(),
@@ -65,8 +77,8 @@ class _MyAppState extends State<MyApp> {
                 serverUrl: "ws://0.0.0.0:3031",
                 workspacePath: "/home/athul/Projects/EhEh",
               ), */
-              lspConfig: snapshot.data,
-              filePath: "/home/athul/Projects/code_forge/lib/code_forge/code_area.dart",
+              // lspConfig: snapshot.data,
+              filePath: "/home/athul/Projects/EhEh/numpy_source.py",
               gutterStyle: GutterStyle(
                 backgroundColor: Color(0xFF252526),
                 lineNumberStyle: TextStyle(

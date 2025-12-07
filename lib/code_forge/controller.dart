@@ -18,6 +18,7 @@ class CodeForgeController implements DeltaTextInputClient {
   int _bufferLineRopeStart = 0, _bufferLineOriginalLength = 0;
   int _cachedTextVersion = -1, _currentVersion = 0;
   int? dirtyLine, _bufferLineIndex;
+  bool readOnly = false;
 
   String? _lastSentText;
   TextSelection? _lastSentSelection;
@@ -184,6 +185,7 @@ class CodeForgeController implements DeltaTextInputClient {
 
   @override
   void updateEditingValueWithDeltas(List<TextEditingDelta> textEditingDeltas) {
+    if(readOnly) return;
     for (final delta in textEditingDeltas) {
       if (delta is TextEditingDeltaNonTextUpdate) {
         if (_lastSentSelection == null ||

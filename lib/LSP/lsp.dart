@@ -194,16 +194,20 @@ sealed class LspConfig {
       method: 'textDocument/completion',
       params: _commonParams(line, character),
     );
-    for (var item in response['result']['items']) {
-      completion.add(
-        LspCompletion(
-          label: item['label'],
-          itemType: CompletionItemType.values.firstWhere(
-            (type) => type.value == item['kind'],
-            orElse: () => CompletionItemType.text,
+    try {
+      for (var item in response['result']['items']) {
+        completion.add(
+          LspCompletion(
+            label: item['label'],
+            itemType: CompletionItemType.values.firstWhere(
+              (type) => type.value == item['kind'],
+              orElse: () => CompletionItemType.text,
+            ),
           ),
-        ),
-      );
+        );
+      }
+    } on Exception catch (e) {
+      debugPrint("An Error Occured: $e");
     }
     return completion;
   }
