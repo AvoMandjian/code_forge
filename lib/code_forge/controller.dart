@@ -22,6 +22,130 @@ class CodeForgeController implements DeltaTextInputClient {
   bool lineStructureChanged = false;
   String? _lastSentText;
   TextSelection? _lastSentSelection;
+  UndoRedoController? _undoController;
+
+  /// Set the undo controller for this editor
+  void setUndoController(UndoRedoController? controller) {
+    _undoController = controller;
+    if (controller != null) {
+      controller.setApplyEditCallback(_applyUndoRedoOperation);
+    }
+  }
+
+  void _applyUndoRedoOperation(EditOperation operation) {
+    _flushBuffer();
+
+    switch (operation) {
+      case InsertOperation(:final offset, :final text, :final selectionAfter):
+        _rope.insert(offset, text);
+        _currentVersion++;
+        _selection = selectionAfter;
+        dirtyLine = _rope.getLineAtOffset(offset);
+        if (text.contains('\n')) {
+          lineStructureChanged = true;
+        }
+        dirtyRegion = TextRange(start: offset, end: offset + text.length);
+
+      case DeleteOperation(:final offset, :final text, :final selectionAfter):
+        _rope.delete(offset, offset + text.length);
+        _currentVersion++;
+        _selection = selectionAfter;
+        dirtyLine = _rope.getLineAtOffset(offset);
+        if (text.contains('\n')) {
+          lineStructureChanged = true;
+        }
+        dirtyRegion = TextRange(start: offset, end: offset);
+
+      case ReplaceOperation(
+        :final offset,
+        :final deletedText,
+        :final insertedText,
+        :final selectionAfter,
+      ):
+        if (deletedText.isNotEmpty) {
+          _rope.delete(offset, offset + deletedText.length);
+        }
+        if (insertedText.isNotEmpty) {
+          _rope.insert(offset, insertedText);
+        }
+        _currentVersion++;
+        _selection = selectionAfter;
+        dirtyLine = _rope.getLineAtOffset(offset);
+        if (deletedText.contains('\n') || insertedText.contains('\n')) {
+          lineStructureChanged = true;
+        }
+        dirtyRegion = TextRange(
+          start: offset,
+          end: offset + insertedText.length,
+        );
+
+      case CompoundOperation(:final operations):
+        for (final op in operations) {
+          _applyUndoRedoOperation(op);
+        }
+        return;
+    }
+
+    _syncToConnection();
+    notifyListeners();
+  }
+
+  void _recordEdit(EditOperation operation) {
+    _undoController?.recordEdit(operation);
+  }
+
+  void _recordInsertion(
+    int offset,
+    String text,
+    TextSelection selBefore,
+    TextSelection selAfter,
+  ) {
+    if (_undoController?.isUndoRedoInProgress ?? false) return;
+    _recordEdit(
+      InsertOperation(
+        offset: offset,
+        text: text,
+        selectionBefore: selBefore,
+        selectionAfter: selAfter,
+      ),
+    );
+  }
+
+  void _recordDeletion(
+    int offset,
+    String text,
+    TextSelection selBefore,
+    TextSelection selAfter,
+  ) {
+    if (_undoController?.isUndoRedoInProgress ?? false) return;
+    _recordEdit(
+      DeleteOperation(
+        offset: offset,
+        text: text,
+        selectionBefore: selBefore,
+        selectionAfter: selAfter,
+      ),
+    );
+  }
+
+  void _recordReplacement(
+    int offset,
+    String deleted,
+    String inserted,
+    TextSelection selBefore,
+    TextSelection selAfter,
+  ) {
+    if (_undoController?.isUndoRedoInProgress ?? false) return;
+    _recordEdit(
+      ReplaceOperation(
+        offset: offset,
+        deletedText: deleted,
+        insertedText: inserted,
+        selectionBefore: selBefore,
+        selectionAfter: selAfter,
+      ),
+    );
+  }
 
   String get text {
     if (_cachedText == null || _cachedTextVersion != _currentVersion) {
@@ -184,7 +308,7 @@ class CodeForgeController implements DeltaTextInputClient {
 
   @override
   void updateEditingValueWithDeltas(List<TextEditingDelta> textEditingDeltas) {
-    if(readOnly) return;
+    if (readOnly) return;
     for (final delta in textEditingDeltas) {
       if (delta is TextEditingDeltaNonTextUpdate) {
         if (_lastSentSelection == null ||
@@ -223,6 +347,9 @@ class CodeForgeController implements DeltaTextInputClient {
     String insertedText,
     TextSelection newSelection,
   ) {
+    if (_undoController?.isUndoRedoInProgress ?? false) return;
+
+    final selectionBefore = _selection;
     final currentLength = length;
     if (offset < 0 || offset > currentLength) {
       return;
@@ -230,19 +357,18 @@ class CodeForgeController implements DeltaTextInputClient {
 
     String actualInsertedText = insertedText;
     TextSelection actualSelection = newSelection;
-    
+
     if (insertedText.length == 1) {
       final char = insertedText[0];
       const pairs = {'(': ')', '{': '}', '[': ']', '"': '"', "'": "'"};
       final openers = pairs.keys.toSet();
       final closers = pairs.values.toSet();
-      
+
       if (openers.contains(char)) {
         final closing = pairs[char]!;
         actualInsertedText = '$char$closing';
         actualSelection = TextSelection.collapsed(offset: offset + 1);
-      }
-      else if (closers.contains(char)) {
+      } else if (closers.contains(char)) {
         final currentText = text;
         if (offset < currentText.length && currentText[offset] == char) {
           _selection = TextSelection.collapsed(offset: offset + 1);
@@ -251,7 +377,7 @@ class CodeForgeController implements DeltaTextInputClient {
         }
       }
     }
-    
+
     if (actualInsertedText.contains('\n')) {
       final currentText = text;
       final textBeforeCursor = currentText.substring(0, offset);
@@ -267,29 +393,46 @@ class CodeForgeController implements DeltaTextInputClient {
         final indent = prevIndent + extraIndent;
         final openToClose = {'{': '}', '(': ')', '[': ']'};
         final trimmedPrev = prevLine.trimRight();
-        final lastChar = trimmedPrev.isNotEmpty ? trimmedPrev[trimmedPrev.length - 1] : null;
+        final lastChar = trimmedPrev.isNotEmpty
+            ? trimmedPrev[trimmedPrev.length - 1]
+            : null;
         final trimmedNext = textAfterCursor.trimLeft();
         final nextChar = trimmedNext.isNotEmpty ? trimmedNext[0] : null;
         final isBracketOpen = openToClose.containsKey(lastChar);
-        final isNextClosing = isBracketOpen && openToClose[lastChar] == nextChar;
-        
+        final isNextClosing =
+            isBracketOpen && openToClose[lastChar] == nextChar;
+
         if (isBracketOpen && isNextClosing) {
           actualInsertedText = '\n$indent\n$prevIndent';
-          actualSelection = TextSelection.collapsed(offset: offset + 1 + indent.length);
+          actualSelection = TextSelection.collapsed(
+            offset: offset + 1 + indent.length,
+          );
         } else {
           actualInsertedText = '\n$indent';
-          actualSelection = TextSelection.collapsed(offset: offset + actualInsertedText.length);
+          actualSelection = TextSelection.collapsed(
+            offset: offset + actualInsertedText.length,
+          );
         }
       }
-      
+
       _flushBuffer();
       _rope.insert(offset, actualInsertedText);
       _currentVersion++;
       _selection = actualSelection;
       dirtyLine = _rope.getLineAtOffset(offset);
       lineStructureChanged = true;
-      dirtyRegion = TextRange(start: offset, end: offset + actualInsertedText.length);
-      
+      dirtyRegion = TextRange(
+        start: offset,
+        end: offset + actualInsertedText.length,
+      );
+
+      _recordInsertion(
+        offset,
+        actualInsertedText,
+        selectionBefore,
+        actualSelection,
+      );
+
       if (connection != null && connection!.attached) {
         _lastSentText = text;
         _lastSentSelection = _selection;
@@ -297,12 +440,13 @@ class CodeForgeController implements DeltaTextInputClient {
           TextEditingValue(text: _lastSentText!, selection: _selection),
         );
       }
-      
+
       notifyListeners();
       return;
     }
 
-    if (actualInsertedText.length == 2 && actualInsertedText[0] != actualInsertedText[1]) {
+    if (actualInsertedText.length == 2 &&
+        actualInsertedText[0] != actualInsertedText[1]) {
       if (_bufferLineIndex != null && _bufferDirty) {
         final bufferEnd = _bufferLineRopeStart + _bufferLineText!.length;
 
@@ -318,6 +462,13 @@ class CodeForgeController implements DeltaTextInputClient {
             dirtyLine = _bufferLineIndex;
 
             bufferNeedsRepaint = true;
+
+            _recordInsertion(
+              offset,
+              actualInsertedText,
+              selectionBefore,
+              actualSelection,
+            );
 
             if (connection != null && connection!.attached) {
               _lastSentText = text;
@@ -351,6 +502,13 @@ class CodeForgeController implements DeltaTextInputClient {
 
         bufferNeedsRepaint = true;
 
+        _recordInsertion(
+          offset,
+          actualInsertedText,
+          selectionBefore,
+          actualSelection,
+        );
+
         if (connection != null && connection!.attached) {
           _lastSentText = text;
           _lastSentSelection = _selection;
@@ -380,6 +538,13 @@ class CodeForgeController implements DeltaTextInputClient {
 
           bufferNeedsRepaint = true;
 
+          _recordInsertion(
+            offset,
+            actualInsertedText,
+            selectionBefore,
+            actualSelection,
+          );
+
           _scheduleFlush();
           return;
         }
@@ -403,11 +568,21 @@ class CodeForgeController implements DeltaTextInputClient {
 
       bufferNeedsRepaint = true;
 
+      _recordInsertion(
+        offset,
+        actualInsertedText,
+        selectionBefore,
+        actualSelection,
+      );
+
       _scheduleFlush();
     }
   }
 
   void _handleDeletion(TextRange range, TextSelection newSelection) {
+    if (_undoController?.isUndoRedoInProgress ?? false) return;
+
+    final selectionBefore = _selection;
     final currentLength = length;
     if (range.start < 0 ||
         range.end > currentLength ||
@@ -434,6 +609,13 @@ class CodeForgeController implements DeltaTextInputClient {
             dirtyLine = _rope.getLineAtOffset(range.start);
             lineStructureChanged = true;
             dirtyRegion = TextRange(start: range.start, end: range.start);
+
+            _recordDeletion(
+              range.start,
+              deletedText,
+              selectionBefore,
+              newSelection,
+            );
             return;
           }
 
@@ -445,6 +627,13 @@ class CodeForgeController implements DeltaTextInputClient {
 
           bufferNeedsRepaint = true;
 
+          _recordDeletion(
+            range.start,
+            deletedText,
+            selectionBefore,
+            newSelection,
+          );
+
           _scheduleFlush();
           return;
         }
@@ -453,21 +642,31 @@ class CodeForgeController implements DeltaTextInputClient {
     }
 
     bool crossesNewline = false;
+    String deletedText = '';
     if (deleteLen == 1) {
-      if (range.start < _rope.length && _rope.charAt(range.start) == '\n') {
-        crossesNewline = true;
+      if (range.start < _rope.length) {
+        deletedText = _rope.charAt(range.start);
+        if (deletedText == '\n') {
+          crossesNewline = true;
+        }
       }
     } else {
       crossesNewline = true;
+      deletedText = _rope.substring(range.start, range.end);
     }
 
     if (crossesNewline) {
+      if (deletedText.isEmpty) {
+        deletedText = _rope.substring(range.start, range.end);
+      }
       _rope.delete(range.start, range.end);
       _currentVersion++;
       _selection = newSelection;
       dirtyLine = _rope.getLineAtOffset(range.start);
       lineStructureChanged = true;
       dirtyRegion = TextRange(start: range.start, end: range.start);
+
+      _recordDeletion(range.start, deletedText, selectionBefore, newSelection);
       return;
     }
 
@@ -478,6 +677,7 @@ class CodeForgeController implements DeltaTextInputClient {
     final localEnd = range.end - _bufferLineRopeStart;
 
     if (localStart >= 0 && localEnd <= _bufferLineText!.length) {
+      deletedText = _bufferLineText!.substring(localStart, localEnd);
       _bufferLineText =
           _bufferLineText!.substring(0, localStart) +
           _bufferLineText!.substring(localEnd);
@@ -486,6 +686,8 @@ class CodeForgeController implements DeltaTextInputClient {
       _currentVersion++;
 
       bufferNeedsRepaint = true;
+
+      _recordDeletion(range.start, deletedText, selectionBefore, newSelection);
 
       _scheduleFlush();
     }
@@ -496,13 +698,29 @@ class CodeForgeController implements DeltaTextInputClient {
     String text,
     TextSelection newSelection,
   ) {
+    if (_undoController?.isUndoRedoInProgress ?? false) return;
+
+    final selectionBefore = _selection;
     _flushBuffer();
+
+    final deletedText = range.start < range.end
+        ? _rope.substring(range.start, range.end)
+        : '';
+
     _rope.delete(range.start, range.end);
     _rope.insert(range.start, text);
     _currentVersion++;
     _selection = newSelection;
     dirtyLine = _rope.getLineAtOffset(range.start);
     dirtyRegion = TextRange(start: range.start, end: range.start + text.length);
+
+    _recordReplacement(
+      range.start,
+      deletedText,
+      text,
+      selectionBefore,
+      newSelection,
+    );
   }
 
   void _initBuffer(int lineIndex) {
@@ -579,9 +797,9 @@ class CodeForgeController implements DeltaTextInputClient {
     final currentLine = _rope.getLineAtOffset(safePosition);
     final isFolded = foldings.any(
       (fold) =>
-        fold.isFolded &&
-        currentLine > fold.startIndex &&
-        currentLine <= fold.endIndex,
+          fold.isFolded &&
+          currentLine > fold.startIndex &&
+          currentLine <= fold.endIndex,
     );
 
     if (isFolded) {
@@ -601,7 +819,6 @@ class CodeForgeController implements DeltaTextInputClient {
     }
   }
 
-  /// Sync current state to the IME connection
   void _syncToConnection() {
     if (connection != null && connection!.attached) {
       final currentText = text;
@@ -615,20 +832,30 @@ class CodeForgeController implements DeltaTextInputClient {
 
   /// Remove the selection or last char if the selection is empty (backspace key)
   void backspace() {
+    if (_undoController?.isUndoRedoInProgress ?? false) return;
+
     _flushBuffer();
 
+    final selectionBefore = _selection;
     final sel = _selection;
+    String deletedText;
 
     if (sel.start < sel.end) {
+      deletedText = _rope.substring(sel.start, sel.end);
       _rope.delete(sel.start, sel.end);
       _currentVersion++;
       _selection = TextSelection.collapsed(offset: sel.start);
       dirtyLine = _rope.getLineAtOffset(sel.start);
+
+      _recordDeletion(sel.start, deletedText, selectionBefore, _selection);
     } else if (sel.start > 0) {
+      deletedText = _rope.charAt(sel.start - 1);
       _rope.delete(sel.start - 1, sel.start);
       _currentVersion++;
       _selection = TextSelection.collapsed(offset: sel.start - 1);
       dirtyLine = _rope.getLineAtOffset(sel.start - 1);
+
+      _recordDeletion(sel.start - 1, deletedText, selectionBefore, _selection);
     } else {
       return;
     }
@@ -639,20 +866,30 @@ class CodeForgeController implements DeltaTextInputClient {
 
   /// Remove the selection or the char at cursor position (delete key)
   void delete() {
+    if (_undoController?.isUndoRedoInProgress ?? false) return;
+
     _flushBuffer();
 
+    final selectionBefore = _selection;
     final sel = _selection;
     final textLen = _rope.length;
+    String deletedText;
 
     if (sel.start < sel.end) {
+      deletedText = _rope.substring(sel.start, sel.end);
       _rope.delete(sel.start, sel.end);
       _currentVersion++;
       _selection = TextSelection.collapsed(offset: sel.start);
       dirtyLine = _rope.getLineAtOffset(sel.start);
+
+      _recordDeletion(sel.start, deletedText, selectionBefore, _selection);
     } else if (sel.start < textLen) {
+      deletedText = _rope.charAt(sel.start);
       _rope.delete(sel.start, sel.start + 1);
       _currentVersion++;
       dirtyLine = _rope.getLineAtOffset(sel.start);
+
+      _recordDeletion(sel.start, deletedText, selectionBefore, _selection);
     } else {
       return;
     }
@@ -702,15 +939,18 @@ class CodeForgeController implements DeltaTextInputClient {
   /// Replace a range of text with new text.
   /// Used for clipboard operations and text manipulation.
   void replaceRange(int start, int end, String replacement) {
+    if (_undoController?.isUndoRedoInProgress ?? false) return;
+
+    final selectionBefore = _selection;
     _flushBuffer();
     final safeStart = start.clamp(0, _rope.length);
     final safeEnd = end.clamp(safeStart, _rope.length);
+    final deletedText = safeStart < safeEnd
+        ? _rope.substring(safeStart, safeEnd)
+        : '';
 
     if (safeStart < safeEnd) {
-      _rope.delete(
-        safeStart,
-        safeEnd,
-      );
+      _rope.delete(safeStart, safeEnd);
     }
     if (replacement.isNotEmpty) {
       _rope.insert(safeStart, replacement);
@@ -724,6 +964,20 @@ class CodeForgeController implements DeltaTextInputClient {
       start: safeStart,
       end: safeStart + replacement.length,
     );
+
+    if (deletedText.isNotEmpty && replacement.isNotEmpty) {
+      _recordReplacement(
+        safeStart,
+        deletedText,
+        replacement,
+        selectionBefore,
+        _selection,
+      );
+    } else if (deletedText.isNotEmpty) {
+      _recordDeletion(safeStart, deletedText, selectionBefore, _selection);
+    } else if (replacement.isNotEmpty) {
+      _recordInsertion(safeStart, replacement, selectionBefore, _selection);
+    }
 
     if (connection != null && connection!.attached) {
       _lastSentText = text;

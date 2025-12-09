@@ -9,6 +9,7 @@ import 'controller.dart';
 import 'scroll.dart';
 import 'styling.dart';
 import 'syntax_highlighter.dart';
+import 'undo_redo.dart';
 
 import 'package:re_highlight/re_highlight.dart';
 import 'package:re_highlight/styles/vs2015.dart';
@@ -20,11 +21,11 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 //TODO: Keyboard shortcuts
-//TODO: Implement undo redo functionality
 //TODO: Public API methods in controller.
 
 class CodeForge extends StatefulWidget {
   final CodeForgeController? controller;
+  final UndoRedoController? undoController;
   final Map<String, TextStyle>? editorTheme;
   final Mode? language;
   final FocusNode? focusNode;
@@ -52,6 +53,7 @@ class CodeForge extends StatefulWidget {
   const CodeForge({
     super.key,
     this.controller,
+    this.undoController,
     this.editorTheme,
     this.language,
     this.aiCompletion,
@@ -100,6 +102,7 @@ class _CodeForgeState extends State<CodeForge>
   late final ValueNotifier<Offset?> _aiOffsetNotifier;
   late final ValueNotifier<Offset> _contextMenuOffsetNotifier;
   late final ValueNotifier<bool> _selectionActiveNotifier, _isHoveringPopup;
+  late final UndoRedoController _undoRedoController;
   final ValueNotifier<Offset> _offsetNotifier = ValueNotifier(Offset(0, 0));
   final Map<String, String> _cachedResponse = {};
   final _isMobile = Platform.isAndroid || Platform.isIOS;
@@ -137,6 +140,9 @@ class _CodeForgeState extends State<CodeForge>
     _controller.manualAiCompletion = getManualAiSuggestion;
     _controller.readOnly = widget.readOnly;
     _selectionStyle = widget.selectionStyle ?? CodeSelectionStyle();
+    _undoRedoController = widget.undoController ?? UndoRedoController();
+
+    _controller.setUndoController(_undoRedoController);
 
     _gutterStyle =
         widget.gutterStyle ??
@@ -2277,7 +2283,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         insertedText,
         newText,
       );
-      
+
       _paragraphCache.clear();
       _lineTextCache.clear();
     }
@@ -2658,7 +2664,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     final lineText = controller.getLineText(lineIndex);
 
     ui.Paragraph para;
-    if (_paragraphCache.containsKey(lineIndex) && 
+    if (_paragraphCache.containsKey(lineIndex) &&
         _lineTextCache[lineIndex] == lineText) {
       para = _paragraphCache[lineIndex]!;
     } else {
@@ -3407,6 +3413,38 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     );
   }
 
+  int _findIndentBasedEndLine(
+    int startLine,
+    int leadingSpaces,
+    bool hasActiveFolds,
+  ) {
+    int endLine = startLine + 1;
+    while (endLine < controller.lineCount) {
+      if (hasActiveFolds && _isLineFolded(endLine)) {
+        endLine++;
+        continue;
+      }
+
+      String nextLine;
+      if (_lineTextCache.containsKey(endLine)) {
+        nextLine = _lineTextCache[endLine]!;
+      } else {
+        nextLine = controller.getLineText(endLine);
+        _lineTextCache[endLine] = nextLine;
+      }
+
+      if (nextLine.trim().isEmpty) {
+        endLine++;
+        continue;
+      }
+
+      final nextLeading = nextLine.length - nextLine.trimLeft().length;
+      if (nextLeading <= leadingSpaces) break;
+      endLine++;
+    }
+    return endLine;
+  }
+
   void _drawIndentGuides(
     Canvas canvas,
     Offset offset,
@@ -3436,55 +3474,77 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       }
 
       final trimmed = lineText.trimRight();
-      if (!trimmed.endsWith('{') && !trimmed.endsWith(':')) return;
+      final endsWithBracket =
+          trimmed.endsWith('{') ||
+          trimmed.endsWith('(') ||
+          trimmed.endsWith('[') ||
+          trimmed.endsWith(':');
+      if (!endsWithBracket) return;
 
       final leadingSpaces = lineText.length - lineText.trimLeft().length;
       final indentLevel = leadingSpaces ~/ tabSize;
-
+      final lastChar = trimmed[trimmed.length - 1];
       int endLine = i + 1;
-      while (endLine < controller.lineCount) {
-        if (hasActiveFolds && _isLineFolded(endLine)) {
-          endLine++;
-          continue;
-        }
 
-        String nextLine;
-        if (_lineTextCache.containsKey(endLine)) {
-          nextLine = _lineTextCache[endLine]!;
+      if (lastChar == '{' || lastChar == '(' || lastChar == '[') {
+        final lineStartOffset = controller.getLineStartOffset(i);
+        final bracketPos = lineStartOffset + trimmed.length - 1;
+        final matchPos = _findMatchingBracket(controller.text, bracketPos);
+
+        if (matchPos != null) {
+          endLine = controller.getLineAtOffset(matchPos) + 1;
         } else {
-          nextLine = controller.getLineText(endLine);
-          _lineTextCache[endLine] = nextLine;
+          endLine = _findIndentBasedEndLine(i, leadingSpaces, hasActiveFolds);
         }
-
-        if (nextLine.trim().isEmpty) {
-          endLine++;
-          continue;
-        }
-
-        final nextLeading = nextLine.length - nextLine.trimLeft().length;
-        if (nextLeading <= leadingSpaces) break;
-        endLine++;
+      } else {
+        endLine = _findIndentBasedEndLine(i, leadingSpaces, hasActiveFolds);
       }
 
       if (endLine <= i + 1) return;
 
       if (endLine < firstVisibleLine) return;
 
-      ui.Paragraph para;
-      if (_paragraphCache.containsKey(i)) {
-        para = _paragraphCache[i]!;
-      } else {
-        para = _buildHighlightedParagraph(i, lineText);
-        _paragraphCache[i] = para;
-      }
-
-      double guideX;
+      double guideX = 0;
       if (leadingSpaces > 0) {
+        ui.Paragraph para;
+        if (_paragraphCache.containsKey(i)) {
+          para = _paragraphCache[i]!;
+        } else {
+          para = _buildHighlightedParagraph(i, lineText);
+          _paragraphCache[i] = para;
+        }
         final boxes = para.getBoxesForRange(0, leadingSpaces);
         guideX = boxes.isNotEmpty ? boxes.last.right : 0;
-      } else {
-        guideX = 0;
       }
+
+      bool wouldPassThroughText = false;
+      for (
+        int checkLine = i + 1;
+        checkLine < endLine - 1 && checkLine < controller.lineCount;
+        checkLine++
+      ) {
+        if (hasActiveFolds && _isLineFolded(checkLine)) continue;
+
+        String checkLineText;
+        if (_lineTextCache.containsKey(checkLine)) {
+          checkLineText = _lineTextCache[checkLine]!;
+        } else {
+          checkLineText = controller.getLineText(checkLine);
+          _lineTextCache[checkLine] = checkLineText;
+        }
+
+        if (checkLineText.trim().isEmpty) continue;
+
+        final checkLeadingSpaces =
+            checkLineText.length - checkLineText.trimLeft().length;
+
+        if (checkLeadingSpaces <= leadingSpaces) {
+          wouldPassThroughText = true;
+          break;
+        }
+      }
+
+      if (wouldPassThroughText) return;
 
       blocks.add((
         startLine: i,
