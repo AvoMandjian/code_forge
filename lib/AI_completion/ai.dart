@@ -147,7 +147,7 @@ class Gemini extends Models {
 
   Gemini({
     required this.apiKey,
-    this.model = 'gemini-2.0-flash',
+    this.model = 'gemini-2.5-flash-lite',
     this.temperature,
     this.maxOutputTokens,
     this.topP,

@@ -36,7 +36,7 @@
 ---
 
 <p align="center">
-  <img src="placeholder_hero_gif.gif" alt="CodeForge Demo" width="800"/>
+  <img src="https://files.catbox.moe/x40oow.gif" alt="CodeForge Demo" width="800"/><sub>large code support (tested with 100k+ lines) and LSP based intelligent lazy highlighting</sub>
 </p>
 
 ## ✨ Why CodeForge?
@@ -72,7 +72,7 @@
 Intelligent code suggestions powered by AI models like Gemini. Auto, manual, or mixed completion modes with smart debouncing.
 
 <p align="center">
-  <img src="placeholder_ai_completion.gif" alt="AI Completion" width="100%"/>
+  <img src="https://files.catbox.moe/csepjs.gif" alt="AI Completion" width="100%"/>
 </p>
 
 </td>
