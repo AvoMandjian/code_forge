@@ -294,7 +294,8 @@ class _CodeForgeState extends State<CodeForge>
             }
             return style;
           })(),
-          backgroundColor: _editorTheme['root']?.backgroundColor ?? Colors.white,
+          backgroundColor:
+              _editorTheme['root']?.backgroundColor ?? Colors.white,
           focusColor: Colors.blueAccent.withAlpha(50),
           hoverColor: Colors.grey.withAlpha(15),
           splashColor: Colors.blueAccent.withAlpha(50),
@@ -2199,60 +2200,77 @@ class _CodeForgeState extends State<CodeForge>
             ValueListenableBuilder<Offset?>(
               valueListenable: _aiOffsetNotifier,
               builder: (context, offvalue, child) {
-                return _isMobile && _aiNotifier.value != null && offvalue != null && _aiNotifier.value!.isNotEmpty ? Positioned(
-                  top: offvalue.dy + (widget.textStyle?.fontSize ?? 14) * _aiNotifier.value!.split('\n').length + 15,
-                  left: offvalue.dx + (_aiNotifier.value!.split('\n')[0].length * (widget.textStyle?.fontSize ?? 14) / 2),
-                  child: Row(
-                    children: [
-                      InkWell(
-                        onTap: (){
-                          if(_aiNotifier.value == null) return;
-                          _controller.insertAtCurrentCursor(_aiNotifier.value!);
-                          _aiNotifier.value = null;
-                          _aiOffsetNotifier.value = null;
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: _editorTheme['root']?.backgroundColor,
-                            borderRadius: BorderRadius.all(Radius.circular(8)),
-                            border: BoxBorder.all(
-                              width: 1.5,
-                              color: Color(0xff64b5f6)
-                            )
-                          ),
-                          child: Icon(
-                            Icons.check,
-                            color: _editorTheme['root']?.color,
-                          ),
+                return _isMobile &&
+                        _aiNotifier.value != null &&
+                        offvalue != null &&
+                        _aiNotifier.value!.isNotEmpty
+                    ? Positioned(
+                        top:
+                            offvalue.dy +
+                            (widget.textStyle?.fontSize ?? 14) *
+                                _aiNotifier.value!.split('\n').length +
+                            15,
+                        left:
+                            offvalue.dx +
+                            (_aiNotifier.value!.split('\n')[0].length *
+                                (widget.textStyle?.fontSize ?? 14) /
+                                2),
+                        child: Row(
+                          children: [
+                            InkWell(
+                              onTap: () {
+                                if (_aiNotifier.value == null) return;
+                                _controller.insertAtCurrentCursor(
+                                  _aiNotifier.value!,
+                                );
+                                _aiNotifier.value = null;
+                                _aiOffsetNotifier.value = null;
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: _editorTheme['root']?.backgroundColor,
+                                  borderRadius: BorderRadius.all(
+                                    Radius.circular(8),
+                                  ),
+                                  border: BoxBorder.all(
+                                    width: 1.5,
+                                    color: Color(0xff64b5f6),
+                                  ),
+                                ),
+                                child: Icon(
+                                  Icons.check,
+                                  color: _editorTheme['root']?.color,
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: 30),
+                            InkWell(
+                              onTap: () {
+                                _aiNotifier.value = null;
+                                _aiOffsetNotifier.value = null;
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: _editorTheme['root']?.backgroundColor,
+                                  borderRadius: BorderRadius.all(
+                                    Radius.circular(8),
+                                  ),
+                                  border: BoxBorder.all(
+                                    width: 1.5,
+                                    color: Colors.red,
+                                  ),
+                                ),
+                                child: Icon(
+                                  Icons.close,
+                                  color: _editorTheme['root']?.color,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      SizedBox(
-                        width: 30,
-                      ),
-                      InkWell(
-                        onTap: () {
-                          _aiNotifier.value = null;
-                          _aiOffsetNotifier.value = null;
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: _editorTheme['root']?.backgroundColor,
-                            borderRadius: BorderRadius.all(Radius.circular(8)),
-                            border: BoxBorder.all(
-                              width: 1.5,
-                              color: Colors.red
-                            )
-                          ),
-                          child: Icon(
-                            Icons.close,
-                            color: _editorTheme['root']?.color,
-                          ),
-                        )
                       )
-                    ],
-                  ),
-                ) : SizedBox.shrink();
-              }
+                    : SizedBox.shrink();
+              },
             ),
           ],
         );
