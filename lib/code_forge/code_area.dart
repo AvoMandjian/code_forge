@@ -257,8 +257,8 @@ class _CodeForgeState extends State<CodeForge>
     _hscrollController =
         widget.horizontalScrollController ?? ScrollController();
     _vscrollController = widget.verticalScrollController ?? ScrollController();
-    _editorTheme = widget.editorTheme ?? vs2015Theme;
-    _language = widget.language ?? langDart;
+    _editorTheme = _controller.currentTheme ?? widget.editorTheme ?? vs2015Theme;
+    _language = _controller.currentLanguage ?? widget.language ?? langDart;
     _suggestionNotifier = ValueNotifier(null);
     _hoverNotifier = ValueNotifier(null);
     _diagnosticsNotifier = ValueNotifier<List<LspErrors>>([]);
@@ -316,7 +316,9 @@ class _CodeForgeState extends State<CodeForge>
         );
       } else if (widget.filePath!.isNotEmpty) {
         final file = File(widget.filePath!);
-        _controller.text = file.readAsStringSync();
+        if (file.existsSync()) {
+          _controller.text = file.readAsStringSync();
+        }
         _controller.openedFile = file.path;
       }
     } else if (widget.initialText != null && widget.initialText!.isNotEmpty) {

@@ -1,9 +1,10 @@
 import 'dart:io';
-import 'package:path/path.dart' as p;
+
 import 'package:code_forge/code_forge.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:re_highlight/languages/dart.dart';
+import 'package:path/path.dart' as p;
+import 'package:re_highlight/languages/all.dart';
+import 'package:re_highlight/styles/all.dart';
 
 void main() {
   runApp(const MyApp());
@@ -20,6 +21,8 @@ class _MyAppState extends State<MyApp> {
   final _controller = CodeForgeController();
   final undoController = UndoRedoController();
   final absFilePath = p.join(Directory.current.path, "lib/example_code.dart");
+  String _selectedLanguage = 'html';
+  String _selectedTheme = 'vs2015';
 
   Future<LspConfig> getLsp() async {
     final absWorkspacePath = p.join(Directory.current.path, "lib");
@@ -43,24 +46,78 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       home: Scaffold(
         body: SafeArea(
-          child: FutureBuilder<LspConfig>(
-            future: getLsp(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return CircularProgressIndicator();
-              }
-              return CodeForge(
-                undoController: undoController,
-                language: langDart,
-                controller: _controller,
-                textStyle: GoogleFonts.jetBrainsMono(),
-                /* aiCompletion: AiCompletion(
-                  model: Gemini(apiKey: "YOUR API KEY"),
-                ), */
-                lspConfig: snapshot.data,
-                filePath: absFilePath,
-              );
-            },
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButton<String>(
+                        value: _selectedLanguage,
+                        isExpanded: true,
+                        items: ['html', 'json', 'sql'].map((String key) {
+                          return DropdownMenuItem<String>(
+                            value: key,
+                            child: Text(key),
+                          );
+                        }).toList(),
+                        onChanged: (String? newValue) {
+                          if (newValue != null) {
+                            setState(() {
+                              _selectedLanguage = newValue;
+                            });
+                            _controller.setLanguage(newValue);
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: DropdownButton<String>(
+                        value: _selectedTheme,
+                        isExpanded: true,
+                        items: builtinAllThemes.keys.map((String key) {
+                          return DropdownMenuItem<String>(
+                            value: key,
+                            child: Text(key),
+                          );
+                        }).toList(),
+                        onChanged: (String? newValue) {
+                          if (newValue != null) {
+                            setState(() {
+                              _selectedTheme = newValue;
+                            });
+                            _controller.setTheme(newValue);
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: FutureBuilder<LspConfig>(
+                  future: getLsp(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    return CodeForge(
+                      undoController: undoController,
+                      language: builtinAllLanguages[_selectedLanguage],
+                      controller: _controller,
+                      // textStyle: GoogleFonts.jetBrainsMono(),
+                      /* aiCompletion: AiCompletion(
+                        model: Gemini(apiKey: "YOUR API KEY"),
+                      ), */
+                      lspConfig: snapshot.data,
+                      filePath: absFilePath,
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         ),
       ),
