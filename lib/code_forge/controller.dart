@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 
-import '../code_forge.dart';
-import 'rope.dart';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:re_highlight/languages/all.dart';
+import 'package:re_highlight/re_highlight.dart';
+import 'package:re_highlight/styles/all.dart';
+
+import '../code_forge.dart';
+import 'rope.dart';
 
 /// Controller for the [CodeForge] code editor widget.
 ///
@@ -52,6 +55,23 @@ class CodeForgeController implements DeltaTextInputClient {
   /// Callback for manually triggering AI completion.
   /// Set this to enable custom AI completion triggers.
   VoidCallback? manualAiCompletion;
+
+  Mode? currentLanguage;
+  Map<String, TextStyle>? currentTheme;
+
+  void setLanguage(String languageName) {
+    if (builtinAllLanguages.containsKey(languageName)) {
+      currentLanguage = builtinAllLanguages[languageName];
+      notifyListeners();
+    }
+  }
+
+  void setTheme(String themeName) {
+    if (builtinAllThemes.containsKey(themeName)) {
+      currentTheme = builtinAllThemes[themeName];
+      notifyListeners();
+    }
+  }
 
   Rope _rope = Rope('');
   TextSelection _selection = const TextSelection.collapsed(offset: 0);

@@ -3,6 +3,15 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:markdown_widget/markdown_widget.dart';
+import 'package:re_highlight/languages/dart.dart';
+import 'package:re_highlight/re_highlight.dart';
+import 'package:re_highlight/styles/vs2015.dart';
+
 import '../AI_completion/ai.dart';
 import '../LSP/lsp.dart';
 import 'controller.dart';
@@ -10,15 +19,6 @@ import 'scroll.dart';
 import 'styling.dart';
 import 'syntax_highlighter.dart';
 import 'undo_redo.dart';
-
-import 'package:re_highlight/re_highlight.dart';
-import 'package:re_highlight/styles/vs2015.dart';
-import 'package:re_highlight/languages/dart.dart';
-import 'package:markdown_widget/markdown_widget.dart';
-import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 
 //TODO: More lsp features
 //TODO: Tokenized input to the AI model for efficient completion.
@@ -221,12 +221,12 @@ class _CodeForgeState extends State<CodeForge>
   late final CodeForgeController _controller;
   late final FocusNode _focusNode;
   late final AnimationController _caretBlinkController;
-  late final Map<String, TextStyle> _editorTheme;
-  late final Mode _language;
+  late Map<String, TextStyle> _editorTheme;
+  late Mode _language;
   late final CodeSelectionStyle _selectionStyle;
-  late final GutterStyle _gutterStyle;
-  late final SuggestionStyle _suggestionStyle;
-  late final HoverDetailsStyle _hoverDetailsStyle;
+  late GutterStyle _gutterStyle;
+  late SuggestionStyle _suggestionStyle;
+  late HoverDetailsStyle _hoverDetailsStyle;
   late final ValueNotifier<List<dynamic>?> _suggestionNotifier, _hoverNotifier;
   late final ValueNotifier<List<LspErrors>> _diagnosticsNotifier;
   late final ValueNotifier<String?> _aiNotifier;
@@ -274,69 +274,7 @@ class _CodeForgeState extends State<CodeForge>
 
     _controller.setUndoController(_undoRedoController);
 
-    _gutterStyle =
-        widget.gutterStyle ??
-        GutterStyle(
-          lineNumberStyle: null,
-          foldedIconColor: _editorTheme['root']?.color,
-          unfoldedIconColor: _editorTheme['root']?.color,
-          backgroundColor: _editorTheme['root']?.backgroundColor,
-        );
-
-    _suggestionStyle =
-        widget.suggestionStyle ??
-        SuggestionStyle(
-          elevation: 6,
-          textStyle: (() {
-            TextStyle style = widget.textStyle ?? TextStyle();
-            if (style.color == null) {
-              style = style.copyWith(color: _editorTheme['root']!.color);
-            }
-            return style;
-          })(),
-          backgroundColor:
-              _editorTheme['root']?.backgroundColor ?? Colors.white,
-          focusColor: Colors.blueAccent.withAlpha(50),
-          hoverColor: Colors.grey.withAlpha(15),
-          splashColor: Colors.blueAccent.withAlpha(50),
-          shape: BeveledRectangleBorder(
-            side: BorderSide(
-              color: _editorTheme['root']!.color ?? Colors.grey[400]!,
-              width: 0.2,
-            ),
-          ),
-        );
-
-    _hoverDetailsStyle =
-        widget.hoverDetailsStyle ??
-        HoverDetailsStyle(
-          shape: BeveledRectangleBorder(
-            side: BorderSide(
-              color: _editorTheme['root']!.color ?? Colors.grey[400]!,
-              width: 0.2,
-            ),
-          ),
-          backgroundColor: (() {
-            final lightnessDelta = -0.06;
-            final base = _editorTheme['root']!.backgroundColor!;
-            final hsl = HSLColor.fromColor(base);
-            final newLightness = (hsl.lightness + lightnessDelta).clamp(
-              0.0,
-              1.0,
-            );
-            return hsl.withLightness(newLightness).toColor();
-          })(),
-          focusColor: Colors.blueAccent.withAlpha(50),
-          hoverColor: Colors.grey.withAlpha(15),
-          splashColor: Colors.blueAccent.withAlpha(50),
-          textStyle: (() {
-            TextStyle style = widget.textStyle ?? _editorTheme['root']!;
-            if (style.color == null) {
-              style = style.copyWith(color: _editorTheme['root']!.color);
-            }
-            return style;
-          })(),
-        );
+    _updateStyles();
 
     _caretBlinkController = AnimationController(
       vsync: this,
@@ -446,6 +384,23 @@ class _CodeForgeState extends State<CodeForge>
     }
 
     _controller.addListener(() {
+      bool styleChanged = false;
+      if (_controller.currentLanguage != null &&
+          _controller.currentLanguage != _language) {
+        _language = _controller.currentLanguage!;
+        styleChanged = true;
+      }
+      if (_controller.currentTheme != null &&
+          _editorTheme != _controller.currentTheme) {
+        _editorTheme = _controller.currentTheme!;
+        _updateStyles();
+        styleChanged = true;
+      }
+
+      if (styleChanged) {
+        if (mounted) setState(() {});
+      }
+
       final text = _controller.text;
       final currentSelection = _controller.selection;
       final cursorPosition = currentSelection.extentOffset;
@@ -695,6 +650,72 @@ class _CodeForgeState extends State<CodeForge>
     _caretBlinkController
       ..stop()
       ..repeat(reverse: true);
+  }
+
+  void _updateStyles() {
+    _gutterStyle =
+        widget.gutterStyle ??
+        GutterStyle(
+          lineNumberStyle: null,
+          foldedIconColor: _editorTheme['root']?.color,
+          unfoldedIconColor: _editorTheme['root']?.color,
+          backgroundColor: _editorTheme['root']?.backgroundColor,
+        );
+
+    _suggestionStyle =
+        widget.suggestionStyle ??
+        SuggestionStyle(
+          elevation: 6,
+          textStyle: (() {
+            TextStyle style = widget.textStyle ?? TextStyle();
+            if (style.color == null) {
+              style = style.copyWith(color: _editorTheme['root']!.color);
+            }
+            return style;
+          })(),
+          backgroundColor:
+              _editorTheme['root']?.backgroundColor ?? Colors.white,
+          focusColor: Colors.blueAccent.withAlpha(50),
+          hoverColor: Colors.grey.withAlpha(15),
+          splashColor: Colors.blueAccent.withAlpha(50),
+          shape: BeveledRectangleBorder(
+            side: BorderSide(
+              color: _editorTheme['root']!.color ?? Colors.grey[400]!,
+              width: 0.2,
+            ),
+          ),
+        );
+
+    _hoverDetailsStyle =
+        widget.hoverDetailsStyle ??
+        HoverDetailsStyle(
+          shape: BeveledRectangleBorder(
+            side: BorderSide(
+              color: _editorTheme['root']!.color ?? Colors.grey[400]!,
+              width: 0.2,
+            ),
+          ),
+          backgroundColor: (() {
+            final lightnessDelta = -0.06;
+            final base = _editorTheme['root']?.backgroundColor ?? Colors.black;
+            final hsl = HSLColor.fromColor(base);
+            final newLightness = (hsl.lightness + lightnessDelta).clamp(
+              0.0,
+              1.0,
+            );
+            return hsl.withLightness(newLightness).toColor();
+          })(),
+          focusColor: Colors.blueAccent.withAlpha(50),
+          hoverColor: Colors.grey.withAlpha(15),
+          splashColor: Colors.blueAccent.withAlpha(50),
+          textStyle: (() {
+            TextStyle style = widget.textStyle ?? _editorTheme['root']!;
+            if (style.color == null) {
+              style = style.copyWith(color: _editorTheme['root']?.color);
+            }
+            return style;
+          })(),
+        );
   }
 
   @override
