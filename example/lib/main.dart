@@ -40,44 +40,7 @@ class _MyAppState extends State<MyApp> {
 
   void _registerCustomSuggestions() {
     // Example 1: Register suggestions from backend JSON format (snake_case)
-    final backendSuggestions = [
-      {
-        "label": "Hello",
-        "description": "Hello World",
-        "replaced_on_click": "{{ Hello World }}",
-        "triggered_at": "{{}}",
-      },
-      {
-        "label": "World",
-        "description": "Hello World",
-        "replaced_on_click": "{{ World is great }}",
-        "triggered_at": "{{}}",
-      },
-      {
-        "label": "Another Type",
-        "description": "Another Type",
-        "replaced_on_click": "<< Another Type >>",
-        "triggered_at": "<<>>",
-      },
-      {
-        "label": "Variable",
-        "description": "Insert a variable placeholder",
-        "replaced_on_click": "{{ variable_name }}",
-        "triggered_at": "{{}}",
-      },
-      {
-        "label": "Filter",
-        "description": "Apply a filter",
-        "replaced_on_click": "{{ value | filter_name }}",
-        "triggered_at": "{{}}",
-      },
-      {
-        "label": "Custom Tag",
-        "description": "Insert custom tag",
-        "replaced_on_click": "<<custom_tag>>",
-        "triggered_at": "<<>>",
-      },
-    ];
+    final backendSuggestions = [];
 
     // Convert backend JSON to SuggestionModel list
     final suggestions = backendSuggestions
@@ -382,20 +345,7 @@ class _MyAppState extends State<MyApp> {
                           child: ElevatedButton.icon(
                             onPressed: () {
                               // Test custom suggestions manually
-                              _controller.showCustomSuggestions([
-                                SuggestionModel(
-                                  label: 'Manual Test',
-                                  replacedOnClick: 'Manual suggestion inserted',
-                                  description: 'This was triggered manually',
-                                  triggeredAt: '{{}}',
-                                ),
-                                SuggestionModel(
-                                  label: 'Another Manual',
-                                  replacedOnClick: 'Another manual suggestion',
-                                  description: 'Manual trigger example',
-                                  triggeredAt: '{{}}',
-                                ),
-                              ]);
+                              _controller.showCustomSuggestions([]);
                               ScaffoldMessenger.of(
                                 scaffoldContext,
                               ).showSnackBar(

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
 
+import 'package:code_forge/code_forge/suggestions/initialize_language_specific_suggestions.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -290,10 +291,16 @@ class _CodeForgeState extends State<CodeForge>
     if (_controller.currentLanguage == null && widget.language != null) {
       _controller.currentLanguage = widget.language;
       // Initialize language-specific suggestions
-      _controller.initializeLanguageSpecificSuggestions();
+      initializeLanguageSpecificSuggestions(
+        currentLanguage: _language,
+        registerCustomSuggestions: _controller.registerCustomSuggestions,
+      );
     } else if (_controller.currentLanguage != null) {
       // Initialize suggestions if language is already set
-      _controller.initializeLanguageSpecificSuggestions();
+      initializeLanguageSpecificSuggestions(
+        currentLanguage: _language,
+        registerCustomSuggestions: _controller.registerCustomSuggestions,
+      );
     }
     _suggestionNotifier = ValueNotifier(null);
     _hoverNotifier = ValueNotifier(null);
