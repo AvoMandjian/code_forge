@@ -285,31 +285,19 @@ class CodeForgeController implements DeltaTextInputClient {
   /// controller.formatCode(languageName: 'html');
   /// ```
   void formatCode() {
-    print('[FORMAT] ===== formatCode() called =====');
-    print('[FORMAT] Buffer state before flush: index=$_bufferLineIndex, dirty=$_bufferDirty, text=$_bufferLineText');
-    print('[FORMAT] Cached text before flush: $_cachedText');
-    print('[FORMAT] Rope length before flush: ${_rope.length}');
-    
     _flushBuffer(); // Ensure buffer is flushed before reading text
-    
-    print('[FORMAT] Buffer state after flush: index=$_bufferLineIndex, dirty=$_bufferDirty, text=$_bufferLineText');
-    
+
     // Ensure buffer state is completely cleared
     _bufferLineIndex = null;
     _bufferLineText = null;
     _bufferDirty = false;
-    
+
     // Force fresh text read directly from rope, bypassing cache
     _cachedText = null;
     final currentText = _rope.getText();
     final langName = currentLanguage?.name;
 
-    print('[FORMAT] Current text from rope (length=${currentText.length}): "$currentText"');
-    print('[FORMAT] Language: $langName');
-    print('[FORMAT] Rope length: ${_rope.length}');
-
     if (langName == null) {
-      print('[FORMAT] No language set, returning');
       // No language set, cannot format
       return;
     }
@@ -319,27 +307,16 @@ class CodeForgeController implements DeltaTextInputClient {
         ? rulers!.first
         : null;
 
-    print('[FORMAT] Calling CodeFormatter.formatCode with text length=${currentText.length}');
     final formattedText = CodeFormatter.formatCode(
       currentText,
       langName,
       rulerColumn: rulerColumn,
     );
 
-    print('[FORMAT] Formatted text (length=${formattedText?.length ?? 0}): "$formattedText"');
-    print('[FORMAT] Texts are equal: ${formattedText == currentText}');
-
     if (formattedText != null && formattedText != currentText) {
-      print('[FORMAT] Applying formatted text...');
       final selectionBefore = selection;
-      print('[FORMAT] Selection before: $selectionBefore');
-      print('[FORMAT] Setting text to formatted text (length=${formattedText.length})');
-      
+
       text = formattedText;
-      
-      print('[FORMAT] Text after setting: "${_rope.getText()}"');
-      print('[FORMAT] Rope length after setting: ${_rope.length}');
-      print('[FORMAT] Buffer state after setting: index=$_bufferLineIndex, dirty=$_bufferDirty');
 
       // Try to preserve cursor position
       final newLength = formattedText.length;
@@ -349,12 +326,7 @@ class CodeForgeController implements DeltaTextInputClient {
         selection = TextSelection.collapsed(offset: newLength);
       }
 
-      print('[FORMAT] Final selection: $selection');
-      print('[FORMAT] ===== formatCode() completed =====');
       notifyListeners();
-    } else {
-      print('[FORMAT] No formatting applied (formattedText is null or same as current)');
-      print('[FORMAT] ===== formatCode() completed =====');
     }
   }
 
@@ -609,40 +581,19 @@ class CodeForgeController implements DeltaTextInputClient {
   /// Getting this property returns the full document text.
   /// Setting this property replaces all content and moves the cursor to the end.
   String get text {
-    final stackTrace = StackTrace.current;
-    final caller = stackTrace.toString().split('\n').take(3).join(' -> ');
-    print('[TEXT GETTER] ===== text getter called =====');
-    print('[TEXT GETTER] Caller: $caller');
-    print('[TEXT GETTER] Cache state: cachedText=${_cachedText != null ? "SET (length=${_cachedText!.length})" : "NULL"}, version=$_cachedTextVersion, currentVersion=$_currentVersion');
-    print('[TEXT GETTER] Buffer state: index=$_bufferLineIndex, dirty=$_bufferDirty, text=$_bufferLineText');
-    print('[TEXT GETTER] Rope length: ${_rope.length}');
-    
     if (_cachedText == null || _cachedTextVersion != _currentVersion) {
-      print('[TEXT GETTER] Cache miss or invalid, constructing text...');
       if (_bufferLineIndex != null && _bufferDirty) {
-        print('[TEXT GETTER] Using buffer to construct text');
         final ropeText = _rope.getText();
-        print('[TEXT GETTER] Rope text: "$ropeText"');
         final before = ropeText.substring(0, _bufferLineRopeStart);
         final after = ropeText.substring(
           _bufferLineRopeStart + _bufferLineOriginalLength,
         );
-        print('[TEXT GETTER] Before buffer: "$before"');
-        print('[TEXT GETTER] Buffer text: "$_bufferLineText"');
-        print('[TEXT GETTER] After buffer: "$after"');
         _cachedText = before + _bufferLineText! + after;
-        print('[TEXT GETTER] Constructed text with buffer: "$_cachedText"');
       } else {
-        print('[TEXT GETTER] No buffer, using rope directly');
         _cachedText = _rope.getText();
-        print('[TEXT GETTER] Text from rope: "$_cachedText"');
       }
       _cachedTextVersion = _currentVersion;
-    } else {
-      print('[TEXT GETTER] Using cached text: "$_cachedText"');
     }
-    print('[TEXT GETTER] Returning text (length=${_cachedText!.length}): "$_cachedText"');
-    print('[TEXT GETTER] ===== text getter completed =====');
     return _cachedText!;
   }
 
@@ -744,32 +695,19 @@ class CodeForgeController implements DeltaTextInputClient {
   int findLineEnd(int offset) => _rope.findLineEnd(offset);
 
   set text(String newText) {
-    print('[TEXT SETTER] ===== Setting text =====');
-    print('[TEXT SETTER] New text length: ${newText.length}');
-    print('[TEXT SETTER] New text content: "$newText"');
-    print('[TEXT SETTER] Buffer state before clear: index=$_bufferLineIndex, dirty=$_bufferDirty, text=$_bufferLineText');
-    print('[TEXT SETTER] Rope length before: ${_rope.length}');
-    print('[TEXT SETTER] Cached text before: $_cachedText');
-    
     // Clear any active buffer state before setting new text
     _bufferLineIndex = null;
     _bufferLineText = null;
     _bufferDirty = false;
     _flushTimer?.cancel();
     _flushTimer = null;
-    
+
     _rope = Rope(newText);
     _currentVersion++;
     _cachedText = null; // Invalidate cached text
     _selection = TextSelection.collapsed(offset: newText.length);
     dirtyRegion = TextRange(start: 0, end: newText.length);
-    
-    print('[TEXT SETTER] Rope length after: ${_rope.length}');
-    print('[TEXT SETTER] Rope text after: "${_rope.getText()}"');
-    print('[TEXT SETTER] Buffer state after: index=$_bufferLineIndex, dirty=$_bufferDirty');
-    print('[TEXT SETTER] Cached text after: $_cachedText');
-    print('[TEXT SETTER] ===== Text setter completed =====');
-    
+
     notifyListeners();
   }
 
@@ -1376,17 +1314,10 @@ class CodeForgeController implements DeltaTextInputClient {
   }
 
   void _flushBuffer() {
-    print('[FLUSH BUFFER] ===== _flushBuffer() called =====');
-    print('[FLUSH BUFFER] Buffer state: index=$_bufferLineIndex, dirty=$_bufferDirty');
-    print('[FLUSH BUFFER] Buffer text: $_bufferLineText');
-    print('[FLUSH BUFFER] Rope length before: ${_rope.length}');
-    print('[FLUSH BUFFER] Rope text before: "${_rope.getText()}"');
-    
     _flushTimer?.cancel();
     _flushTimer = null;
 
     if (_bufferLineIndex == null || !_bufferDirty) {
-      print('[FLUSH BUFFER] No buffer to flush, returning');
       return;
     }
 
@@ -1395,13 +1326,10 @@ class CodeForgeController implements DeltaTextInputClient {
     final start = _bufferLineRopeStart;
     final end = start + _bufferLineOriginalLength;
 
-    print('[FLUSH BUFFER] Deleting range: start=$start, end=$end, length=${_bufferLineOriginalLength}');
     if (_bufferLineOriginalLength > 0) {
       _rope.delete(start, end);
     }
-    print('[FLUSH BUFFER] Rope after delete: "${_rope.getText()}"');
-    
-    print('[FLUSH BUFFER] Inserting buffer text at $start: "$_bufferLineText"');
+
     if (_bufferLineText!.isNotEmpty) {
       _rope.insert(start, _bufferLineText!);
     }
@@ -1413,11 +1341,6 @@ class CodeForgeController implements DeltaTextInputClient {
     // Invalidate cached text since rope content changed
     _cachedText = null;
     _currentVersion++;
-
-    print('[FLUSH BUFFER] Rope length after: ${_rope.length}');
-    print('[FLUSH BUFFER] Rope text after: "${_rope.getText()}"');
-    print('[FLUSH BUFFER] Buffer cleared: index=$_bufferLineIndex, dirty=$_bufferDirty');
-    print('[FLUSH BUFFER] ===== _flushBuffer() completed =====');
 
     dirtyLine = lineToInvalidate;
     notifyListeners();

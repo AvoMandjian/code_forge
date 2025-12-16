@@ -318,39 +318,23 @@ class TagCompletion {
   /// Supports both HTML tags (`<tag>`) and Jinja tags (`{% tag %}`).
   /// Returns a [TagContext] object with information about the tag context.
   static TagContext analyzeTagContext(String text, int cursorPosition) {
-    print('[TAG_CONTEXT] analyzeTagContext called');
-    print('  cursorPosition: $cursorPosition, text.length: ${text.length}');
-    print(
-      '  text around cursor: "${text.substring((cursorPosition - 10).clamp(0, text.length), (cursorPosition + 10).clamp(0, text.length))}"',
-    );
-
     if (cursorPosition < 0 || cursorPosition > text.length) {
-      print('  Invalid cursor position, returning false');
       return TagContext(isInTag: false);
     }
 
     // First, try to detect Jinja tags {% %}
     final jinjaContext = _analyzeJinjaTagContext(text, cursorPosition);
-    print(
-      '  Jinja context: isInTag=${jinjaContext.isInTag}, isJinjaTag=${jinjaContext.isJinjaTag}, prefix="${jinjaContext.prefix}"',
-    );
     if (jinjaContext.isInTag) {
-      print('  Returning Jinja context');
       return jinjaContext;
     }
 
     // Then try HTML tags <>
     final htmlContext = _analyzeHtmlTagContext(text, cursorPosition);
-    print(
-      '  HTML context: isInTag=${htmlContext.isInTag}, prefix="${htmlContext.prefix}"',
-    );
     return htmlContext;
   }
 
   /// Analyzes Jinja tag context (`{% tag %}`).
   static TagContext _analyzeJinjaTagContext(String text, int cursorPosition) {
-    print('[JINJA_CONTEXT] _analyzeJinjaTagContext called');
-    print('  cursorPosition: $cursorPosition');
     int pos = cursorPosition - 1;
     bool foundOpeningTag = false;
     int tagStart = -1;
@@ -358,25 +342,20 @@ class TagCompletion {
 
     // Look backwards for '{%' first
     // This handles cases like '{%%}' where we need to detect we're inside a tag
-    print('  Looking backwards from pos=$pos for {%');
     int searchPos = pos;
     while (searchPos >= 0) {
       if (searchPos + 1 < text.length) {
         final twoChars = text.substring(searchPos, searchPos + 2);
-        print('    searchPos=$searchPos, twoChars="$twoChars"');
         if (twoChars == '{%') {
           tagStart = searchPos;
           foundOpeningTag = true;
-          print('  Found {% at pos=$searchPos');
           // Check if it's a closing tag (look for 'end' after '{%')
           if (searchPos + 2 < text.length) {
             final afterOpen = text
                 .substring(searchPos + 2, (searchPos + 7).clamp(0, text.length))
                 .trim();
-            print('  After {%: "$afterOpen"');
             if (afterOpen.toLowerCase().startsWith('end')) {
               isClosingTag = true;
-              print('  Detected closing tag');
             }
           }
           break;
@@ -391,20 +370,17 @@ class TagCompletion {
     if (!foundOpeningTag && pos >= 0 && pos + 1 < text.length) {
       final twoChars = text.substring(pos, pos + 2);
       if (twoChars == '%}') {
-        print('  Right after %} with no opening tag, returning false');
         return TagContext(isInTag: false);
       }
     }
 
     if (!foundOpeningTag) {
-      print('  No {% found, returning false');
       return TagContext(isInTag: false);
     }
 
     // Look forwards from tagStart to find the closing delimiter '%}'
     int? tagEnd;
     int searchStart = tagStart + 2;
-    print('  Searching for %} from pos=$searchStart');
     for (
       int i = searchStart;
       i < text.length && i < cursorPosition + 100;
@@ -414,17 +390,14 @@ class TagCompletion {
         final twoChars = text.substring(i, i + 2);
         if (twoChars == '%}') {
           tagEnd = i + 1;
-          print('  Found %} at pos=${i + 1}');
           break;
         }
         if (twoChars == '{%') {
           // Found another opening tag before closing this one
-          print('  Found another {% before closing');
           break;
         }
       }
     }
-    print('  tagEnd: $tagEnd');
 
     // Extract prefix (text between '{%' and cursor)
     // Skip any extra '%' characters after '{%' (handles '{%%}' case)
@@ -433,19 +406,14 @@ class TagCompletion {
     String prefix = '';
     if (prefixEnd > prefixStart) {
       prefix = text.substring(prefixStart, prefixEnd).trim();
-      print('  Raw prefix before cleanup: "$prefix"');
       // Remove leading '%' characters (handles '{%%}' -> prefix should be empty, not '%')
       prefix = prefix.replaceFirst(RegExp(r'^%+'), '');
-      print('  Prefix after cleanup: "$prefix"');
     }
 
     // Check if cursor is actually within the tag bounds
     final isInTag = tagEnd == null || cursorPosition <= tagEnd;
-    print(
-      '  isInTag calculation: tagEnd=$tagEnd, cursorPosition=$cursorPosition, isInTag=$isInTag',
-    );
 
-    final result = TagContext(
+    return TagContext(
       isInTag: isInTag && foundOpeningTag,
       isClosingTag: isClosingTag,
       isJinjaTag: true,
@@ -453,10 +421,6 @@ class TagCompletion {
       tagStart: tagStart,
       tagEnd: tagEnd,
     );
-    print(
-      '  Returning Jinja context: isInTag=${result.isInTag}, prefix="${result.prefix}", tagStart=${result.tagStart}, tagEnd=${result.tagEnd}',
-    );
-    return result;
   }
 
   /// Analyzes HTML tag context (`<tag>`).
@@ -565,18 +529,11 @@ class TagCompletion {
     int cursorPosition,
     String? language,
   ) {
-    print('[GET_SUGGESTIONS] getTagSuggestions called');
-    print('  language: $language');
     final context = analyzeTagContext(text, cursorPosition);
 
     if (!context.isInTag) {
-      print('  Not in tag, returning empty list');
       return [];
     }
-
-    print(
-      '  In tag! isJinjaTag=${context.isJinjaTag}, prefix="${context.prefix}"',
-    );
 
     // Determine which tag list to use based on tag context first
     List<String> availableTags = [];
@@ -584,7 +541,6 @@ class TagCompletion {
     if (context.isJinjaTag) {
       // Inside {% %} - only show Jinja tags
       availableTags = List.from(jinjaTags);
-      print('  Using Jinja tags, count: ${availableTags.length}');
     } else {
       // Inside <> - show HTML tags
       // If the base language is Jinja, also include Jinja tags
@@ -594,20 +550,14 @@ class TagCompletion {
         // For Jinja templates, also include Jinja tags when in HTML context
         availableTags.addAll(jinjaTags);
       }
-      print('  Using HTML tags, count: ${availableTags.length}');
     }
 
     // Filter by prefix if present
     if (context.prefix.isNotEmpty) {
       final lowerPrefix = context.prefix.toLowerCase();
-      print('  Filtering by prefix: "$lowerPrefix"');
-      final beforeFilter = availableTags.length;
       availableTags = availableTags
           .where((tag) => tag.toLowerCase().startsWith(lowerPrefix))
           .toList();
-      print('  After filtering: ${availableTags.length} (was $beforeFilter)');
-    } else {
-      print('  No prefix, showing all ${availableTags.length} tags');
     }
 
     // Sort suggestions (exact prefix matches first, then alphabetical)
@@ -627,9 +577,6 @@ class TagCompletion {
       return a.compareTo(b);
     });
 
-    print(
-      '  Returning ${availableTags.length} suggestions: ${availableTags.take(10).toList()}',
-    );
     return availableTags;
   }
 

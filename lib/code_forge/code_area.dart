@@ -559,38 +559,16 @@ class _CodeForgeState extends State<CodeForge>
               twoCharsBefore == '{%' ||
               threeCharsBefore == '{%%';
 
-          print('[TAG_COMPLETION] Debug Info:');
-          print('  insertedChar: "$insertedChar"');
-          print('  cursorPosition: $cursorPosition');
-          print('  twoCharsBefore: "$twoCharsBefore"');
-          print('  threeCharsBefore: "$threeCharsBefore"');
-          print('  isJinjaTrigger: $isJinjaTrigger');
-          print('  tagContext.isInTag: ${tagContext.isInTag}');
-          print('  tagContext.isJinjaTag: ${tagContext.isJinjaTag}');
-          print('  tagContext.prefix: "${tagContext.prefix}"');
-          print('  tagContext.tagStart: ${tagContext.tagStart}');
-          print('  tagContext.tagEnd: ${tagContext.tagEnd}');
-          print(
-            '  text around cursor: "${text.substring((cursorPosition - 5).clamp(0, text.length), (cursorPosition + 5).clamp(0, text.length))}"',
-          );
-
           if (insertedChar == '<' ||
               insertedChar == '/' ||
               isJinjaTrigger ||
               tagContext.isInTag) {
-            print(
-              '[TAG_COMPLETION] Trigger condition met, getting suggestions...',
-            );
             final tagSuggestions = TagCompletion.getTagSuggestions(
               text,
               cursorPosition,
               language,
             );
-            print('  tagSuggestions count: ${tagSuggestions.length}');
             if (tagSuggestions.isNotEmpty) {
-              print(
-                '  Showing suggestions: ${tagSuggestions.take(5).toList()}',
-              );
               _suggestions = tagSuggestions;
               _sortSuggestions(tagContext.prefix);
               if (mounted) {
@@ -600,11 +578,7 @@ class _CodeForgeState extends State<CodeForge>
               _previousValue = text;
               _prevSelection = currentSelection;
               return;
-            } else {
-              print('  No suggestions found!');
             }
-          } else {
-            print('[TAG_COMPLETION] Trigger condition NOT met');
           }
         }
 

@@ -40,7 +40,106 @@ class _MyAppState extends State<MyApp> {
 
   @override
   void initState() {
-    _controller.text = "{% if True %}Hello{% endif %}";
+    _controller.text = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ page_title | default("Admin Dashboard") }}</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+
+<body>
+
+<div class="container">
+
+    <!-- HEADER -->
+    <div class="card header">
+        <h2>{{ app_name | default("My Application") }}</h2>
+
+        {% if current_user %}
+            <div>
+                Logged in as <strong>{{ current_user.name }}</strong>
+                {% if current_user.is_admin %}
+                    <span class="badge active">Admin</span>
+                {% else %}
+                    <span class="badge inactive">User</span>
+                {% endif %}
+            </div>
+        {% else %}
+            <span class="badge inactive">Guest</span>
+        {% endif %}
+    </div>
+
+    <!-- FLASH MESSAGES -->
+    {% if messages %}
+        {% for msg in messages %}
+            <div class="card">
+                <strong>{{ msg.level | upper }}:</strong>
+                {{ msg.text }}
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <!-- USERS TABLE -->
+    <div class="card">
+        <h3>Users</h3>
+
+        {% if users and users|length > 0 %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Status</th>
+                        <th>Joined</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>{{ user.name }}</td>
+                            <td>{{ user.email }}</td>
+                            <td>
+                                {% if user.active %}
+                                    <span class="badge active">Active</span>
+                                {% else %}
+                                    <span class="badge inactive">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ user.created_at | date("Y-m-d") }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No users found.</p>
+        {% endif %}
+    </div>
+
+    <!-- STATISTICS -->
+    <div class="card">
+        <h3>Statistics</h3>
+
+        <ul>
+            <li>Total users: {{ stats.total_users | default(0) }}</li>
+            <li>Active users: {{ stats.active_users | default(0) }}</li>
+            <li>Inactive users: {{ stats.inactive_users | default(0) }}</li>
+        </ul>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+        &copy; {{ current_year }} {{ company_name | default("Your Company") }}.
+        Generated at {{ generated_at | date("Y-m-d H:i") }}.
+    </div>
+
+</div>
+
+</body>
+</html>""";
     _controller.setRulers([80]);
     _updateRuler();
     _controller.disableAiCompletion();
