@@ -58,6 +58,16 @@ class CodeFormatter {
     final indentStr = '  ';
     final lines = html.split('\n');
 
+    // Check if HTML is already formatted (tags are on separate lines)
+    // If so, process line by line without trying to match tag pairs
+    final isAlreadyFormatted = lines.any((line) {
+      final trimmed = line.trim();
+      return trimmed.startsWith('<') &&
+          !trimmed.contains('</') &&
+          trimmed.endsWith('>') &&
+          !trimmed.contains('/>');
+    });
+
     for (final line in lines) {
       final trimmed = line.trim();
       if (trimmed.isEmpty) {
@@ -65,15 +75,61 @@ class CodeFormatter {
         continue;
       }
 
+      // If HTML is already formatted, skip tag pair processing and handle line by line
+      if (isAlreadyFormatted) {
+        // Check for closing tags first
+        if (trimmed.startsWith('</')) {
+          // Decrease indent BEFORE writing so closing tag aligns with its opening tag
+          if (indent > 0) {
+            indent--;
+          }
+          buffer.write(indentStr * indent);
+          buffer.writeln(trimmed);
+          continue;
+        }
+
+        // Check for self-closing tags
+        if (trimmed.contains('/>')) {
+          buffer.write(indentStr * indent);
+          buffer.writeln(trimmed);
+          continue;
+        }
+
+        // Check for opening tags
+        if (trimmed.startsWith('<') && trimmed.contains('>')) {
+          final isOpeningTag =
+              !trimmed.contains('/>') &&
+              !_isVoidElement(trimmed) &&
+              !trimmed.endsWith('/>');
+
+          // Write opening tag at current indent level
+          buffer.write(indentStr * indent);
+          buffer.writeln(trimmed);
+
+          // If it's an opening tag (not self-closing or void), increase indent for content
+          if (isOpeningTag) {
+            // Increase indent AFTER writing the opening tag
+            indent++;
+          }
+          continue;
+        }
+
+        // Regular content (indented one level from its parent tag)
+        buffer.write(indentStr * indent);
+        buffer.writeln(trimmed);
+        continue;
+      }
+
       // Process all tag pairs on the line, not just the first one
+      // Only process tag pairs that are actually on the same line (no newlines in between)
       String remaining = trimmed;
       bool processedAnyTag = false;
 
       while (remaining.isNotEmpty) {
-        // Find the first tag pair match
+        // Find the first tag pair match - but only if both tags are on the same line
+        // Use a regex that doesn't allow newlines between opening and closing tags
         final tagPairMatch = RegExp(
-          r'<([a-zA-Z][a-zA-Z0-9-]*)([^>]*)>(.*?)</([a-zA-Z][a-zA-Z0-9-]*)>',
-          dotAll: true,
+          r'<([a-zA-Z][a-zA-Z0-9-]*)([^>]*)>([^\n]*?)</([a-zA-Z][a-zA-Z0-9-]*)>',
         ).firstMatch(remaining);
 
         if (tagPairMatch != null) {
@@ -110,14 +166,17 @@ class CodeFormatter {
               continue;
             }
 
-            // Check if content contains nested tags - if so, recursively format it
+            // Check if content contains nested tags on the same line
             final hasNestedTags = RegExp(
-              r'<[^>]+>.*</[^>]+>',
-              dotAll: true,
+              r'<[^>]+>[^\n]*</[^>]+>',
             ).hasMatch(content);
 
-            if (hasNestedTags) {
-              // Recursively format nested content
+            // Check if content appears to be already formatted (contains newlines with tags)
+            final isAlreadyFormatted =
+                content.contains('\n') && RegExp(r'<[^>]+>').hasMatch(content);
+
+            if (hasNestedTags && !isAlreadyFormatted) {
+              // Recursively format nested content (only if not already formatted)
               final formattedContent = formatHtml(
                 content,
                 rulerColumn: rulerColumn,
@@ -144,7 +203,7 @@ class CodeFormatter {
               buffer.write(indentStr * indent);
               buffer.writeln('</$closingTagName>');
             } else {
-              // Simple content - write opening tag, content, closing tag
+              // Simple content or already formatted - write opening tag, content, closing tag
               buffer.write(indentStr * indent);
               if (openingAttributes.trim().isNotEmpty) {
                 buffer.writeln('<$openingTagName$openingAttributes>');
@@ -153,9 +212,21 @@ class CodeFormatter {
               }
 
               // Write content (if any) with indentation
+              // If already formatted, preserve the formatting
               if (content.trim().isNotEmpty) {
-                buffer.write(indentStr * (indent + 1));
-                buffer.writeln(content.trim());
+                if (isAlreadyFormatted) {
+                  // Content is already formatted, preserve its indentation structure
+                  final contentLines = content.split('\n');
+                  for (final contentLine in contentLines) {
+                    if (contentLine.trim().isNotEmpty) {
+                      buffer.write(indentStr * (indent + 1));
+                      buffer.writeln(contentLine.trim());
+                    }
+                  }
+                } else {
+                  buffer.write(indentStr * (indent + 1));
+                  buffer.writeln(content.trim());
+                }
               }
 
               // Write closing tag
