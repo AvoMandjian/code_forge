@@ -4,8 +4,15 @@ import 'dart:convert';
 class CodeFormatter {
   /// Formats code based on the language type
   ///
+  /// [rulerColumn] is an optional column position (e.g., from editor rulers)
+  /// that determines when to keep tags on the same line in HTML formatting.
+  ///
   /// Returns the formatted code, or null if formatting is not supported
-  static String? formatCode(String code, String? languageName) {
+  static String? formatCode(
+    String code,
+    String? languageName, {
+    int? rulerColumn,
+  }) {
     if (languageName == null) return null;
 
     final langLower = languageName.toLowerCase();
@@ -16,7 +23,7 @@ class CodeFormatter {
         langLower == 'xml' ||
         langLower.contains('html') ||
         langLower.contains('xml')) {
-      return formatHtml(code);
+      return formatHtml(code, rulerColumn: rulerColumn);
     } else if (langLower == 'sql' || langLower.contains('sql')) {
       return formatSql(code);
     } else if (langLower == 'jinja' ||
@@ -42,7 +49,10 @@ class CodeFormatter {
   }
 
   /// Formats HTML code
-  static String formatHtml(String html) {
+  ///
+  /// [rulerColumn] is an optional column position. If provided and tags on the
+  /// same line are within this column limit, they will not be split.
+  static String formatHtml(String html, {int? rulerColumn}) {
     final buffer = StringBuffer();
     int indent = 0;
     final indentStr = '  ';
@@ -55,73 +65,129 @@ class CodeFormatter {
         continue;
       }
 
-      // Check if line contains both opening and closing tag (e.g., <h1>text</h1>)
-      // Split them into separate lines: opening tag, content, closing tag
-      // Use non-greedy matching to find innermost tag pairs first
-      final tagPairMatch = RegExp(
-        r'<([a-zA-Z][a-zA-Z0-9-]*)([^>]*)>(.*?)</([a-zA-Z][a-zA-Z0-9-]*)>',
-        dotAll: true,
-      ).firstMatch(trimmed);
-      if (tagPairMatch != null) {
-        final openingTagName = tagPairMatch.group(1)!;
-        final openingAttributes = tagPairMatch.group(2) ?? '';
-        final content = tagPairMatch.group(3)!;
-        final closingTagName = tagPairMatch.group(4)!;
+      // Process all tag pairs on the line, not just the first one
+      String remaining = trimmed;
+      bool processedAnyTag = false;
 
-        // Only split if tags match and it's not a void element
-        if (openingTagName.toLowerCase() == closingTagName.toLowerCase() &&
-            !_isVoidElement('<$openingTagName>')) {
-          // Check if content contains nested tags - if so, recursively format it
-          final hasNestedTags = RegExp(
-            r'<[^>]+>.*</[^>]+>',
-            dotAll: true,
-          ).hasMatch(content);
+      while (remaining.isNotEmpty) {
+        // Find the first tag pair match
+        final tagPairMatch = RegExp(
+          r'<([a-zA-Z][a-zA-Z0-9-]*)([^>]*)>(.*?)</([a-zA-Z][a-zA-Z0-9-]*)>',
+          dotAll: true,
+        ).firstMatch(remaining);
 
-          if (hasNestedTags) {
-            // Recursively format nested content
-            final formattedContent = formatHtml(content);
-            final contentLines = formattedContent.split('\n');
+        if (tagPairMatch != null) {
+          final matchStart = tagPairMatch.start;
+          final matchEnd = tagPairMatch.end;
+          final openingTagName = tagPairMatch.group(1)!;
+          final openingAttributes = tagPairMatch.group(2) ?? '';
+          final content = tagPairMatch.group(3)!;
+          final closingTagName = tagPairMatch.group(4)!;
 
-            // Write opening tag
-            buffer.write(indentStr * indent);
-            if (openingAttributes.trim().isNotEmpty) {
-              buffer.writeln('<$openingTagName$openingAttributes>');
-            } else {
-              buffer.writeln('<$openingTagName>');
-            }
-
-            // Write formatted content with proper indentation
-            for (final contentLine in contentLines) {
-              if (contentLine.trim().isNotEmpty) {
-                buffer.write(indentStr * (indent + 1));
-                buffer.writeln(contentLine.trim());
+          // Only process if tags match and it's not a void element
+          if (openingTagName.toLowerCase() == closingTagName.toLowerCase() &&
+              !_isVoidElement('<$openingTagName>')) {
+            // Write any content before this tag pair
+            if (matchStart > 0) {
+              final beforeContent = remaining.substring(0, matchStart).trim();
+              if (beforeContent.isNotEmpty) {
+                buffer.write(indentStr * indent);
+                buffer.writeln(beforeContent);
               }
             }
 
-            // Write closing tag
-            buffer.write(indentStr * indent);
-            buffer.writeln('</$closingTagName>');
-          } else {
-            // Simple content - write opening tag, content, closing tag
-            buffer.write(indentStr * indent);
-            if (openingAttributes.trim().isNotEmpty) {
-              buffer.writeln('<$openingTagName$openingAttributes>');
+            // Calculate the tag pair length with current indentation
+            final currentIndentLength = indentStr.length * indent;
+            final tagPairText = remaining.substring(matchStart, matchEnd);
+            final fullLineLength = currentIndentLength + tagPairText.length;
+
+            // If ruler is set and tag pair is within ruler limit, keep on same line
+            if (rulerColumn != null && fullLineLength <= rulerColumn) {
+              buffer.write(indentStr * indent);
+              buffer.writeln(tagPairText);
+              remaining = remaining.substring(matchEnd).trim();
+              processedAnyTag = true;
+              continue;
+            }
+
+            // Check if content contains nested tags - if so, recursively format it
+            final hasNestedTags = RegExp(
+              r'<[^>]+>.*</[^>]+>',
+              dotAll: true,
+            ).hasMatch(content);
+
+            if (hasNestedTags) {
+              // Recursively format nested content
+              final formattedContent = formatHtml(
+                content,
+                rulerColumn: rulerColumn,
+              );
+              final contentLines = formattedContent.split('\n');
+
+              // Write opening tag
+              buffer.write(indentStr * indent);
+              if (openingAttributes.trim().isNotEmpty) {
+                buffer.writeln('<$openingTagName$openingAttributes>');
+              } else {
+                buffer.writeln('<$openingTagName>');
+              }
+
+              // Write formatted content with proper indentation
+              for (final contentLine in contentLines) {
+                if (contentLine.trim().isNotEmpty) {
+                  buffer.write(indentStr * (indent + 1));
+                  buffer.writeln(contentLine.trim());
+                }
+              }
+
+              // Write closing tag
+              buffer.write(indentStr * indent);
+              buffer.writeln('</$closingTagName>');
             } else {
-              buffer.writeln('<$openingTagName>');
+              // Simple content - write opening tag, content, closing tag
+              buffer.write(indentStr * indent);
+              if (openingAttributes.trim().isNotEmpty) {
+                buffer.writeln('<$openingTagName$openingAttributes>');
+              } else {
+                buffer.writeln('<$openingTagName>');
+              }
+
+              // Write content (if any) with indentation
+              if (content.trim().isNotEmpty) {
+                buffer.write(indentStr * (indent + 1));
+                buffer.writeln(content.trim());
+              }
+
+              // Write closing tag
+              buffer.write(indentStr * indent);
+              buffer.writeln('</$closingTagName>');
             }
 
-            // Write content (if any) with indentation
-            if (content.trim().isNotEmpty) {
-              buffer.write(indentStr * (indent + 1));
-              buffer.writeln(content.trim());
+            remaining = remaining.substring(matchEnd).trim();
+            processedAnyTag = true;
+          } else {
+            // Tags don't match or it's a void element, skip this match
+            // Move past the opening tag to avoid infinite loop
+            final nextOpenTag = remaining.indexOf('<', matchStart + 1);
+            if (nextOpenTag > matchStart) {
+              remaining = remaining.substring(nextOpenTag).trim();
+            } else {
+              break;
             }
-
-            // Write closing tag
-            buffer.write(indentStr * indent);
-            buffer.writeln('</$closingTagName>');
           }
-          continue;
+        } else {
+          // No more tag pairs found, write remaining content
+          if (remaining.trim().isNotEmpty) {
+            buffer.write(indentStr * indent);
+            buffer.writeln(remaining.trim());
+          }
+          break;
         }
+      }
+
+      // If we processed any tags, continue to next line
+      if (processedAnyTag) {
+        continue;
       }
 
       // Check for closing tags first

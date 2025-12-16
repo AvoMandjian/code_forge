@@ -293,7 +293,16 @@ class CodeForgeController implements DeltaTextInputClient {
       return;
     }
 
-    final formattedText = CodeFormatter.formatCode(currentText, langName);
+    // Get the first ruler column if rulers are set
+    final rulerColumn = rulers != null && rulers!.isNotEmpty
+        ? rulers!.first
+        : null;
+
+    final formattedText = CodeFormatter.formatCode(
+      currentText,
+      langName,
+      rulerColumn: rulerColumn,
+    );
 
     if (formattedText != null && formattedText != currentText) {
       final selectionBefore = selection;
