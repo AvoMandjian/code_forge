@@ -265,6 +265,14 @@ class _CodeForgeState extends State<CodeForge>
   List<dynamic> _suggestions = [];
   TextSelection _prevSelection = TextSelection.collapsed(offset: 0);
 
+  // Search functionality
+  bool _isSearchVisible = false;
+  String _searchText = '';
+  int _currentMatchIndex = -1;
+  List<SearchHighlight> _searchMatches = [];
+  final _searchController = TextEditingController();
+  final _searchFocusNode = FocusNode();
+
   @override
   void initState() {
     super.initState();
@@ -299,6 +307,16 @@ class _CodeForgeState extends State<CodeForge>
     _controller.setUndoController(_undoRedoController);
 
     _updateStyles();
+
+    // Initialize search controller listener
+    _searchController.addListener(() {
+      if (_isSearchVisible) {
+        setState(() {
+          _searchText = _searchController.text;
+        });
+        _performSearch();
+      }
+    });
 
     _caretBlinkController = AnimationController(
       vsync: this,
@@ -772,6 +790,8 @@ class _CodeForgeState extends State<CodeForge>
     _hoverTimer?.cancel();
     _aiDebounceTimer?.cancel();
     _semanticTokenTimer?.cancel();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -1426,6 +1446,13 @@ class _CodeForgeState extends State<CodeForge>
                                           // Format code shortcut: Command+Shift+F (or Ctrl+Shift+F)
                                           handleFormatCode();
                                           return KeyEventResult.handled;
+                                        case LogicalKeyboardKey.enter:
+                                          if (_isSearchVisible &&
+                                              _searchFocusNode.hasFocus) {
+                                            _navigateToPreviousMatch();
+                                            return KeyEventResult.handled;
+                                          }
+                                          break;
                                         case LogicalKeyboardKey.arrowUp:
                                           _moveLineUp();
                                           _commonKeyFunctions();
@@ -1449,6 +1476,23 @@ class _CodeForgeState extends State<CodeForge>
 
                                     if (isCtrlPressed) {
                                       switch (event.logicalKey) {
+                                        case LogicalKeyboardKey.keyF:
+                                          // Search shortcut: Command+F (or Ctrl+F)
+                                          if (!_isSearchVisible) {
+                                            setState(() {
+                                              _isSearchVisible = true;
+                                            });
+                                            _searchFocusNode.requestFocus();
+                                            _searchController
+                                                .selection = TextSelection(
+                                              baseOffset: 0,
+                                              extentOffset:
+                                                  _searchController.text.length,
+                                            );
+                                          } else {
+                                            _searchFocusNode.requestFocus();
+                                          }
+                                          return KeyEventResult.handled;
                                         case LogicalKeyboardKey.keyS:
                                           if (widget.saveFile != null) {
                                             widget.saveFile!();
@@ -1613,6 +1657,18 @@ class _CodeForgeState extends State<CodeForge>
                                         return KeyEventResult.handled;
 
                                       case LogicalKeyboardKey.escape:
+                                        if (_isSearchVisible) {
+                                          // Close search on Escape
+                                          setState(() {
+                                            _isSearchVisible = false;
+                                            _searchText = '';
+                                            _currentMatchIndex = -1;
+                                            _searchMatches = [];
+                                          });
+                                          _controller.clearSearchHighlights();
+                                          _focusNode.requestFocus();
+                                          return KeyEventResult.handled;
+                                        }
                                         _hoverTimer?.cancel();
                                         _contextMenuOffsetNotifier.value =
                                             const Offset(-1, -1);
@@ -1632,6 +1688,11 @@ class _CodeForgeState extends State<CodeForge>
                                         return KeyEventResult.handled;
 
                                       case LogicalKeyboardKey.enter:
+                                        if (_isSearchVisible &&
+                                            _searchFocusNode.hasFocus) {
+                                          _navigateToNextMatch();
+                                          return KeyEventResult.handled;
+                                        }
                                         if (_aiNotifier.value != null) {
                                           _aiNotifier.value = null;
                                         }
@@ -2160,10 +2221,273 @@ class _CodeForgeState extends State<CodeForge>
                     : SizedBox.shrink();
               },
             ),
+            // Search overlay
+            if (_isSearchVisible) _buildSearchOverlay(),
           ],
         );
       },
     );
+  }
+
+  Widget _buildSearchOverlay() {
+    return Positioned(
+      top: 8,
+      right: 8,
+      child: Material(
+        elevation: 4,
+        borderRadius: BorderRadius.circular(4),
+        color: _editorTheme['root']?.backgroundColor ?? Colors.grey[900],
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          width: 400,
+          child: TextField(
+            controller: _searchController,
+            focusNode: _searchFocusNode,
+            style: TextStyle(
+              color: _editorTheme['root']?.color ?? Colors.white,
+              fontSize: 14,
+            ),
+            decoration: InputDecoration(
+              hintText: 'Search',
+              hintStyle: TextStyle(
+                color: (_editorTheme['root']?.color ?? Colors.white)
+                    .withOpacity(0.5),
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(
+                  color: _editorTheme['root']?.color ?? Colors.white,
+                  width: 1,
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(
+                  color: (_editorTheme['root']?.color ?? Colors.white)
+                      .withOpacity(0.5),
+                  width: 1,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(
+                  color: _editorTheme['root']?.color ?? Colors.white,
+                  width: 2,
+                ),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 8,
+              ),
+              isDense: true,
+              suffixIcon: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Match counter
+                  if (_searchMatches.isNotEmpty || _searchText.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Text(
+                        _searchMatches.isEmpty && _searchText.isNotEmpty
+                            ? 'No matches'
+                            : _searchMatches.isEmpty
+                            ? ''
+                            : '${_currentMatchIndex + 1} of ${_searchMatches.length}',
+                        style: TextStyle(
+                          color: (_editorTheme['root']?.color ?? Colors.white)
+                              .withOpacity(0.7),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  // Previous button
+                  IconButton(
+                    icon: const Icon(Icons.arrow_upward, size: 18),
+                    color: _editorTheme['root']?.color ?? Colors.white,
+                    onPressed: _searchMatches.isEmpty
+                        ? null
+                        : () => _navigateToPreviousMatch(),
+                    tooltip: 'Previous (Shift+Enter)',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                  ),
+                  // Next button
+                  IconButton(
+                    icon: const Icon(Icons.arrow_downward, size: 18),
+                    color: _editorTheme['root']?.color ?? Colors.white,
+                    onPressed: _searchMatches.isEmpty
+                        ? null
+                        : () => _navigateToNextMatch(),
+                    tooltip: 'Next (Enter)',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                  ),
+                  // Close button
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    color: _editorTheme['root']?.color ?? Colors.white,
+                    onPressed: () {
+                      setState(() {
+                        _isSearchVisible = false;
+                        _searchText = '';
+                        _currentMatchIndex = -1;
+                        _searchMatches = [];
+                      });
+                      _controller.clearSearchHighlights();
+                      _focusNode.requestFocus();
+                    },
+                    tooltip: 'Close (Esc)',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            onChanged: (value) {
+              setState(() {
+                _searchText = value;
+                _currentMatchIndex = -1;
+              });
+              _performSearch();
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _performSearch() {
+    if (_searchText.isEmpty) {
+      _controller.clearSearchHighlights();
+      _searchMatches = [];
+      _currentMatchIndex = -1;
+      return;
+    }
+
+    final text = _controller.text;
+    final searchText = _searchText;
+    _searchMatches = [];
+
+    int offset = 0;
+    while (offset < text.length) {
+      final index = text.indexOf(searchText, offset);
+      if (index == -1) break;
+
+      _searchMatches.add(
+        SearchHighlight(
+          start: index,
+          end: index + searchText.length,
+          style: TextStyle(
+            backgroundColor: Colors.amberAccent.withOpacity(0.3),
+          ),
+        ),
+      );
+
+      offset = index + 1;
+    }
+
+    _controller.searchHighlights = _searchMatches;
+    _controller.searchHighlightsChanged = true;
+    _controller.notifyListeners();
+
+    setState(() {
+      if (_searchMatches.isNotEmpty) {
+        _currentMatchIndex = 0;
+      } else {
+        _currentMatchIndex = -1;
+      }
+    });
+
+    if (_searchMatches.isNotEmpty) {
+      _scrollToMatch(_currentMatchIndex);
+    }
+  }
+
+  void _navigateToNextMatch() {
+    if (_searchMatches.isEmpty) return;
+
+    setState(() {
+      _currentMatchIndex = (_currentMatchIndex + 1) % _searchMatches.length;
+    });
+    _scrollToMatch(_currentMatchIndex);
+    _highlightCurrentMatch();
+  }
+
+  void _navigateToPreviousMatch() {
+    if (_searchMatches.isEmpty) return;
+
+    setState(() {
+      _currentMatchIndex =
+          (_currentMatchIndex - 1 + _searchMatches.length) %
+          _searchMatches.length;
+    });
+    _scrollToMatch(_currentMatchIndex);
+    _highlightCurrentMatch();
+  }
+
+  void _scrollToMatch(int index) {
+    if (index < 0 || index >= _searchMatches.length) return;
+
+    final match = _searchMatches[index];
+    final startLine = _controller.getLineAtOffset(match.start);
+
+    // Estimate line height (using font size from text style)
+    final fontSize = widget.textStyle?.fontSize ?? 14.0;
+    final lineHeight = fontSize * 1.5; // Approximate line height multiplier
+    final targetY = startLine * lineHeight;
+
+    // Scroll to make the match visible
+    if (_vscrollController.hasClients) {
+      final viewportHeight = _vscrollController.position.viewportDimension;
+      final currentOffset = _vscrollController.offset;
+
+      if (targetY < currentOffset) {
+        _vscrollController.jumpTo(targetY);
+      } else if (targetY + lineHeight > currentOffset + viewportHeight) {
+        _vscrollController.jumpTo(targetY + lineHeight - viewportHeight);
+      }
+    }
+
+    // Set selection to the match
+    _controller.setSelectionSilently(
+      TextSelection(baseOffset: match.start, extentOffset: match.end),
+    );
+  }
+
+  void _highlightCurrentMatch() {
+    if (_currentMatchIndex < 0 || _currentMatchIndex >= _searchMatches.length) {
+      return;
+    }
+
+    // Update highlights to show current match differently
+    final updatedHighlights = <SearchHighlight>[];
+    for (int i = 0; i < _searchMatches.length; i++) {
+      final match = _searchMatches[i];
+      updatedHighlights.add(
+        SearchHighlight(
+          start: match.start,
+          end: match.end,
+          style: TextStyle(
+            backgroundColor: i == _currentMatchIndex
+                ? Colors.amberAccent.withOpacity(0.6)
+                : Colors.amberAccent.withOpacity(0.3),
+          ),
+        ),
+      );
+    }
+
+    _controller.searchHighlights = updatedHighlights;
+    _controller.searchHighlightsChanged = true;
+    _controller.notifyListeners();
   }
 
   void _acceptSuggestion() {
