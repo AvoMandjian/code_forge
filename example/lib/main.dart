@@ -40,8 +40,7 @@ class _MyAppState extends State<MyApp> {
 
   @override
   void initState() {
-    _controller.text =
-        """<p>Total Score (custom): {{ users | map(attribute='score') | sum }} ({{ (users | map(attribute='score') | sum) | filesizeformat }})</p> <p>Total Score (custom): {{ users | map(attribute='score') | sum }} ({{ (users | map(attribute='score') | sum) | filesizeformat }})</p> <p>Total Score (custom): {{ users | map(attribute='score') | sum }} ({{ (users | map(attribute='score') | sum) | filesizeformat }})</p> <p>Total Score (custom): {{ users | map(attribute='score') | sum }} ({{ (users | map(attribute='score') | sum) | filesizeformat }})</p>""";
+    _controller.text = "{% if True %}Hello{% endif %}";
     _controller.setRulers([80]);
     _updateRuler();
     _controller.disableAiCompletion();

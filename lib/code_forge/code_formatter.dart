@@ -17,12 +17,22 @@ class CodeFormatter {
 
     final langLower = languageName.toLowerCase();
 
+    // Check if content contains Jinja tags - if so, format as Jinja regardless of language
+    final hasJinjaTags = RegExp(r'\{%[\s\S]*?%\}').hasMatch(code);
+    final hasHtmlTags = RegExp(r'<[^>]+>').hasMatch(code);
+
+    // If content has Jinja tags but no HTML tags, format as Jinja
+    if (hasJinjaTags && !hasHtmlTags) {
+      return formatJinja(code);
+    }
+
     if (langLower == 'json' || langLower.contains('json')) {
       return formatJson(code);
     } else if (langLower == 'html' ||
         langLower == 'xml' ||
         langLower.contains('html') ||
         langLower.contains('xml')) {
+      // HTML formatter now handles Jinja tags when mixed with HTML
       return formatHtml(code, rulerColumn: rulerColumn);
     } else if (langLower == 'sql' || langLower.contains('sql')) {
       return formatSql(code);
@@ -53,10 +63,26 @@ class CodeFormatter {
   /// [rulerColumn] is an optional column position. If provided and tags on the
   /// same line are within this column limit, they will not be split.
   static String formatHtml(String html, {int? rulerColumn}) {
+    print('[FORMATTER HTML] ===== formatHtml() called =====');
+    print('[FORMATTER HTML] Input text length: ${html.length}');
+    print('[FORMATTER HTML] Input text: "$html"');
+    
+    // Check if content contains Jinja tags
+    final hasJinjaTags = RegExp(r'\{%[\s\S]*?%\}').hasMatch(html);
+    print('[FORMATTER HTML] Has Jinja tags: $hasJinjaTags');
+    
+    // If content is pure Jinja (no HTML tags), use Jinja formatter
+    final hasHtmlTags = RegExp(r'<[^>]+>').hasMatch(html);
+    if (hasJinjaTags && !hasHtmlTags) {
+      print('[FORMATTER HTML] Pure Jinja content, delegating to Jinja formatter');
+      return formatJinja(html);
+    }
+    
     final buffer = StringBuffer();
     int indent = 0;
     final indentStr = '  ';
     final lines = html.split('\n');
+    print('[FORMATTER HTML] Split into ${lines.length} lines');
 
     // Check if HTML is already formatted (tags are on separate lines)
     // If so, process line by line without trying to match tag pairs
@@ -247,11 +273,26 @@ class CodeFormatter {
             }
           }
         } else {
-          // No more tag pairs found, write remaining content
-          if (remaining.trim().isNotEmpty) {
+          // No more HTML tag pairs found
+          // Check if remaining content contains Jinja tags
+          final jinjaTagPattern = RegExp(r'\{%[\s\S]*?%\}');
+          if (jinjaTagPattern.hasMatch(remaining)) {
+            // Format Jinja content separately
+            final jinjaFormatted = formatJinja(remaining);
+            final jinjaLines = jinjaFormatted.split('\n');
+            for (final jinjaLine in jinjaLines) {
+              if (jinjaLine.trim().isNotEmpty) {
+                buffer.write(indentStr * indent);
+                buffer.writeln(jinjaLine);
+              }
+            }
+          } else if (remaining.trim().isNotEmpty) {
+            // Regular content without tags
             buffer.write(indentStr * indent);
             buffer.writeln(remaining.trim());
           }
+          // Mark as processed to prevent duplicate writing below
+          processedAnyTag = true;
           break;
         }
       }
@@ -298,12 +339,31 @@ class CodeFormatter {
         continue;
       }
 
+      // Check if line contains Jinja tags
+      final jinjaTagPattern = RegExp(r'\{%[\s\S]*?%\}');
+      if (jinjaTagPattern.hasMatch(trimmed)) {
+        // Format Jinja content separately
+        final jinjaFormatted = formatJinja(trimmed);
+        final jinjaLines = jinjaFormatted.split('\n');
+        for (final jinjaLine in jinjaLines) {
+          if (jinjaLine.trim().isNotEmpty) {
+            buffer.write(indentStr * indent);
+            buffer.writeln(jinjaLine);
+          }
+        }
+        continue;
+      }
+
       // Regular content (indented one level from its parent tag)
       buffer.write(indentStr * indent);
       buffer.writeln(trimmed);
     }
 
-    return buffer.toString().trim();
+    final result = buffer.toString().trim();
+    print('[FORMATTER HTML] Output text length: ${result.length}');
+    print('[FORMATTER HTML] Output text: "$result"');
+    print('[FORMATTER HTML] ===== formatHtml() completed =====');
+    return result;
   }
 
   static bool _isVoidElement(String tag) {
@@ -404,16 +464,65 @@ class CodeFormatter {
 
   /// Formats Jinja template code
   static String formatJinja(String jinja) {
+    print('[FORMATTER] ===== formatJinja() called =====');
+    print('[FORMATTER] Input text length: ${jinja.length}');
+    print('[FORMATTER] Input text: "$jinja"');
+    
     final buffer = StringBuffer();
     int indent = 0;
     final indentStr = '  ';
 
     final lines = jinja.split('\n');
+    print('[FORMATTER] Split into ${lines.length} lines');
+
+    // Check if Jinja is already formatted (tags are on separate lines)
+    // If so, process line by line without reformatting
+    // A template is considered already formatted if:
+    // - It has multiple lines AND
+    // - Lines with opening tags don't also contain closing tags on the same line
+    final isAlreadyFormatted = lines.length > 1 && lines.every((line) {
+      final trimmed = line.trim();
+      // If line has an opening tag, check if it also has a closing tag
+      if (trimmed.contains('{%') && !trimmed.startsWith('{% end')) {
+        // Check if this line also contains a closing tag
+        return !RegExp(r'\{%\s*\w+[^%]*%\s*\}.*\{%\s*end').hasMatch(trimmed);
+      }
+      return true;
+    });
 
     for (final line in lines) {
       final trimmed = line.trim();
       if (trimmed.isEmpty) {
         buffer.writeln();
+        continue;
+      }
+
+      // If already formatted, preserve the formatting
+      if (isAlreadyFormatted) {
+        buffer.writeln(line);
+        // Update indent based on tags for next iteration
+        if (trimmed.startsWith('{% end')) {
+          indent = (indent - 1).clamp(0, double.infinity).toInt();
+        } else if (trimmed.startsWith('{%')) {
+          final tagMatch = RegExp(r'\{%\s*(\w+)').firstMatch(trimmed);
+          if (tagMatch != null) {
+            final tagName = tagMatch.group(1)?.toLowerCase();
+            final foldableTags = [
+              'if',
+              'for',
+              'block',
+              'macro',
+              'filter',
+              'with',
+              'set',
+              'call',
+              'raw',
+            ];
+            if (tagName != null && foldableTags.contains(tagName)) {
+              indent++;
+            }
+          }
+        }
         continue;
       }
 
@@ -459,6 +568,10 @@ class CodeFormatter {
       buffer.writeln(trimmed);
     }
 
-    return buffer.toString().trim();
+    final result = buffer.toString().trim();
+    print('[FORMATTER] Output text length: ${result.length}');
+    print('[FORMATTER] Output text: "$result"');
+    print('[FORMATTER] ===== formatJinja() completed =====');
+    return result;
   }
 }

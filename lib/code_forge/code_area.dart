@@ -19,6 +19,7 @@ import 'controller.dart';
 import 'scroll.dart';
 import 'styling.dart';
 import 'syntax_highlighter.dart';
+import 'tag_completion.dart';
 import 'undo_redo.dart';
 
 //TODO: More lsp features
@@ -528,6 +529,85 @@ class _CodeForgeState extends State<CodeForge>
         _isTyping =
             insertedChar.isNotEmpty &&
             RegExp(r'[a-zA-Z]').hasMatch(insertedChar);
+
+        // Check for HTML/Jinja tag completion
+        final language = _controller.currentLanguage?.name;
+        if (widget.enableSuggestions &&
+            TagCompletion.supportsTagCompletion(
+              language,
+              text: text,
+              cursorPosition: cursorPosition,
+            ) &&
+            widget.lspConfig == null) {
+          final tagContext = TagCompletion.analyzeTagContext(
+            text,
+            cursorPosition,
+          );
+
+          // Check if we're typing '<', '/', '{', '%', or within a tag
+          // For Jinja: typing '{', '%', or '%' after '{%' triggers suggestions
+          final twoCharsBefore = cursorPosition >= 2
+              ? text.substring(cursorPosition - 2, cursorPosition)
+              : '';
+          final threeCharsBefore = cursorPosition >= 3
+              ? text.substring(cursorPosition - 3, cursorPosition)
+              : '';
+
+          final isJinjaTrigger =
+              insertedChar == '{' ||
+              insertedChar == '%' ||
+              twoCharsBefore == '{%' ||
+              threeCharsBefore == '{%%';
+
+          print('[TAG_COMPLETION] Debug Info:');
+          print('  insertedChar: "$insertedChar"');
+          print('  cursorPosition: $cursorPosition');
+          print('  twoCharsBefore: "$twoCharsBefore"');
+          print('  threeCharsBefore: "$threeCharsBefore"');
+          print('  isJinjaTrigger: $isJinjaTrigger');
+          print('  tagContext.isInTag: ${tagContext.isInTag}');
+          print('  tagContext.isJinjaTag: ${tagContext.isJinjaTag}');
+          print('  tagContext.prefix: "${tagContext.prefix}"');
+          print('  tagContext.tagStart: ${tagContext.tagStart}');
+          print('  tagContext.tagEnd: ${tagContext.tagEnd}');
+          print(
+            '  text around cursor: "${text.substring((cursorPosition - 5).clamp(0, text.length), (cursorPosition + 5).clamp(0, text.length))}"',
+          );
+
+          if (insertedChar == '<' ||
+              insertedChar == '/' ||
+              isJinjaTrigger ||
+              tagContext.isInTag) {
+            print(
+              '[TAG_COMPLETION] Trigger condition met, getting suggestions...',
+            );
+            final tagSuggestions = TagCompletion.getTagSuggestions(
+              text,
+              cursorPosition,
+              language,
+            );
+            print('  tagSuggestions count: ${tagSuggestions.length}');
+            if (tagSuggestions.isNotEmpty) {
+              print(
+                '  Showing suggestions: ${tagSuggestions.take(5).toList()}',
+              );
+              _suggestions = tagSuggestions;
+              _sortSuggestions(tagContext.prefix);
+              if (mounted) {
+                _sugSelIndex = 0;
+                _suggestionNotifier.value = _suggestions;
+              }
+              _previousValue = text;
+              _prevSelection = currentSelection;
+              return;
+            } else {
+              print('  No suggestions found!');
+            }
+          } else {
+            print('[TAG_COMPLETION] Trigger condition NOT met');
+          }
+        }
+
         if (widget.enableSuggestions &&
             _isTyping &&
             prefix.isNotEmpty &&
@@ -569,6 +649,39 @@ class _CodeForgeState extends State<CodeForge>
           }
         } else {
           _suggestionNotifier.value = null;
+        }
+      }
+
+      // Also check for tag completion on any text change (not just single char insertions)
+      // This handles cases like typing within a tag after it was already opened
+      if (widget.enableSuggestions &&
+          TagCompletion.supportsTagCompletion(
+            _controller.currentLanguage?.name,
+            text: text,
+            cursorPosition: cursorPosition,
+          ) &&
+          widget.lspConfig == null &&
+          text != oldText) {
+        final tagContext = TagCompletion.analyzeTagContext(
+          text,
+          cursorPosition,
+        );
+        if (tagContext.isInTag) {
+          final tagSuggestions = TagCompletion.getTagSuggestions(
+            text,
+            cursorPosition,
+            _controller.currentLanguage?.name,
+          );
+          if (tagSuggestions.isNotEmpty) {
+            _suggestions = tagSuggestions;
+            _sortSuggestions(tagContext.prefix);
+            if (mounted) {
+              _sugSelIndex = 0;
+              _suggestionNotifier.value = _suggestions;
+            }
+          } else {
+            _suggestionNotifier.value = null;
+          }
         }
       }
 
@@ -1809,13 +1922,133 @@ class _CodeForgeState extends State<CodeForge>
                                       if (mounted) {
                                         setState(() {
                                           _sugSelIndex = indx;
-                                          final text = item is LspCompletion
+                                          final tagName = item is LspCompletion
                                               ? item.label
                                               : item as String;
-                                          _controller.insertAtCurrentCursor(
-                                            text,
-                                            replaceTypedChar: true,
-                                          );
+
+                                          // Check if this is a tag completion
+                                          final language =
+                                              _controller.currentLanguage?.name;
+                                          final text = _controller.text;
+                                          final cursorPos = _controller
+                                              .selection
+                                              .extentOffset;
+                                          if (TagCompletion.supportsTagCompletion(
+                                                language,
+                                                text: text,
+                                                cursorPosition: cursorPos,
+                                              ) &&
+                                              widget.lspConfig == null) {
+                                            final tagContext =
+                                                TagCompletion.analyzeTagContext(
+                                                  text,
+                                                  cursorPos,
+                                                );
+
+                                            if (tagContext.isInTag) {
+                                              // Get the template for this tag
+                                              final insertText =
+                                                  TagCompletion.getInsertTextForTag(
+                                                    tagName,
+                                                    tagContext.isClosingTag,
+                                                    tagContext,
+                                                  );
+
+                                              // Calculate what to replace
+                                              // For HTML: Replace from after '<' (or '</') to cursor
+                                              // For Jinja: Replace from after '{%' to cursor (or up to '%}' if tag is already closed)
+                                              final replaceStart =
+                                                  tagContext.isJinjaTag
+                                                  ? (tagContext.isClosingTag
+                                                        ? tagContext.tagStart +
+                                                              5 // '{% end'
+                                                        : tagContext.tagStart +
+                                                              2) // '{%'
+                                                  : (tagContext.isClosingTag
+                                                        ? tagContext.tagStart +
+                                                              2 // '</'
+                                                        : tagContext.tagStart +
+                                                              1); // '<'
+
+                                              // For Jinja tags, if tagEnd is found (meaning '%}' exists),
+                                              // replace up to tagEnd+1 (to include the '}') to avoid duplicating '%}'
+                                              int replaceEnd = cursorPos;
+                                              if (tagContext.isJinjaTag &&
+                                                  tagContext.tagEnd != null) {
+                                                // tagEnd points to the '}' character, so include it
+                                                replaceEnd =
+                                                    tagContext.tagEnd! + 1;
+                                              }
+
+                                              // Replace the prefix with the template
+                                              _controller.replaceRange(
+                                                replaceStart,
+                                                replaceEnd,
+                                                insertText,
+                                              );
+
+                                              // Position cursor appropriately
+                                              if (!tagContext.isClosingTag) {
+                                                if (tagContext.isJinjaTag) {
+                                                  // For Jinja tags, place cursor after '%}' if template has it
+                                                  if (insertText.contains(
+                                                    '%}',
+                                                  )) {
+                                                    final tagEndIndex =
+                                                        insertText.indexOf(
+                                                          '%}',
+                                                        );
+                                                    final newCursorPos =
+                                                        replaceStart +
+                                                        tagEndIndex +
+                                                        2;
+                                                    _controller.selection =
+                                                        TextSelection.collapsed(
+                                                          offset: newCursorPos
+                                                              .clamp(
+                                                                0,
+                                                                _controller
+                                                                    .length,
+                                                              ),
+                                                        );
+                                                  }
+                                                } else {
+                                                  // For HTML tags, place cursor after '>'
+                                                  if (insertText.contains(
+                                                    '>',
+                                                  )) {
+                                                    final tagEndIndex =
+                                                        insertText.indexOf('>');
+                                                    final newCursorPos =
+                                                        replaceStart +
+                                                        tagEndIndex +
+                                                        1;
+                                                    _controller.selection =
+                                                        TextSelection.collapsed(
+                                                          offset: newCursorPos
+                                                              .clamp(
+                                                                0,
+                                                                _controller
+                                                                    .length,
+                                                              ),
+                                                        );
+                                                  }
+                                                }
+                                              }
+                                            } else {
+                                              // Fallback to normal insertion
+                                              _controller.insertAtCurrentCursor(
+                                                tagName,
+                                                replaceTypedChar: true,
+                                              );
+                                            }
+                                          } else {
+                                            // Normal suggestion insertion
+                                            _controller.insertAtCurrentCursor(
+                                              tagName,
+                                              replaceTypedChar: true,
+                                            );
+                                          }
                                           _suggestionNotifier.value = null;
                                         });
                                       }
@@ -2506,7 +2739,81 @@ class _CodeForgeState extends State<CodeForge>
     }
 
     if (insertText.isNotEmpty) {
-      _controller.insertAtCurrentCursor(insertText, replaceTypedChar: true);
+      // Check if this is a tag completion
+      final language = _controller.currentLanguage?.name;
+      final text = _controller.text;
+      final cursorPos = _controller.selection.extentOffset;
+      if (TagCompletion.supportsTagCompletion(
+            language,
+            text: text,
+            cursorPosition: cursorPos,
+          ) &&
+          widget.lspConfig == null &&
+          selected is String) {
+        final tagContext = TagCompletion.analyzeTagContext(text, cursorPos);
+
+        if (tagContext.isInTag) {
+          // Get the template for this tag
+          final templateText = TagCompletion.getInsertTextForTag(
+            insertText,
+            tagContext.isClosingTag,
+            tagContext,
+          );
+
+          // Calculate what to replace
+          // For HTML: Replace from after '<' (or '</') to cursor
+          // For Jinja: Replace from after '{%' to cursor (or up to '%}' if tag is already closed)
+          final replaceStart = tagContext.isJinjaTag
+              ? (tagContext.isClosingTag
+                    ? tagContext.tagStart +
+                          5 // '{% end'
+                    : tagContext.tagStart + 2) // '{%'
+              : (tagContext.isClosingTag
+                    ? tagContext.tagStart +
+                          2 // '</'
+                    : tagContext.tagStart + 1); // '<'
+
+          // For Jinja tags, if tagEnd is found (meaning '%}' exists),
+          // replace up to tagEnd+1 (to include the '}') to avoid duplicating '%}'
+          int replaceEnd = cursorPos;
+          if (tagContext.isJinjaTag && tagContext.tagEnd != null) {
+            // tagEnd points to the '}' character, so include it
+            replaceEnd = tagContext.tagEnd! + 1;
+          }
+
+          // Replace the prefix with the template
+          _controller.replaceRange(replaceStart, replaceEnd, templateText);
+
+          // Position cursor appropriately
+          if (!tagContext.isClosingTag) {
+            if (tagContext.isJinjaTag) {
+              // For Jinja tags, place cursor after '%}' if template has it
+              if (templateText.contains('%}')) {
+                final tagEndIndex = templateText.indexOf('%}');
+                final newCursorPos = replaceStart + tagEndIndex + 2;
+                _controller.selection = TextSelection.collapsed(
+                  offset: newCursorPos.clamp(0, _controller.length),
+                );
+              }
+            } else {
+              // For HTML tags, place cursor after '>'
+              if (templateText.contains('>')) {
+                final tagEndIndex = templateText.indexOf('>');
+                final newCursorPos = replaceStart + tagEndIndex + 1;
+                _controller.selection = TextSelection.collapsed(
+                  offset: newCursorPos.clamp(0, _controller.length),
+                );
+              }
+            }
+          }
+        } else {
+          // Fallback to normal insertion
+          _controller.insertAtCurrentCursor(insertText, replaceTypedChar: true);
+        }
+      } else {
+        // Normal suggestion insertion
+        _controller.insertAtCurrentCursor(insertText, replaceTypedChar: true);
+      }
     }
 
     _suggestionNotifier.value = null;
