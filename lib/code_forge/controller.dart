@@ -99,6 +99,11 @@ class CodeForgeController implements DeltaTextInputClient {
     _aiCompletion = aiCompletion;
   }
 
+  /// Gets the AI completion configuration.
+  ///
+  /// Returns the AI completion instance if set, null otherwise.
+  AiCompletion? get aiCompletion => _aiCompletion;
+
   /// Enables AI completion if it is configured.
   ///
   /// Example:

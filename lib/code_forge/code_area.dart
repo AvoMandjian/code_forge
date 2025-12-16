@@ -463,9 +463,11 @@ class _CodeForgeState extends State<CodeForge>
 
       _aiDebounceTimer?.cancel();
 
-      if (widget.aiCompletion != null &&
+      // Check AI completion from controller if available, otherwise fall back to widget
+      final aiCompletion = _controller.aiCompletion ?? widget.aiCompletion;
+      if (aiCompletion != null &&
           _controller.selection.isValid &&
-          widget.aiCompletion!.enableCompletion &&
+          aiCompletion.enableCompletion &&
           _aiNotifier.value == null) {
         if (_suggestionNotifier.value != null) return;
         final text = _controller.text;
@@ -482,12 +484,18 @@ class _CodeForgeState extends State<CodeForge>
         if (!lineEnd) return;
         final codeToSend =
             "${text.substring(0, cursorPosition)}<|CURSOR|>${text.substring(cursorPosition)}";
-        if (widget.aiCompletion!.completionType == CompletionType.auto ||
-            widget.aiCompletion!.completionType == CompletionType.mixed) {
+        if (aiCompletion.completionType == CompletionType.auto ||
+            aiCompletion.completionType == CompletionType.mixed) {
           _aiDebounceTimer = Timer(
-            Duration(milliseconds: widget.aiCompletion!.debounceTime),
+            Duration(milliseconds: aiCompletion.debounceTime),
             () async {
-              _aiNotifier.value = await _getCachedResponse(codeToSend);
+              final aiComp = _controller.aiCompletion ?? widget.aiCompletion;
+              if (aiComp != null) {
+                _aiNotifier.value = await _getCachedResponse(
+                  codeToSend,
+                  aiComp,
+                );
+              }
             },
           );
         }
@@ -2183,23 +2191,28 @@ class _CodeForgeState extends State<CodeForge>
 
   Future<void> getManualAiSuggestion() async {
     _suggestionNotifier.value = null;
-    if (widget.aiCompletion?.completionType == CompletionType.manual ||
-        widget.aiCompletion?.completionType == CompletionType.mixed) {
+    final aiCompletion = _controller.aiCompletion ?? widget.aiCompletion;
+    if (aiCompletion?.completionType == CompletionType.manual ||
+        aiCompletion?.completionType == CompletionType.mixed) {
       final String text = _controller.text;
       final int cursorPosition = _controller.selection.extentOffset;
       final String codeToSend =
           "${text.substring(0, cursorPosition)}<|CURSOR|>${text.substring(cursorPosition)}";
-      _aiNotifier.value = await _getCachedResponse(codeToSend);
+      _aiNotifier.value = await _getCachedResponse(codeToSend, aiCompletion!);
     }
   }
 
-  Future<String> _getCachedResponse(String codeToSend) async {
+  Future<String> _getCachedResponse(
+    String codeToSend,
+    AiCompletion aiCompletion,
+  ) async {
     final String key = codeToSend.hashCode.toString();
     if (_cachedResponse.containsKey(key)) {
       return _cachedResponse[key]!;
     }
-    final String aiResponse = await widget.aiCompletion!.model
-        .completionResponse(codeToSend);
+    final String aiResponse = await aiCompletion.model.completionResponse(
+      codeToSend,
+    );
     _cachedResponse[key] = aiResponse;
     return aiResponse;
   }
