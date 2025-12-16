@@ -300,6 +300,7 @@ class _CodeForgeState extends State<CodeForge>
     _isHoveringPopup = ValueNotifier<bool>(false);
     _controller.manualAiCompletion = getManualAiSuggestion;
     _controller.saveFileCallback = widget.saveFile;
+    _controller.showCustomSuggestionsCallback = _showCustomSuggestions;
     _controller.setAiCompletion(widget.aiCompletion);
     _controller.readOnly = widget.readOnly;
     _selectionStyle = widget.selectionStyle ?? CodeSelectionStyle();
@@ -582,6 +583,24 @@ class _CodeForgeState extends State<CodeForge>
           }
         }
 
+        // Check for custom suggestion triggers
+        if (widget.enableSuggestions &&
+            _controller.registeredCustomSuggestions.isNotEmpty) {
+          final textBeforeCursor = text.substring(0, cursorPosition);
+          final matchingSuggestions = _checkTriggerPatterns(textBeforeCursor);
+          if (matchingSuggestions.isNotEmpty) {
+            // Show matching custom suggestions
+            _suggestions = matchingSuggestions;
+            _sugSelIndex = 0;
+            if (mounted) {
+              _suggestionNotifier.value = matchingSuggestions;
+            }
+            _previousValue = text;
+            _prevSelection = currentSelection;
+            return;
+          }
+        }
+
         if (widget.enableSuggestions &&
             _isTyping &&
             prefix.isNotEmpty &&
@@ -622,6 +641,28 @@ class _CodeForgeState extends State<CodeForge>
             _suggestionNotifier.value = _suggestions;
           }
         } else {
+          _suggestionNotifier.value = null;
+        }
+      }
+
+      // Also check for custom suggestion triggers on any text change
+      // This handles cases like typing within a trigger pattern after it was already started
+      if (widget.enableSuggestions &&
+          _controller.registeredCustomSuggestions.isNotEmpty &&
+          text != oldText) {
+        final textBeforeCursor = text.substring(0, cursorPosition);
+        final matchingSuggestions = _checkTriggerPatterns(textBeforeCursor);
+        if (matchingSuggestions.isNotEmpty) {
+          // Show matching custom suggestions
+          _suggestions = matchingSuggestions;
+          _sugSelIndex = 0;
+          if (mounted) {
+            _suggestionNotifier.value = matchingSuggestions;
+          }
+        } else if (_suggestionNotifier.value != null &&
+            _suggestionNotifier.value!.isNotEmpty &&
+            _suggestionNotifier.value!.first is SuggestionModel) {
+          // Clear custom suggestions if trigger pattern is no longer present
           _suggestionNotifier.value = null;
         }
       }
@@ -707,6 +748,71 @@ class _CodeForgeState extends State<CodeForge>
     final beforeCursor = text.substring(0, safeOffset);
     final match = RegExp(r'([a-zA-Z_][a-zA-Z0-9_]*)$').firstMatch(beforeCursor);
     return match?.group(0) ?? '';
+  }
+
+  /// Checks for matching trigger patterns in the text before cursor.
+  ///
+  /// Returns a list of suggestions whose trigger patterns match as a prefix
+  /// of the text before the cursor. Handles multiple triggers by prioritizing
+  /// longest matches first.
+  List<SuggestionModel> _checkTriggerPatterns(String textBeforeCursor) {
+    final registeredSuggestions = _controller.registeredCustomSuggestions;
+    if (registeredSuggestions.isEmpty) {
+      return [];
+    }
+
+    // Find the maximum trigger length to optimize substring extraction
+    final maxTriggerLength = registeredSuggestions
+        .map((s) => s.triggeredAt.length)
+        .reduce((a, b) => a > b ? a : b);
+
+    // Get enough text before cursor to check all possible triggers
+    final checkLength = textBeforeCursor.length.clamp(0, maxTriggerLength);
+    final textToCheck = textBeforeCursor.substring(
+      textBeforeCursor.length - checkLength,
+    );
+
+    // Find all matching triggers (prioritize longer matches)
+    final matchingSuggestions = <SuggestionModel>[];
+    final matchedTriggers = <String>{};
+
+    // Sort triggers by length (longest first) to prioritize longer matches
+    final sortedSuggestions = List<SuggestionModel>.from(registeredSuggestions)
+      ..sort((a, b) => b.triggeredAt.length.compareTo(a.triggeredAt.length));
+
+    for (final suggestion in sortedSuggestions) {
+      final trigger = suggestion.triggeredAt;
+      if (trigger.isEmpty) continue;
+
+      // Check if trigger matches as prefix of text before cursor
+      if (textToCheck.endsWith(trigger) || textToCheck == trigger) {
+        // Only add if we haven't already matched this exact trigger
+        if (!matchedTriggers.contains(trigger)) {
+          matchedTriggers.add(trigger);
+          // Add all suggestions with this trigger
+          matchingSuggestions.addAll(
+            registeredSuggestions.where((s) => s.triggeredAt == trigger),
+          );
+        }
+      } else if (trigger.length <= textToCheck.length) {
+        // Check if trigger is a prefix of what we're typing (for partial matches)
+        // For example, if trigger is "{{}}" and user typed "{{", we should show suggestions
+        final textEnd = textToCheck.substring(
+          textToCheck.length - trigger.length,
+        );
+        if (trigger.startsWith(textEnd)) {
+          // Partial match - user is typing the trigger
+          if (!matchedTriggers.contains(trigger)) {
+            matchedTriggers.add(trigger);
+            matchingSuggestions.addAll(
+              registeredSuggestions.where((s) => s.triggeredAt == trigger),
+            );
+          }
+        }
+      }
+    }
+
+    return matchingSuggestions;
   }
 
   int _scoreMatch(String label, String prefix) {
@@ -1896,17 +2002,60 @@ class _CodeForgeState extends State<CodeForge>
                                       if (mounted) {
                                         setState(() {
                                           _sugSelIndex = indx;
-                                          final tagName = item is LspCompletion
-                                              ? item.label
-                                              : item as String;
 
-                                          // Check if this is a tag completion
-                                          final language =
-                                              _controller.currentLanguage?.name;
+                                          // Get text and cursor position first
                                           final text = _controller.text;
                                           final cursorPos = _controller
                                               .selection
                                               .extentOffset;
+
+                                          // Extract text to insert based on item type
+                                          final String textToInsert;
+                                          if (item is LspCompletion) {
+                                            textToInsert = item.label;
+                                          } else if (item is SuggestionModel) {
+                                            // Custom suggestions with SuggestionModel
+                                            // Check if trigger pattern exists before cursor and replace it entirely
+                                            final textBeforeCursor = text
+                                                .substring(0, cursorPos);
+                                            final triggerPattern =
+                                                item.triggeredAt;
+
+                                            // Check if trigger pattern exists in text before cursor
+                                            if (triggerPattern.isNotEmpty &&
+                                                textBeforeCursor.endsWith(
+                                                  triggerPattern,
+                                                )) {
+                                              // Trigger pattern found - replace the entire trigger pattern with replacedOnClick
+                                              final triggerStartPos =
+                                                  cursorPos -
+                                                  triggerPattern.length;
+                                              _controller.replaceRange(
+                                                triggerStartPos,
+                                                cursorPos,
+                                                item.replacedOnClick,
+                                              );
+                                              _suggestionNotifier.value = null;
+                                              return;
+                                            }
+                                            // No trigger pattern found - use normal insertion
+                                            textToInsert = item.replacedOnClick;
+                                          } else if (item is Map) {
+                                            // Legacy map format support
+                                            textToInsert =
+                                                item['replacedOnClick'] ??
+                                                item['insertText'] ??
+                                                item['label'] ??
+                                                '';
+                                          } else {
+                                            textToInsert = item as String;
+                                          }
+
+                                          final tagName = textToInsert;
+
+                                          // Check if this is a tag completion
+                                          final language =
+                                              _controller.currentLanguage?.name;
                                           if (TagCompletion.supportsTagCompletion(
                                                 language,
                                                 text: text,
@@ -2064,6 +2213,97 @@ class _CodeForgeState extends State<CodeForge>
                                               overflow: TextOverflow.ellipsis,
                                             ),
                                           ),
+                                        if (item is SuggestionModel) ...[
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(
+                                                  item.label,
+                                                  style: _suggestionStyle
+                                                      .textStyle,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                                if (item.description != null &&
+                                                    item
+                                                        .description!
+                                                        .isNotEmpty)
+                                                  Text(
+                                                    item.description!,
+                                                    style: _suggestionStyle
+                                                        .textStyle
+                                                        .copyWith(
+                                                          color:
+                                                              _suggestionStyle
+                                                                  .textStyle
+                                                                  .color
+                                                                  ?.withAlpha(
+                                                                    150,
+                                                                  ),
+                                                          fontSize:
+                                                              (_suggestionStyle
+                                                                      .textStyle
+                                                                      .fontSize ??
+                                                                  14) *
+                                                              0.85,
+                                                        ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    maxLines: 2,
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                        if (item is Map) ...[
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(
+                                                  item['label'] ?? '',
+                                                  style: _suggestionStyle
+                                                      .textStyle,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                                if (item['description'] !=
+                                                        null &&
+                                                    item['description']
+                                                        .toString()
+                                                        .isNotEmpty)
+                                                  Text(
+                                                    item['description'],
+                                                    style: _suggestionStyle
+                                                        .textStyle
+                                                        .copyWith(
+                                                          color:
+                                                              _suggestionStyle
+                                                                  .textStyle
+                                                                  .color
+                                                                  ?.withAlpha(
+                                                                    150,
+                                                                  ),
+                                                          fontSize:
+                                                              (_suggestionStyle
+                                                                      .textStyle
+                                                                      .fontSize ??
+                                                                  14) *
+                                                              0.85,
+                                                        ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    maxLines: 2,
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
                                       ],
                                     ),
                                   ),
@@ -2706,8 +2946,37 @@ class _CodeForgeState extends State<CodeForge>
 
     if (selected is LspCompletion) {
       insertText = selected.label;
+    } else if (selected is SuggestionModel) {
+      // Custom suggestions with SuggestionModel
+      // Check if trigger pattern exists before cursor and replace it entirely
+      final text = _controller.text;
+      final cursorPos = _controller.selection.extentOffset;
+      final textBeforeCursor = text.substring(0, cursorPos);
+      final triggerPattern = selected.triggeredAt;
+
+      // Check if trigger pattern exists in text before cursor
+      if (triggerPattern.isNotEmpty &&
+          textBeforeCursor.endsWith(triggerPattern)) {
+        // Trigger pattern found - replace the entire trigger pattern with replacedOnClick
+        final triggerStartPos = cursorPos - triggerPattern.length;
+        _controller.replaceRange(
+          triggerStartPos,
+          cursorPos,
+          selected.replacedOnClick,
+        );
+        _suggestionNotifier.value = null;
+        _sugSelIndex = 0;
+        return;
+      }
+      // No trigger pattern found or partial match - use normal insertion
+      insertText = selected.replacedOnClick;
     } else if (selected is Map) {
-      insertText = selected['insertText'] ?? selected['label'] ?? '';
+      // Legacy map format support
+      insertText =
+          selected['replacedOnClick'] ??
+          selected['insertText'] ??
+          selected['label'] ??
+          '';
     } else if (selected is String) {
       insertText = selected;
     }
@@ -2792,6 +3061,18 @@ class _CodeForgeState extends State<CodeForge>
 
     _suggestionNotifier.value = null;
     _sugSelIndex = 0;
+  }
+
+  /// Handles showing custom suggestions popup.
+  ///
+  /// This is called by the controller when [showCustomSuggestions] is invoked.
+  void _showCustomSuggestions(List<SuggestionModel> suggestions) {
+    if (!mounted) return;
+
+    // Set suggestions and show popup
+    _suggestions = suggestions;
+    _sugSelIndex = 0;
+    _suggestionNotifier.value = suggestions;
   }
 
   Future<void> getManualAiSuggestion() async {

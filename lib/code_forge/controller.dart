@@ -11,6 +11,89 @@ import '../code_forge.dart';
 import 'code_formatter.dart';
 import 'rope.dart';
 
+/// Model representing a custom suggestion item for the code editor.
+///
+/// Each suggestion contains:
+/// - [label]: The text displayed in the suggestion list
+/// - [replacedOnClick]: The text inserted when the suggestion is selected
+/// - [description]: Optional description text shown below the label
+/// - [triggeredAt]: The string pattern that triggers this suggestion when typed
+class SuggestionModel {
+  /// The text displayed in the suggestion list.
+  final String label;
+
+  /// The text inserted when the suggestion is selected.
+  final String replacedOnClick;
+
+  /// Optional description text shown below the label.
+  final String? description;
+
+  /// The string pattern that triggers this suggestion when typed.
+  ///
+  /// When the user types this pattern in the editor, the suggestion popup
+  /// will be triggered. For example, if [triggeredAt] is "{{}}", typing
+  /// "{{}}" will show the suggestions.
+  final String triggeredAt;
+
+  /// Creates a [SuggestionModel] instance.
+  ///
+  /// [label], [replacedOnClick], and [triggeredAt] are required.
+  /// [description] is optional.
+  const SuggestionModel({
+    required this.label,
+    required this.replacedOnClick,
+    required this.triggeredAt,
+    this.description,
+  });
+
+  /// Creates a [SuggestionModel] from a map.
+  ///
+  /// Useful for deserializing from JSON or converting from legacy map format.
+  /// Supports both camelCase (replacedOnClick, triggeredAt) and snake_case
+  /// (replaced_on_click, triggered_at) formats for backend compatibility.
+  factory SuggestionModel.fromMap(Map<String, dynamic> map) {
+    return SuggestionModel(
+      label: map['label'] as String,
+      replacedOnClick: map['replacedOnClick'] ?? map['replaced_on_click'] ?? '',
+      triggeredAt: map['triggeredAt'] ?? map['triggered_at'] ?? '',
+      description: map['description'] as String?,
+    );
+  }
+
+  /// Converts the [SuggestionModel] to a map.
+  ///
+  /// Useful for serializing to JSON or converting to legacy map format.
+  Map<String, dynamic> toMap() {
+    return {
+      'label': label,
+      'replacedOnClick': replacedOnClick,
+      'triggeredAt': triggeredAt,
+      if (description != null) 'description': description,
+    };
+  }
+
+  @override
+  String toString() {
+    return 'SuggestionModel(label: $label, replacedOnClick: $replacedOnClick, '
+        'description: $description, triggeredAt: $triggeredAt)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is SuggestionModel &&
+        other.label == label &&
+        other.replacedOnClick == replacedOnClick &&
+        other.description == description &&
+        other.triggeredAt == triggeredAt;
+  }
+
+  @override
+  int get hashCode {
+    return Object.hash(label, replacedOnClick, description, triggeredAt);
+  }
+}
+
 /// Controller for the [CodeForge] code editor widget.
 ///
 /// This controller manages the text content, selection state, and various
@@ -60,6 +143,11 @@ class CodeForgeController implements DeltaTextInputClient {
   /// Callback for save file operations.
   /// Set this to enable custom save file handling.
   VoidCallback? saveFileCallback;
+
+  /// Callback for showing custom popup suggestions.
+  /// Set by the widget to handle displaying custom suggestion popups.
+  /// The callback receives a list of [SuggestionModel] instances.
+  void Function(List<SuggestionModel>)? showCustomSuggestionsCallback;
 
   /// Reference to the AI completion configuration.
   /// Set by the widget to allow controller-based enable/disable control.
@@ -214,6 +302,19 @@ class CodeForgeController implements DeltaTextInputClient {
   /// Whether the search highlights have changed and need repaint.
   bool searchHighlightsChanged = false;
 
+  /// Registered custom suggestions that can be triggered automatically.
+  ///
+  /// These suggestions are checked when the user types trigger patterns
+  /// (defined in [SuggestionModel.triggeredAt]). Suggestions are automatically
+  /// shown when their trigger pattern is detected.
+  List<SuggestionModel> _registeredCustomSuggestions = [];
+
+  /// Gets the list of registered custom suggestions.
+  ///
+  /// Returns a copy of the registered suggestions list.
+  List<SuggestionModel> get registeredCustomSuggestions =>
+      List.unmodifiable(_registeredCustomSuggestions);
+
   /// Whether the editor is in read-only mode.
   ///
   /// When true, the user cannot modify the text content.
@@ -225,6 +326,103 @@ class CodeForgeController implements DeltaTextInputClient {
   /// Callback to show Ai suggestion manually when the [AiCompletion.completionType] is [CompletionType.manual] or [CompletionType.mixed].
   void getManualAiSuggestion() {
     manualAiCompletion?.call();
+  }
+
+  /// Registers custom suggestions for automatic trigger detection.
+  ///
+  /// Registered suggestions will automatically appear when the user types
+  /// their trigger patterns (defined in [SuggestionModel.triggeredAt]).
+  /// This replaces any previously registered suggestions.
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.registerCustomSuggestions([
+  ///   SuggestionModel(
+  ///     label: 'Hello',
+  ///     replacedOnClick: 'Hello World',
+  ///     description: 'Hello World',
+  ///     triggeredAt: '{{}}',
+  ///   ),
+  ///   SuggestionModel(
+  ///     label: 'World',
+  ///     replacedOnClick: 'World is great',
+  ///     description: 'Hello World',
+  ///     triggeredAt: '{{}}',
+  ///   ),
+  ///   SuggestionModel(
+  ///     label: 'Another Type',
+  ///     replacedOnClick: 'Another Type',
+  ///     description: 'Another Type',
+  ///     triggeredAt: '<<>>',
+  ///   ),
+  /// ]);
+  /// ```
+  ///
+  /// Suggestions can also be registered from backend JSON:
+  /// ```dart
+  /// final jsonData = await fetchSuggestionsFromBackend();
+  /// final suggestions = (jsonData as List)
+  ///     .map((item) => SuggestionModel.fromMap(item as Map<String, dynamic>))
+  ///     .toList();
+  /// controller.registerCustomSuggestions(suggestions);
+  /// ```
+  void registerCustomSuggestions(List<SuggestionModel> suggestions) {
+    _registeredCustomSuggestions = List.from(suggestions);
+    notifyListeners();
+  }
+
+  /// Clears all registered custom suggestions.
+  ///
+  /// After calling this, no custom suggestions will be triggered automatically.
+  void clearRegisteredCustomSuggestions() {
+    _registeredCustomSuggestions.clear();
+    notifyListeners();
+  }
+
+  /// Shows custom popup suggestions in the editor.
+  ///
+  /// Displays a popup with the provided suggestions. When a suggestion is tapped,
+  /// it will replace the current word prefix (or selection) with the [replacedOnClick] text.
+  ///
+  /// Each [SuggestionModel] contains:
+  /// - [SuggestionModel.label]: The text displayed in the suggestion list
+  /// - [SuggestionModel.replacedOnClick]: The text inserted when selected
+  /// - [SuggestionModel.description]: Optional description shown below the label
+  /// - [SuggestionModel.triggeredAt]: The string pattern that triggers this suggestion when typed
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.showCustomSuggestions([
+  ///   SuggestionModel(
+  ///     label: 'template',
+  ///     replacedOnClick: '{{ variable }}',
+  ///     description: 'Insert template variable',
+  ///     triggeredAt: '{{}}',
+  ///   ),
+  ///   SuggestionModel(
+  ///     label: 'function',
+  ///     replacedOnClick: 'function myFunction() {\n  \n}',
+  ///     description: 'Create a new function',
+  ///     triggeredAt: '{{}}',
+  ///   ),
+  /// ]);
+  /// ```
+  ///
+  /// Throws [StateError] if the editor widget has not been initialized or
+  /// the callback has not been set.
+  void showCustomSuggestions(List<SuggestionModel> suggestions) {
+    if (showCustomSuggestionsCallback == null) {
+      throw StateError(
+        'Custom suggestions callback not set. '
+        'Ensure the CodeForge widget is properly initialized.',
+      );
+    }
+
+    if (suggestions.isEmpty) {
+      return;
+    }
+
+    showCustomSuggestionsCallback!(suggestions);
   }
 
   /// Sets the undo controller for this editor.

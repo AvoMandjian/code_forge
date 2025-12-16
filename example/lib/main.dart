@@ -38,6 +38,66 @@ class _MyAppState extends State<MyApp> {
     return data;
   }
 
+  void _registerCustomSuggestions() {
+    // Example 1: Register suggestions from backend JSON format (snake_case)
+    final backendSuggestions = [
+      {
+        "label": "Hello",
+        "description": "Hello World",
+        "replaced_on_click": "{{ Hello World }}",
+        "triggered_at": "{{}}",
+      },
+      {
+        "label": "World",
+        "description": "Hello World",
+        "replaced_on_click": "{{ World is great }}",
+        "triggered_at": "{{}}",
+      },
+      {
+        "label": "Another Type",
+        "description": "Another Type",
+        "replaced_on_click": "<< Another Type >>",
+        "triggered_at": "<<>>",
+      },
+      {
+        "label": "Variable",
+        "description": "Insert a variable placeholder",
+        "replaced_on_click": "{{ variable_name }}",
+        "triggered_at": "{{}}",
+      },
+      {
+        "label": "Filter",
+        "description": "Apply a filter",
+        "replaced_on_click": "{{ value | filter_name }}",
+        "triggered_at": "{{}}",
+      },
+      {
+        "label": "Custom Tag",
+        "description": "Insert custom tag",
+        "replaced_on_click": "<<custom_tag>>",
+        "triggered_at": "<<>>",
+      },
+    ];
+
+    // Convert backend JSON to SuggestionModel list
+    final suggestions = backendSuggestions
+        .map((item) => SuggestionModel.fromMap(item as Map<String, dynamic>))
+        .toList();
+
+    // Register the suggestions
+    _controller.registerCustomSuggestions(suggestions);
+
+    // Example 2: You can also register suggestions directly using camelCase
+    // _controller.registerCustomSuggestions([
+    //   SuggestionModel(
+    //     label: 'Direct Example',
+    //     replacedOnClick: 'Direct replacement text',
+    //     description: 'This is a direct example',
+    //     triggeredAt: '{{}}',
+    //   ),
+    // ]);
+  }
+
   @override
   void initState() {
     _controller.text = """<!DOCTYPE html>
@@ -143,6 +203,10 @@ class _MyAppState extends State<MyApp> {
     _controller.setRulers([80]);
     _updateRuler();
     _controller.disableAiCompletion();
+
+    // Register custom suggestions for testing
+    _registerCustomSuggestions();
+
     super.initState();
   }
 
@@ -312,7 +376,53 @@ class _MyAppState extends State<MyApp> {
                             onChanged: (_) => _updateRuler(),
                           ),
                         ),
+                        const SizedBox(width: 8),
+                        Tooltip(
+                          message: 'Test custom suggestions manually',
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              // Test custom suggestions manually
+                              _controller.showCustomSuggestions([
+                                SuggestionModel(
+                                  label: 'Manual Test',
+                                  replacedOnClick: 'Manual suggestion inserted',
+                                  description: 'This was triggered manually',
+                                  triggeredAt: '{{}}',
+                                ),
+                                SuggestionModel(
+                                  label: 'Another Manual',
+                                  replacedOnClick: 'Another manual suggestion',
+                                  description: 'Manual trigger example',
+                                  triggeredAt: '{{}}',
+                                ),
+                              ]);
+                              ScaffoldMessenger.of(
+                                scaffoldContext,
+                              ).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Manual suggestions shown. Try typing "{{" to see automatic triggers!',
+                                  ),
+                                  duration: Duration(seconds: 3),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.auto_awesome),
+                            label: const Text('Test'),
+                          ),
+                        ),
                       ],
+                    ),
+                  ),
+                  // Instructions banner
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(8.0),
+                    color: Colors.blue.shade50,
+                    child: const Text(
+                      '💡 Tip: Type "{{" or "<<" to see custom suggestions automatically appear!',
+                      style: TextStyle(fontSize: 12),
+                      textAlign: TextAlign.center,
                     ),
                   ),
                   Expanded(
