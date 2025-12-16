@@ -587,7 +587,11 @@ class _CodeForgeState extends State<CodeForge>
         if (widget.enableSuggestions &&
             _controller.registeredCustomSuggestions.isNotEmpty) {
           final textBeforeCursor = text.substring(0, cursorPosition);
-          final matchingSuggestions = _checkTriggerPatterns(textBeforeCursor);
+          final textAfterCursor = text.substring(cursorPosition);
+          final matchingSuggestions = _checkTriggerPatterns(
+            textBeforeCursor,
+            textAfterCursor,
+          );
           if (matchingSuggestions.isNotEmpty) {
             // Show matching custom suggestions
             _suggestions = matchingSuggestions;
@@ -651,7 +655,11 @@ class _CodeForgeState extends State<CodeForge>
           _controller.registeredCustomSuggestions.isNotEmpty &&
           text != oldText) {
         final textBeforeCursor = text.substring(0, cursorPosition);
-        final matchingSuggestions = _checkTriggerPatterns(textBeforeCursor);
+        final textAfterCursor = text.substring(cursorPosition);
+        final matchingSuggestions = _checkTriggerPatterns(
+          textBeforeCursor,
+          textAfterCursor,
+        );
         if (matchingSuggestions.isNotEmpty) {
           // Show matching custom suggestions
           _suggestions = matchingSuggestions;
@@ -754,8 +762,12 @@ class _CodeForgeState extends State<CodeForge>
   ///
   /// Returns a list of suggestions whose trigger patterns match as a prefix
   /// of the text before the cursor. Handles multiple triggers by prioritizing
-  /// longest matches first.
-  List<SuggestionModel> _checkTriggerPatterns(String textBeforeCursor) {
+  /// longest matches first. Also handles cases where the cursor is in the middle
+  /// of a trigger pattern (e.g., "{{|}}" where | is cursor).
+  List<SuggestionModel> _checkTriggerPatterns(
+    String textBeforeCursor, [
+    String? textAfterCursor,
+  ]) {
     final registeredSuggestions = _controller.registeredCustomSuggestions;
     if (registeredSuggestions.isEmpty) {
       return [];
@@ -807,6 +819,48 @@ class _CodeForgeState extends State<CodeForge>
             matchingSuggestions.addAll(
               registeredSuggestions.where((s) => s.triggeredAt == trigger),
             );
+          }
+        }
+      }
+
+      // Check if cursor is in the middle of the trigger pattern
+      // e.g., trigger is "{{}}" and we have "{{" before cursor and "}}" after cursor
+      if (textAfterCursor != null && trigger.length > 2) {
+        // Try to find if the trigger pattern spans across the cursor
+        for (int i = 1; i < trigger.length; i++) {
+          final triggerPrefix = trigger.substring(0, i);
+          final triggerSuffix = trigger.substring(i);
+          if (textBeforeCursor.endsWith(triggerPrefix) &&
+              textAfterCursor.startsWith(triggerSuffix)) {
+            // Cursor is in the middle of the trigger pattern
+            if (!matchedTriggers.contains(trigger)) {
+              matchedTriggers.add(trigger);
+              matchingSuggestions.addAll(
+                registeredSuggestions.where((s) => s.triggeredAt == trigger),
+              );
+            }
+            break;
+          }
+        }
+      }
+
+      // Check if cursor is in the middle of the trigger pattern
+      // e.g., trigger is "{{}}" and we have "{{" before cursor and "}}" after cursor
+      if (textAfterCursor != null && trigger.length > 2) {
+        // Try to find if the trigger pattern spans across the cursor
+        for (int i = 1; i < trigger.length; i++) {
+          final triggerPrefix = trigger.substring(0, i);
+          final triggerSuffix = trigger.substring(i);
+          if (textBeforeCursor.endsWith(triggerPrefix) &&
+              textAfterCursor.startsWith(triggerSuffix)) {
+            // Cursor is in the middle of the trigger pattern
+            if (!matchedTriggers.contains(trigger)) {
+              matchedTriggers.add(trigger);
+              matchingSuggestions.addAll(
+                registeredSuggestions.where((s) => s.triggeredAt == trigger),
+              );
+            }
+            break;
           }
         }
       }
@@ -2016,28 +2070,72 @@ class _CodeForgeState extends State<CodeForge>
                                           } else if (item is SuggestionModel) {
                                             // Custom suggestions with SuggestionModel
                                             // Check if trigger pattern exists before cursor and replace it entirely
+                                            // Also handle cases where cursor is in the middle of the trigger pattern
                                             final textBeforeCursor = text
                                                 .substring(0, cursorPos);
+                                            final textAfterCursor = text
+                                                .substring(cursorPos);
                                             final triggerPattern =
                                                 item.triggeredAt;
 
-                                            // Check if trigger pattern exists in text before cursor
-                                            if (triggerPattern.isNotEmpty &&
-                                                textBeforeCursor.endsWith(
-                                                  triggerPattern,
-                                                )) {
-                                              // Trigger pattern found - replace the entire trigger pattern with replacedOnClick
-                                              final triggerStartPos =
-                                                  cursorPos -
-                                                  triggerPattern.length;
-                                              _controller.replaceRange(
-                                                triggerStartPos,
-                                                cursorPos,
-                                                item.replacedOnClick,
-                                              );
-                                              _suggestionNotifier.value = null;
-                                              return;
+                                            if (triggerPattern.isNotEmpty) {
+                                              // Check if trigger pattern exists entirely before cursor
+                                              if (textBeforeCursor.endsWith(
+                                                triggerPattern,
+                                              )) {
+                                                // Trigger pattern found - replace the entire trigger pattern with replacedOnClick
+                                                final triggerStartPos =
+                                                    cursorPos -
+                                                    triggerPattern.length;
+                                                _controller.replaceRange(
+                                                  triggerStartPos,
+                                                  cursorPos,
+                                                  item.replacedOnClick,
+                                                );
+                                                _suggestionNotifier.value =
+                                                    null;
+                                                return;
+                                              }
+
+                                              // Check if cursor is in the middle of the trigger pattern
+                                              // e.g., trigger is "{{}}" and we have "{{" before cursor and "}}" after cursor
+                                              for (
+                                                int i = 1;
+                                                i < triggerPattern.length;
+                                                i++
+                                              ) {
+                                                final triggerPrefix =
+                                                    triggerPattern.substring(
+                                                      0,
+                                                      i,
+                                                    );
+                                                final triggerSuffix =
+                                                    triggerPattern.substring(i);
+                                                if (textBeforeCursor.endsWith(
+                                                      triggerPrefix,
+                                                    ) &&
+                                                    textAfterCursor.startsWith(
+                                                      triggerSuffix,
+                                                    )) {
+                                                  // Cursor is in the middle of the trigger pattern - replace entire pattern
+                                                  final triggerStartPos =
+                                                      cursorPos -
+                                                      triggerPrefix.length;
+                                                  final triggerEndPos =
+                                                      cursorPos +
+                                                      triggerSuffix.length;
+                                                  _controller.replaceRange(
+                                                    triggerStartPos,
+                                                    triggerEndPos,
+                                                    item.replacedOnClick,
+                                                  );
+                                                  _suggestionNotifier.value =
+                                                      null;
+                                                  return;
+                                                }
+                                              }
                                             }
+
                                             // No trigger pattern found - use normal insertion
                                             textToInsert = item.replacedOnClick;
                                           } else if (item is Map) {
@@ -2949,25 +3047,50 @@ class _CodeForgeState extends State<CodeForge>
     } else if (selected is SuggestionModel) {
       // Custom suggestions with SuggestionModel
       // Check if trigger pattern exists before cursor and replace it entirely
+      // Also handle cases where cursor is in the middle of the trigger pattern
       final text = _controller.text;
       final cursorPos = _controller.selection.extentOffset;
       final textBeforeCursor = text.substring(0, cursorPos);
+      final textAfterCursor = text.substring(cursorPos);
       final triggerPattern = selected.triggeredAt;
 
-      // Check if trigger pattern exists in text before cursor
-      if (triggerPattern.isNotEmpty &&
-          textBeforeCursor.endsWith(triggerPattern)) {
-        // Trigger pattern found - replace the entire trigger pattern with replacedOnClick
-        final triggerStartPos = cursorPos - triggerPattern.length;
-        _controller.replaceRange(
-          triggerStartPos,
-          cursorPos,
-          selected.replacedOnClick,
-        );
-        _suggestionNotifier.value = null;
-        _sugSelIndex = 0;
-        return;
+      if (triggerPattern.isNotEmpty) {
+        // Check if trigger pattern exists entirely before cursor
+        if (textBeforeCursor.endsWith(triggerPattern)) {
+          // Trigger pattern found - replace the entire trigger pattern with replacedOnClick
+          final triggerStartPos = cursorPos - triggerPattern.length;
+          _controller.replaceRange(
+            triggerStartPos,
+            cursorPos,
+            selected.replacedOnClick,
+          );
+          _suggestionNotifier.value = null;
+          _sugSelIndex = 0;
+          return;
+        }
+
+        // Check if cursor is in the middle of the trigger pattern
+        // e.g., trigger is "{{}}" and we have "{{" before cursor and "}}" after cursor
+        for (int i = 1; i < triggerPattern.length; i++) {
+          final triggerPrefix = triggerPattern.substring(0, i);
+          final triggerSuffix = triggerPattern.substring(i);
+          if (textBeforeCursor.endsWith(triggerPrefix) &&
+              textAfterCursor.startsWith(triggerSuffix)) {
+            // Cursor is in the middle of the trigger pattern - replace entire pattern
+            final triggerStartPos = cursorPos - triggerPrefix.length;
+            final triggerEndPos = cursorPos + triggerSuffix.length;
+            _controller.replaceRange(
+              triggerStartPos,
+              triggerEndPos,
+              selected.replacedOnClick,
+            );
+            _suggestionNotifier.value = null;
+            _sugSelIndex = 0;
+            return;
+          }
+        }
       }
+
       // No trigger pattern found or partial match - use normal insertion
       insertText = selected.replacedOnClick;
     } else if (selected is Map) {
