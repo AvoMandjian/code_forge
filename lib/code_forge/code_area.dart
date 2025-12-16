@@ -5141,7 +5141,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     }
 
     // Draw rulers (vertical lines at specific column positions)
-    if (_rulers != null && _rulers!.isNotEmpty && !_lineWrap) {
+    if (_rulers != null && _rulers!.isNotEmpty) {
       _drawRulers(
         canvas,
         offset,
@@ -5982,8 +5982,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     bool hasActiveFolds,
     Color textColor,
   ) {
-    if (_rulers == null || _rulers!.isEmpty || _lineWrap) {
-      return; // Don't draw rulers if disabled or in line wrap mode
+    if (_rulers == null || _rulers!.isEmpty) {
+      return; // Don't draw rulers if disabled
     }
 
     final characterWidth = _getCharacterWidth();

@@ -400,7 +400,7 @@ class _MyAppState extends State<MyApp> {
                           saveFile: () {
                             print('saveFile: ${_controller.text}');
                           },
-                          // lineWrap: true,
+                          lineWrap: true,
                           lspConfig: snapshot.data,
 
                           filePath: absFilePath,
