@@ -21,7 +21,7 @@ class _MyAppState extends State<MyApp> {
   final _controller = CodeForgeController();
   final undoController = UndoRedoController();
   final absFilePath = p.join(Directory.current.path, "lib/example_code.dart");
-  String _selectedLanguage = 'json';
+  String _selectedLanguage = 'html';
   String _selectedTheme = 'vs2015';
 
   Future<LspConfig> getLsp() async {
@@ -38,6 +38,110 @@ class _MyAppState extends State<MyApp> {
 
   @override
   void initState() {
+    _controller.text = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ config.app_name }} - User Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .welcome { color: {{ colors.primary }}; font-size: 24px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .status-{% if user.active %}active{% else %}inactive{% endif %} { font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="welcome">
+        {% if user.is_premium %}
+            <h1>👑 Welcome back, {{ user.name | title }}!</h1>
+            <p>Premium member since {{ user.premium_since.strftime('%B %Y') }}.</p>
+        {% else %}
+            <h1>Hello, {{ user.name | default('User') }}!</h1>
+            <p>Upgrade for premium features.</p>
+        {% endif %}
+    </div>
+
+    {# Macro for reusable user card #}
+    {% macro user_card(user) %}
+        <div style="border: 1px solid #ccc; padding: 20px; margin: 10px 0; border-radius: 8px;">
+            <h3>{{ user.name }}</h3>
+            <p><strong>Email:</strong> {{ user.email }}</p>
+            <p><strong>Score:</strong> {{ user.score | int | default(0) }}</p>
+            <p class="status-{{ 'active' if user.active else 'inactive' }}">
+                Status: {{ 'Active' if user.active else 'Inactive' }}
+            </p>
+            {% if user.score > 1000 %}
+                🏆 Elite Member
+            {% endif %}
+        </div>
+    {% endmacro %}
+
+    {# Leaderboard table with sorting #}
+    <h2>🏆 Leaderboard (Top {{ users | length | min(10) }})</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Name</th>
+                <th>Score</th>
+                <th>Country</th>
+                <th>Last Active</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users | sort(attribute='score', reverse=True) | list | slice(10) %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>{{ user.name | truncate(20) }}</td>
+                    <td>{{ user.score | floatformat(0) }}</td>
+                    <td>
+                        <img src="https://flagcdn.com/24x18/{{ user.country.lower() }}.png" alt="{{ user.country }}">
+                        {{ user.country }}
+                    </td>
+                    <td>{{ user.last_active.strftime('%Y-%m-%d') if user.last_active else 'Never' }}</td>
+                </tr>
+            {% else %}
+                <tr><td colspan="5">No users found.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {# Nested loops: Users by country #}
+    <h2>👥 Users by Country</h2>
+    {% for country, country_users in users | groupby('country') | list %}
+        <h3>{{ country }} ({{ country_users | list | length }} users)</h3>
+        <div style="display: flex; flex-wrap: wrap;">
+            {% for user in country_users | list | slice(3) %}
+                {{ user_card(user) }}
+            {% endfor %}
+        </div>
+    {% endfor %}
+
+    {# Filters and custom logic #}
+    <h2>📊 Stats</h2>
+    <ul>
+        <li>Total Users: {{ users | length }}</li>
+        <li>Avg Score: {{ users | map(attribute='score') | list | avg | round(1) }}</li>
+        <li>Premium Users: {{ users | selectattr('is_premium') | list | length }}</li>
+        <li>Countries: {{ users | map(attribute='country') | unique | list | length }}</li>
+    </ul>
+
+    {# Custom filters example (requires registration in Python) #}
+    <p>Total Score (custom): {{ users | map(attribute='score') | sum }} ({{ (users | map(attribute='score') | sum) | filesizeformat }})</p>
+
+    {# Include external template (if using includes) #}
+    {% include 'footer.html' ignore missing %}
+
+    {# Set block for inheritance #}
+    {% block scripts %}
+        <script>
+            console.log('Rendered at {{ now.strftime("%Y-%m-%d %H:%M") }}');
+        </script>
+    {% endblock %}
+</body>
+</html>
+""";
     super.initState();
   }
 
@@ -106,7 +210,6 @@ class _MyAppState extends State<MyApp> {
                       return const Center(child: CircularProgressIndicator());
                     }
                     return CodeForge(
-                      autoFocus: true,
                       undoController: undoController,
                       language: builtinAllLanguages[_selectedLanguage],
                       controller: _controller,

@@ -9,7 +9,6 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:re_highlight/languages/dart.dart';
-import 'package:re_highlight/languages/jinja.dart';
 import 'package:re_highlight/re_highlight.dart';
 import 'package:re_highlight/styles/vs2015.dart';
 
@@ -2964,58 +2963,133 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     if (!enableFolding) return null;
 
     final line = controller.getLineText(lineIndex);
+    final trimmed = line.trim();
 
-    // Jinja template tag folding: {% if %}, {% for %}, {% block %}, etc.
-    if (_language == langJinja || _language.name == 'Jinja') {
-      final jinjaTagMatch = RegExp(r'\{%\s*(\w+)').firstMatch(line);
-      if (jinjaTagMatch != null) {
-        final tagName = jinjaTagMatch.group(1);
-        // Check if this is a foldable opening tag
-        final foldableTags = {
-          'if',
-          'for',
-          'block',
-          'macro',
-          'filter',
-          'with',
-          'set',
-          'call',
-          'raw',
-        };
+    // 1. Jinja template tag folding: {% if %}, {% for %}, {% block %}, etc.
+    // Works in any language (not just when language is Jinja)
+    final jinjaTagMatch = RegExp(r'\{%\s*(\w+)').firstMatch(trimmed);
+    if (jinjaTagMatch != null) {
+      final tagName = jinjaTagMatch.group(1);
+      final foldableTags = {
+        'if',
+        'for',
+        'block',
+        'macro',
+        'filter',
+        'with',
+        'set',
+        'call',
+        'raw',
+      };
 
-        if (tagName != null && foldableTags.contains(tagName.toLowerCase())) {
-          final tagNameLower = tagName.toLowerCase();
-          int depth = 1;
+      if (tagName != null && foldableTags.contains(tagName.toLowerCase())) {
+        final tagNameLower = tagName.toLowerCase();
+        int depth = 1;
 
-          for (int i = lineIndex + 1; i < controller.lineCount; i++) {
-            final checkLine = controller.getLineText(i).toLowerCase();
+        for (int i = lineIndex + 1; i < controller.lineCount; i++) {
+          final checkLine = controller.getLineText(i).trim().toLowerCase();
 
-            // Check for matching end tag (case-insensitive)
-            final endTagRegex = RegExp(r'\{%\s*end' + tagNameLower + r'\s*%\}');
-            if (endTagRegex.hasMatch(checkLine)) {
-              depth--;
-              if (depth == 0) {
-                return FoldRange(lineIndex, i);
-              }
+          // Check for matching end tag (case-insensitive)
+          final endTagRegex = RegExp(r'\{%\s*end' + tagNameLower + r'\s*%\}');
+          if (endTagRegex.hasMatch(checkLine)) {
+            depth--;
+            if (depth == 0) {
+              return FoldRange(lineIndex, i);
             }
+          }
 
-            // Check for nested opening tags of the same type (case-insensitive)
-            final nestedTagRegex = RegExp(r'\{%\s*' + tagNameLower + r'\s*');
-            if (nestedTagRegex.hasMatch(checkLine)) {
-              depth++;
-            }
+          // Check for nested opening tags of the same type (case-insensitive)
+          final nestedTagRegex = RegExp(r'\{%\s*' + tagNameLower + r'\s*');
+          if (nestedTagRegex.hasMatch(checkLine)) {
+            depth++;
           }
         }
       }
     }
 
-    if (line.contains('{')) {
+    // 2. HTML/XML tag folding: <div>...</div>, <table>...</table>, etc.
+    final htmlTagMatch = RegExp(
+      r'<\s*([a-zA-Z][a-zA-Z0-9-]*)\s*[^>]*>',
+    ).firstMatch(trimmed);
+    if (htmlTagMatch != null) {
+      final tagName = htmlTagMatch.group(1);
+      // Skip self-closing tags and void elements
+      final voidElements = {
+        'area',
+        'base',
+        'br',
+        'col',
+        'embed',
+        'hr',
+        'img',
+        'input',
+        'link',
+        'meta',
+        'param',
+        'source',
+        'track',
+        'wbr',
+      };
+
+      // Check if it's a self-closing tag (ends with /> or />)
+      final isSelfClosing = RegExp(r'/\s*>').hasMatch(trimmed);
+
+      if (tagName != null &&
+          !voidElements.contains(tagName.toLowerCase()) &&
+          !isSelfClosing) {
+        final tagNameLower = tagName.toLowerCase();
+        int depth = 1;
+
+        for (int i = lineIndex + 1; i < controller.lineCount; i++) {
+          final checkLine = controller.getLineText(i).trim();
+
+          // Check for matching closing tag
+          final closingTagRegex = RegExp(
+            r'</\s*' + tagNameLower + r'\s*>',
+            caseSensitive: false,
+          );
+          if (closingTagRegex.hasMatch(checkLine)) {
+            depth--;
+            if (depth == 0) {
+              return FoldRange(lineIndex, i);
+            }
+          }
+
+          // Check for nested opening tags of the same type
+          final openingTagRegex = RegExp(
+            r'<\s*' + tagNameLower + r'\s*[^>]*>',
+            caseSensitive: false,
+          );
+          if (openingTagRegex.hasMatch(checkLine) &&
+              !checkLine.contains('/>')) {
+            depth++;
+          }
+        }
+      }
+    }
+
+    // 3. Brace-based folding: { }, ( ), [ ]
+    // Skip if line contains Jinja syntax to avoid conflicts
+    if (line.contains('{') &&
+        !trimmed.contains('{%') &&
+        !trimmed.contains('{{') &&
+        !trimmed.contains('{#')) {
       int braceCount = 0;
       bool foundOpen = false;
 
       for (int i = lineIndex; i < controller.lineCount; i++) {
         final checkLine = controller.getLineText(i);
         for (int c = 0; c < checkLine.length; c++) {
+          // Skip Jinja syntax
+          if (c < checkLine.length - 1) {
+            final twoChar = checkLine.substring(c, c + 2);
+            if (twoChar == '{%' || twoChar == '{{' || twoChar == '{#') {
+              // Skip to after the Jinja tag
+              while (c < checkLine.length && checkLine[c] != '}') c++;
+              continue;
+            }
+          }
+
           if (checkLine[c] == '{') {
             if (!foundOpen && i == lineIndex) foundOpen = true;
             braceCount++;
@@ -3029,7 +3103,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       }
     }
 
-    if (line.trim().endsWith(':')) {
+    // 4. Indentation-based folding: lines ending with ':'
+    if (trimmed.endsWith(':')) {
       final startIndent = line.length - line.trimLeft().length;
       int endLine = lineIndex;
 
@@ -3216,6 +3291,52 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         }
       }
     }
+    return null;
+  }
+
+  /// Finds the matching Jinja end tag for a given opening tag
+  /// Returns the line number of the matching end tag, or null if not found
+  int? _findMatchingJinjaEndTag(int startLine, String tagName) {
+    final foldableTags = {
+      'if',
+      'for',
+      'block',
+      'macro',
+      'filter',
+      'with',
+      'set',
+      'call',
+      'raw',
+    };
+
+    if (!foldableTags.contains(tagName.toLowerCase())) {
+      return null;
+    }
+
+    final tagNameLower = tagName.toLowerCase();
+    int depth = 1;
+
+    for (int i = startLine + 1; i < controller.lineCount; i++) {
+      if (_isLineFolded(i)) continue;
+
+      final checkLine = controller.getLineText(i).toLowerCase();
+
+      // Check for matching end tag
+      final endTagRegex = RegExp(r'\{%\s*end' + tagNameLower + r'\s*%\}');
+      if (endTagRegex.hasMatch(checkLine)) {
+        depth--;
+        if (depth == 0) {
+          return i;
+        }
+      }
+
+      // Check for nested opening tags of the same type
+      final nestedTagRegex = RegExp(r'\{%\s*' + tagNameLower + r'\s*');
+      if (nestedTagRegex.hasMatch(checkLine)) {
+        depth++;
+      }
+    }
+
     return null;
   }
 
@@ -4239,19 +4360,35 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       }
 
       final trimmed = lineText.trimRight();
+
+      // Check for Jinja template tags
+      final jinjaTagMatch = RegExp(r'\{%\s*(\w+)').firstMatch(trimmed);
+      int? jinjaEndLine;
+      if (jinjaTagMatch != null) {
+        final tagName = jinjaTagMatch.group(1);
+        if (tagName != null) {
+          jinjaEndLine = _findMatchingJinjaEndTag(i, tagName);
+        }
+      }
+
       final endsWithBracket =
           trimmed.endsWith('{') ||
           trimmed.endsWith('(') ||
           trimmed.endsWith('[') ||
           trimmed.endsWith(':');
-      if (!endsWithBracket) return;
+
+      // Skip if neither Jinja tag nor bracket/colon
+      if (jinjaEndLine == null && !endsWithBracket) return;
 
       final leadingSpaces = lineText.length - lineText.trimLeft().length;
       final indentLevel = leadingSpaces ~/ tabSize;
       final lastChar = trimmed[trimmed.length - 1];
       int endLine = i + 1;
 
-      if (lastChar == '{' || lastChar == '(' || lastChar == '[') {
+      // Prioritize Jinja tag matching
+      if (jinjaEndLine != null) {
+        endLine = jinjaEndLine + 1;
+      } else if (lastChar == '{' || lastChar == '(' || lastChar == '[') {
         final lineStartOffset = controller.getLineStartOffset(i);
         final bracketPos = lineStartOffset + trimmed.length - 1;
         final matchPos = _findMatchingBracket(controller.text, bracketPos);
@@ -5223,37 +5360,24 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         contextMenuOffsetNotifier.value = const Offset(-1, -1);
       }
 
-      if (enableFolding && enableGutter && localPosition.dx < _gutterWidth) {
+      if (enableGutter && localPosition.dx < _gutterWidth) {
         final clickY =
-            localPosition.dy +
-            vscrollController.offset -
-            (innerPadding?.top ?? 0);
-        final hasActiveFolds = _foldRanges.any((f) => f.isFolded);
-        int clickedLine;
+            localPosition.dy -
+            (innerPadding?.top ?? 0) +
+            vscrollController.offset;
+        final clickedLine = _findVisibleLineByYPosition(clickY);
 
-        if (!hasActiveFolds) {
-          clickedLine = (clickY / _lineHeight).floor().clamp(
-            0,
-            controller.lineCount - 1,
-          );
-        } else {
-          clickedLine = 0;
-          double currentY = 0;
-          for (int i = 0; i < controller.lineCount; i++) {
-            if (_isLineFolded(i)) continue;
-            if (clickY >= currentY && clickY < currentY + _lineHeight) {
-              clickedLine = i;
-              break;
-            }
-            currentY += _lineHeight;
+        if (enableFolding) {
+          final foldRange = _getFoldRangeAtLine(clickedLine);
+          if (foldRange != null) {
+            _toggleFold(foldRange);
+            return;
           }
         }
 
-        final foldRange = _getFoldRangeAtLine(clickedLine);
-        if (foldRange != null) {
-          _toggleFold(foldRange);
-          return;
-        }
+        // Handle gutter clicks for line selection
+        final lineStartOffset = controller.getLineStartOffset(clickedLine);
+        controller.selection = TextSelection.collapsed(offset: lineStartOffset);
         return;
       }
 
