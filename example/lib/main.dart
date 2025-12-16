@@ -104,13 +104,17 @@ class _MyAppState extends State<MyApp> {
                       return const Center(child: CircularProgressIndicator());
                     }
                     return CodeForge(
+                      autoFocus: true,
                       undoController: undoController,
                       language: builtinAllLanguages[_selectedLanguage],
                       controller: _controller,
-                      // textStyle: GoogleFonts.jetBrainsMono(),
-                      /* aiCompletion: AiCompletion(
-                        model: Gemini(apiKey: "YOUR API KEY"),
-                      ), */
+                      aiCompletion: AiCompletion(
+                        model: Gemini(
+                          apiKey: Platform.environment['GEMINI_API_KEY'] ?? '',
+                        ),
+                        debounceTime: 300,
+                      ),
+                      lineWrap: true,
                       lspConfig: snapshot.data,
                       filePath: absFilePath,
                     );

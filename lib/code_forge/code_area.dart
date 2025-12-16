@@ -257,7 +257,8 @@ class _CodeForgeState extends State<CodeForge>
     _hscrollController =
         widget.horizontalScrollController ?? ScrollController();
     _vscrollController = widget.verticalScrollController ?? ScrollController();
-    _editorTheme = _controller.currentTheme ?? widget.editorTheme ?? vs2015Theme;
+    _editorTheme =
+        _controller.currentTheme ?? widget.editorTheme ?? vs2015Theme;
     _language = _controller.currentLanguage ?? widget.language ?? langDart;
     _suggestionNotifier = ValueNotifier(null);
     _hoverNotifier = ValueNotifier(null);
