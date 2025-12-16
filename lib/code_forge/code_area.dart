@@ -291,6 +291,7 @@ class _CodeForgeState extends State<CodeForge>
     _isHoveringPopup = ValueNotifier<bool>(false);
     _controller.manualAiCompletion = getManualAiSuggestion;
     _controller.saveFileCallback = widget.saveFile;
+    _controller.setAiCompletion(widget.aiCompletion);
     _controller.readOnly = widget.readOnly;
     _selectionStyle = widget.selectionStyle ?? CodeSelectionStyle();
     _undoRedoController = widget.undoController ?? UndoRedoController();
@@ -421,6 +422,9 @@ class _CodeForgeState extends State<CodeForge>
         _updateStyles();
         styleChanged = true;
       }
+
+      // Sync rulers from controller to render object
+      // This will be handled in updateRenderObject when setState is called
 
       if (styleChanged) {
         if (mounted) setState(() {});
@@ -2330,7 +2334,8 @@ class _CodeField extends LeafRenderObjectWidget {
       ..enableGutterDivider = enableGutterDivider
       ..gutterStyle = gutterStyle
       ..selectionStyle = selectionStyle
-      ..aiCompletionTextStyle = aiCompletionTextStyle;
+      ..aiCompletionTextStyle = aiCompletionTextStyle
+      ..rulers = controller.rulers;
   }
 }
 
@@ -2384,6 +2389,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   bool _showBubble = false, _draggingCHandle = false, _readOnly;
   Rect? _startHandleRect, _endHandleRect, _normalHandle;
   double _longLineWidth = 0.0, _wrapWidth = double.infinity;
+  double? _cachedCharacterWidth;
+  List<int>? _rulers;
   int _extraSpaceToAdd = 0, _cachedLineCount = 0;
   String? _aiResponse, _lastProcessedText;
   TextSelection? _lastSelectionForAi;
@@ -2728,6 +2735,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     _lineWidthCache.clear();
     _lineTextCache.clear();
     _lineHeightCache.clear();
+    _cachedCharacterWidth = null; // Invalidate character width cache
 
     markNeedsLayout();
     markNeedsPaint();
@@ -2778,6 +2786,12 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   set enableGutterDivider(bool value) {
     if (_enableGutterDivider == value) return;
     _enableGutterDivider = value;
+    markNeedsPaint();
+  }
+
+  set rulers(List<int>? value) {
+    if (_rulers == value) return;
+    _rulers = value;
     markNeedsPaint();
   }
 
@@ -3659,6 +3673,31 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     return width;
   }
 
+  /// Calculates the width of a single character for ruler positioning.
+  ///
+  /// Uses TextPainter to measure a sample character (typically 'M' for monospace
+  /// or 'W' for variable-width fonts) and caches the result.
+  double _getCharacterWidth() {
+    if (_cachedCharacterWidth != null) {
+      return _cachedCharacterWidth!;
+    }
+
+    final fontSize = textStyle?.fontSize ?? 14.0;
+    final fontFamily = textStyle?.fontFamily;
+
+    // Use TextPainter to measure character width accurately
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: 'M', // 'M' is typically the widest character in monospace fonts
+        style: TextStyle(fontSize: fontSize, fontFamily: fontFamily),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+    _cachedCharacterWidth = textPainter.width;
+    return _cachedCharacterWidth!;
+  }
+
   @override
   void performLayout() {
     final lineCount = controller.lineCount;
@@ -3847,6 +3886,19 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
     if (enableGuideLines && (lastVisibleLine - firstVisibleLine) < 200) {
       _drawIndentGuides(
+        canvas,
+        offset,
+        firstVisibleLine,
+        lastVisibleLine,
+        firstVisibleLineY,
+        hasActiveFolds,
+        textColor,
+      );
+    }
+
+    // Draw rulers (vertical lines at specific column positions)
+    if (_rulers != null && _rulers!.isNotEmpty && !_lineWrap) {
+      _drawRulers(
         canvas,
         offset,
         firstVisibleLine,
@@ -4673,6 +4725,55 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         Offset(screenGuideX, clampedYTop),
         Offset(screenGuideX, clampedYBottom),
         guidePaint,
+      );
+    }
+  }
+
+  void _drawRulers(
+    Canvas canvas,
+    Offset offset,
+    int firstVisibleLine,
+    int lastVisibleLine,
+    double firstVisibleLineY,
+    bool hasActiveFolds,
+    Color textColor,
+  ) {
+    if (_rulers == null || _rulers!.isEmpty || _lineWrap) {
+      return; // Don't draw rulers if disabled or in line wrap mode
+    }
+
+    final characterWidth = _getCharacterWidth();
+    final horizontalScrollOffset = hscrollController.offset;
+
+    // Create paint for rulers (same style as indentation guides)
+    final rulerPaint = Paint()
+      ..color = (editorTheme['root']?.color ?? textColor).withAlpha(100)
+      ..strokeWidth = 0.5
+      ..style = PaintingStyle.stroke;
+
+    // Calculate viewport bounds
+    final viewportTop = offset.dy + (innerPadding?.top ?? 0);
+    final viewportBottom =
+        viewportTop + vscrollController.position.viewportDimension;
+    final contentLeft = offset.dx + _gutterWidth + (innerPadding?.left ?? 0);
+    final contentRight = offset.dx + size.width;
+
+    // Draw each ruler
+    for (final column in _rulers!) {
+      // Calculate X position for this column
+      final rulerX =
+          contentLeft + (column * characterWidth) - horizontalScrollOffset;
+
+      // Only draw if ruler is within visible horizontal range
+      if (rulerX < contentLeft || rulerX > contentRight) {
+        continue;
+      }
+
+      // Draw vertical line spanning the full viewport height
+      canvas.drawLine(
+        Offset(rulerX, viewportTop),
+        Offset(rulerX, viewportBottom),
+        rulerPaint,
       );
     }
   }

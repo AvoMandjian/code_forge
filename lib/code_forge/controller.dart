@@ -61,6 +61,19 @@ class CodeForgeController implements DeltaTextInputClient {
   /// Set this to enable custom save file handling.
   VoidCallback? saveFileCallback;
 
+  /// Reference to the AI completion configuration.
+  /// Set by the widget to allow controller-based enable/disable control.
+  AiCompletion? _aiCompletion;
+
+  /// Column positions for editor rulers (vertical guide lines).
+  ///
+  /// When set, vertical lines will be drawn at the specified column positions
+  /// to help maintain consistent line lengths. For example, [80, 120] will
+  /// draw rulers at columns 80 and 120.
+  ///
+  /// Set to null or empty list to disable rulers.
+  List<int>? rulers;
+
   Mode? currentLanguage;
   Map<String, TextStyle>? currentTheme;
 
@@ -76,6 +89,100 @@ class CodeForgeController implements DeltaTextInputClient {
       currentTheme = builtinAllThemes[themeName];
       notifyListeners();
     }
+  }
+
+  /// Sets the AI completion configuration.
+  ///
+  /// This is called by the widget to provide access to the AI completion
+  /// configuration, allowing the controller to enable/disable it.
+  void setAiCompletion(AiCompletion? aiCompletion) {
+    _aiCompletion = aiCompletion;
+  }
+
+  /// Enables AI completion if it is configured.
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.enableAiCompletion();
+  /// ```
+  void enableAiCompletion() {
+    if (_aiCompletion != null) {
+      _aiCompletion!.enableCompletion = true;
+      notifyListeners();
+    }
+  }
+
+  /// Disables AI completion if it is configured.
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.disableAiCompletion();
+  /// ```
+  void disableAiCompletion() {
+    if (_aiCompletion != null) {
+      _aiCompletion!.enableCompletion = false;
+      notifyListeners();
+    }
+  }
+
+  /// Toggles AI completion on/off if it is configured.
+  ///
+  /// Returns the new state (true if enabled, false if disabled).
+  ///
+  /// Example:
+  /// ```dart
+  /// final isEnabled = controller.toggleAiCompletion();
+  /// ```
+  bool toggleAiCompletion() {
+    if (_aiCompletion != null) {
+      _aiCompletion!.enableCompletion = !_aiCompletion!.enableCompletion;
+      notifyListeners();
+      return _aiCompletion!.enableCompletion;
+    }
+    return false;
+  }
+
+  /// Returns whether AI completion is currently enabled.
+  ///
+  /// Returns false if AI completion is not configured.
+  ///
+  /// Example:
+  /// ```dart
+  /// if (controller.isAiCompletionEnabled()) {
+  ///   print('AI completion is active');
+  /// }
+  /// ```
+  bool isAiCompletionEnabled() {
+    return _aiCompletion?.enableCompletion ?? false;
+  }
+
+  /// Sets the column positions for editor rulers.
+  ///
+  /// Rulers are vertical guide lines drawn at the specified column positions
+  /// to help maintain consistent line lengths. For example, [80, 120] will
+  /// draw rulers at columns 80 and 120.
+  ///
+  /// Pass null or an empty list to disable rulers.
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.setRulers([80, 120]); // Show rulers at columns 80 and 120
+  /// controller.setRulers(null); // Disable rulers
+  /// ```
+  void setRulers(List<int>? columns) {
+    rulers = columns;
+    notifyListeners();
+  }
+
+  /// Clears all rulers (disables ruler display).
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.clearRulers();
+  /// ```
+  void clearRulers() {
+    rulers = null;
+    notifyListeners();
   }
 
   Rope _rope = Rope('');

@@ -142,6 +142,7 @@ class _MyAppState extends State<MyApp> {
 </body>
 </html>
 """;
+    _controller.setRulers([80]);
     super.initState();
   }
 
@@ -260,15 +261,16 @@ class _MyAppState extends State<MyApp> {
                           undoController: undoController,
                           language: builtinAllLanguages[_selectedLanguage],
                           controller: _controller,
-                          // aiCompletion: AiCompletion(
-                          //   model: Gemini(
-                          //     apiKey: Platform.environment['GEMINI_API_KEY'] ?? '',
-                          //   ),
-                          // ),
+                          aiCompletion: AiCompletion(
+                            model: Gemini(
+                              apiKey:
+                                  Platform.environment['GEMINI_API_KEY'] ?? '',
+                            ),
+                          ),
                           saveFile: () {
                             print('saveFile');
                           },
-                          lineWrap: true,
+                          // lineWrap: true,
                           lspConfig: snapshot.data,
                           filePath: absFilePath,
                         );

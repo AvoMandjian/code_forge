@@ -56,14 +56,72 @@ class CodeFormatter {
       }
 
       // Check if line contains both opening and closing tag (e.g., <h1>text</h1>)
-      final hasOpeningAndClosing = RegExp(
-        r'<[^>]+>.*</[^>]+>',
-      ).hasMatch(trimmed);
-      if (hasOpeningAndClosing) {
-        // Complete tag pair on one line - write at current indent, don't change indent
-        buffer.write(indentStr * indent);
-        buffer.writeln(trimmed);
-        continue;
+      // Split them into separate lines: opening tag, content, closing tag
+      // Use non-greedy matching to find innermost tag pairs first
+      final tagPairMatch = RegExp(
+        r'<([a-zA-Z][a-zA-Z0-9-]*)([^>]*)>(.*?)</([a-zA-Z][a-zA-Z0-9-]*)>',
+        dotAll: true,
+      ).firstMatch(trimmed);
+      if (tagPairMatch != null) {
+        final openingTagName = tagPairMatch.group(1)!;
+        final openingAttributes = tagPairMatch.group(2) ?? '';
+        final content = tagPairMatch.group(3)!;
+        final closingTagName = tagPairMatch.group(4)!;
+
+        // Only split if tags match and it's not a void element
+        if (openingTagName.toLowerCase() == closingTagName.toLowerCase() &&
+            !_isVoidElement('<$openingTagName>')) {
+          // Check if content contains nested tags - if so, recursively format it
+          final hasNestedTags = RegExp(
+            r'<[^>]+>.*</[^>]+>',
+            dotAll: true,
+          ).hasMatch(content);
+
+          if (hasNestedTags) {
+            // Recursively format nested content
+            final formattedContent = formatHtml(content);
+            final contentLines = formattedContent.split('\n');
+
+            // Write opening tag
+            buffer.write(indentStr * indent);
+            if (openingAttributes.trim().isNotEmpty) {
+              buffer.writeln('<$openingTagName$openingAttributes>');
+            } else {
+              buffer.writeln('<$openingTagName>');
+            }
+
+            // Write formatted content with proper indentation
+            for (final contentLine in contentLines) {
+              if (contentLine.trim().isNotEmpty) {
+                buffer.write(indentStr * (indent + 1));
+                buffer.writeln(contentLine.trim());
+              }
+            }
+
+            // Write closing tag
+            buffer.write(indentStr * indent);
+            buffer.writeln('</$closingTagName>');
+          } else {
+            // Simple content - write opening tag, content, closing tag
+            buffer.write(indentStr * indent);
+            if (openingAttributes.trim().isNotEmpty) {
+              buffer.writeln('<$openingTagName$openingAttributes>');
+            } else {
+              buffer.writeln('<$openingTagName>');
+            }
+
+            // Write content (if any) with indentation
+            if (content.trim().isNotEmpty) {
+              buffer.write(indentStr * (indent + 1));
+              buffer.writeln(content.trim());
+            }
+
+            // Write closing tag
+            buffer.write(indentStr * indent);
+            buffer.writeln('</$closingTagName>');
+          }
+          continue;
+        }
       }
 
       // Check for closing tags first
