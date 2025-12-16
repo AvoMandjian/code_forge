@@ -3340,6 +3340,68 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     return null;
   }
 
+  /// Finds the matching HTML/XML end tag for a given opening tag
+  /// Returns the line number of the matching end tag, or null if not found
+  int? _findMatchingHtmlEndTag(int startLine, String tagName) {
+    final voidElements = {
+      'area',
+      'base',
+      'br',
+      'col',
+      'embed',
+      'hr',
+      'img',
+      'input',
+      'link',
+      'meta',
+      'param',
+      'source',
+      'track',
+      'wbr',
+    };
+
+    final tagNameLower = tagName.toLowerCase();
+
+    // Skip void elements
+    if (voidElements.contains(tagNameLower)) {
+      return null;
+    }
+
+    int depth = 1;
+
+    for (int i = startLine + 1; i < controller.lineCount; i++) {
+      if (_isLineFolded(i)) continue;
+
+      final checkLine = controller.getLineText(i).trim();
+
+      // Check if it's a self-closing tag
+      final isSelfClosing = RegExp(r'/\s*>').hasMatch(checkLine);
+
+      // Check for matching closing tag
+      final closingTagRegex = RegExp(
+        r'</\s*' + tagNameLower + r'\s*>',
+        caseSensitive: false,
+      );
+      if (closingTagRegex.hasMatch(checkLine)) {
+        depth--;
+        if (depth == 0) {
+          return i;
+        }
+      }
+
+      // Check for nested opening tags of the same type
+      final openingTagRegex = RegExp(
+        r'<\s*' + tagNameLower + r'\s*[^>]*>',
+        caseSensitive: false,
+      );
+      if (openingTagRegex.hasMatch(checkLine) && !isSelfClosing) {
+        depth++;
+      }
+    }
+
+    return null;
+  }
+
   (int?, int?) _getBracketPairAtCursor() {
     final cursorOffset = controller.selection.extentOffset;
     final text = controller.text;
@@ -4371,23 +4433,42 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         }
       }
 
+      // Check for HTML/XML tags
+      final htmlTagMatch = RegExp(
+        r'<\s*([a-zA-Z][a-zA-Z0-9-]*)\s*[^>]*>',
+      ).firstMatch(trimmed);
+      int? htmlEndLine;
+      if (htmlTagMatch != null) {
+        final tagName = htmlTagMatch.group(1);
+        if (tagName != null) {
+          final isSelfClosing = RegExp(r'/\s*>').hasMatch(trimmed);
+          if (!isSelfClosing) {
+            htmlEndLine = _findMatchingHtmlEndTag(i, tagName);
+          }
+        }
+      }
+
       final endsWithBracket =
           trimmed.endsWith('{') ||
           trimmed.endsWith('(') ||
           trimmed.endsWith('[') ||
           trimmed.endsWith(':');
 
-      // Skip if neither Jinja tag nor bracket/colon
-      if (jinjaEndLine == null && !endsWithBracket) return;
+      // Skip if neither Jinja tag, HTML tag, nor bracket/colon
+      if (jinjaEndLine == null && htmlEndLine == null && !endsWithBracket) {
+        return;
+      }
 
       final leadingSpaces = lineText.length - lineText.trimLeft().length;
       final indentLevel = leadingSpaces ~/ tabSize;
       final lastChar = trimmed[trimmed.length - 1];
       int endLine = i + 1;
 
-      // Prioritize Jinja tag matching
+      // Prioritize Jinja tag matching, then HTML tag matching
       if (jinjaEndLine != null) {
         endLine = jinjaEndLine + 1;
+      } else if (htmlEndLine != null) {
+        endLine = htmlEndLine + 1;
       } else if (lastChar == '{' || lastChar == '(' || lastChar == '[') {
         final lineStartOffset = controller.getLineStartOffset(i);
         final bracketPos = lineStartOffset + trimmed.length - 1;
