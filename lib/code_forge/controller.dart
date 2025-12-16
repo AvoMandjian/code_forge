@@ -13,7 +13,6 @@ import '../code_forge.dart';
 import 'code_formatter.dart';
 import 'rope.dart';
 
-
 /// Controller for the [CodeForge] code editor widget.
 ///
 /// This controller manages the text content, selection state, and various
@@ -26,13 +25,13 @@ import 'rope.dart';
 /// Example:
 /// ```dart
 /// final controller = CodeForgeController();
-/// controller.text = 'void main() {\n  print("Hello");\n}';
+/// controller.text = 'void main() {\n  debugPrint("Hello");\n}';
 ///
 /// // Access selection
-/// print(controller.selection);
+/// debugPrint(controller.selection);
 ///
 /// // Get specific line
-/// print(controller.getLineText(0)); // 'void main() {'
+/// debugPrint(controller.getLineText(0)); // 'void main() {'
 ///
 /// // Fold/unfold code
 /// controller.foldAll();
@@ -166,7 +165,7 @@ class CodeForgeController implements DeltaTextInputClient {
   /// Example:
   /// ```dart
   /// if (controller.isAiCompletionEnabled()) {
-  ///   print('AI completion is active');
+  ///   debugPrint('AI completion is active');
   /// }
   /// ```
   bool isAiCompletionEnabled() {

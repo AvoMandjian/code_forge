@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 /// Code formatter utilities for various languages
 class CodeFormatter {
   /// Helper to check if content contains Jinja tags
@@ -65,82 +67,92 @@ class CodeFormatter {
 
   /// Formats JSON code (supports Jinja tags)
   static String formatJson(String json) {
-    print('[DEBUG JSON Format] ==========================================');
-    print('[DEBUG JSON Format] Input JSON length: ${json.length}');
-    print(
+    debugPrint(
+      '[DEBUG JSON Format] ==========================================',
+    );
+    debugPrint('[DEBUG JSON Format] Input JSON length: ${json.length}');
+    debugPrint(
       '[DEBUG JSON Format] Input JSON (first 200 chars): ${json.length > 200 ? "${json.substring(0, 200)}..." : json}',
     );
-    print(
+    debugPrint(
       '[DEBUG JSON Format] Input JSON (last 200 chars): ${json.length > 200 ? "...${json.substring(json.length - 200)}" : json}',
     );
 
     // Check for Jinja tags
     final hasJinja = _hasJinjaTags(json);
-    print('[DEBUG JSON Format] Has Jinja tags: $hasJinja');
+    debugPrint('[DEBUG JSON Format] Has Jinja tags: $hasJinja');
 
     if (hasJinja) {
-      print('[DEBUG JSON Format] Processing JSON with Jinja tags...');
+      debugPrint('[DEBUG JSON Format] Processing JSON with Jinja tags...');
       // Format as hybrid: format JSON structure while preserving Jinja tags
       return _formatJsonWithJinja(json);
     }
 
     try {
       // Parse and pretty print JSON using dart:convert
-      print('[DEBUG JSON Format] Attempting to decode JSON...');
+      debugPrint('[DEBUG JSON Format] Attempting to decode JSON...');
       final dynamic decoded = jsonDecode(json);
-      print('[DEBUG JSON Format] JSON decoded successfully');
-      print('[DEBUG JSON Format] Decoded type: ${decoded.runtimeType}');
+      debugPrint('[DEBUG JSON Format] JSON decoded successfully');
+      debugPrint('[DEBUG JSON Format] Decoded type: ${decoded.runtimeType}');
 
       const indentStr = '  ';
-      print(
+      debugPrint(
         '[DEBUG JSON Format] Using indent string: "$indentStr" (${indentStr.length} spaces)',
       );
       const encoder = JsonEncoder.withIndent(indentStr);
 
-      print('[DEBUG JSON Format] Converting to formatted JSON...');
+      debugPrint('[DEBUG JSON Format] Converting to formatted JSON...');
       final formatted = encoder.convert(decoded);
-      print('[DEBUG JSON Format] Formatted JSON length: ${formatted.length}');
-      print(
+      debugPrint(
+        '[DEBUG JSON Format] Formatted JSON length: ${formatted.length}',
+      );
+      debugPrint(
         '[DEBUG JSON Format] Formatted JSON (first 300 chars): ${formatted.length > 300 ? "${formatted.substring(0, 300)}..." : formatted}',
       );
 
       // Check indentation by counting leading spaces in first few lines
       final lines = formatted.split('\n');
-      print(
+      debugPrint(
         '[DEBUG JSON Format] Total lines in formatted output: ${lines.length}',
       );
       if (lines.length > 1) {
-        print('[DEBUG JSON Format] First 5 lines with leading space counts:');
+        debugPrint(
+          '[DEBUG JSON Format] First 5 lines with leading space counts:',
+        );
         for (int i = 0; i < lines.length && i < 5; i++) {
           final leadingSpaces = lines[i].length - lines[i].trimLeft().length;
-          print(
+          debugPrint(
             '[DEBUG JSON Format]   Line $i: $leadingSpaces leading spaces | "${lines[i].length > 60 ? "${lines[i].substring(0, 60)}..." : lines[i]}"',
           );
         }
       }
 
-      print('[DEBUG JSON Format] ==========================================');
+      debugPrint(
+        '[DEBUG JSON Format] ==========================================',
+      );
       return formatted;
     } catch (e, stackTrace) {
-      print('[DEBUG JSON Format] ERROR: Failed to parse JSON');
-      print('[DEBUG JSON Format] Error: $e');
-      print('[DEBUG JSON Format] Stack trace: $stackTrace');
-      print('[DEBUG JSON Format] Returning original JSON');
-      print('[DEBUG JSON Format] ==========================================');
+      debugPrint('[DEBUG JSON Format] ERROR: Failed to parse JSON');
+      debugPrint('[DEBUG JSON Format] Error: $e');
+      debugPrint('[DEBUG JSON Format] Stack trace: $stackTrace');
+      debugPrint('[DEBUG JSON Format] Returning original JSON');
+      debugPrint(
+        '[DEBUG JSON Format] ==========================================',
+      );
       return json; // Return original if parsing fails
     }
   }
 
   /// Formats JSON with Jinja tags preserved
   static String _formatJsonWithJinja(String json) {
-    print('[DEBUG JSON Format] Formatting JSON with Jinja support...');
+    debugPrint('[DEBUG JSON Format] Formatting JSON with Jinja support...');
     final buffer = StringBuffer();
     final indentStr = '  ';
     int indent = 0;
 
     // Extract all Jinja tags with their positions
     final jinjaTags = _extractJinjaTags(json);
-    print('[DEBUG JSON Format] Found ${jinjaTags.length} Jinja tags');
+    debugPrint('[DEBUG JSON Format] Found ${jinjaTags.length} Jinja tags');
 
     // Try to format as JSON first, handling Jinja tags in string values
     try {
@@ -170,10 +182,10 @@ class CodeFormatter {
         formatted = formatted.replaceAll('"$placeholder"', originalTag);
       });
 
-      print('[DEBUG JSON Format] Successfully formatted JSON with Jinja');
+      debugPrint('[DEBUG JSON Format] Successfully formatted JSON with Jinja');
       return formatted;
     } catch (e) {
-      print(
+      debugPrint(
         '[DEBUG JSON Format] Failed to parse JSON with placeholders, using line-by-line formatting',
       );
       // Fallback: format line by line, preserving Jinja tags
@@ -257,7 +269,7 @@ class CodeFormatter {
 
       // If HTML is already formatted, skip tag pair processing and handle line by line
       if (isAlreadyFormatted) {
-        print('[DEBUG] Line: "$trimmed" | Indent before: $indent');
+        debugPrint('[DEBUG] Line: "$trimmed" | Indent before: $indent');
 
         // Check for Jinja closing tags first (before HTML closing tags)
         if (trimmed.startsWith('{% end')) {
@@ -265,7 +277,7 @@ class CodeFormatter {
           if (indent > 0) {
             indent--;
           }
-          print(
+          debugPrint(
             '[DEBUG]   -> Jinja closing tag | Indent after: $indent | Applied indent: ${indentStr.length * indent} spaces',
           );
           buffer.write(indentStr * indent);
@@ -291,19 +303,19 @@ class CodeFormatter {
             ];
             if (tagName != null && foldableTags.contains(tagName)) {
               // Write Jinja opening tag at current indent level
-              print(
+              debugPrint(
                 '[DEBUG]   -> Jinja opening tag ($tagName) | Indent before: $indent | Applied indent: ${indentStr.length * indent} spaces',
               );
               buffer.write(indentStr * indent);
               buffer.writeln(trimmed);
               // Increase indent AFTER writing the opening tag
               indent++;
-              print('[DEBUG]   -> Indent increased to: $indent');
+              debugPrint('[DEBUG]   -> Indent increased to: $indent');
               continue;
             }
           }
           // Other Jinja tags (like {% set %}, {% include %}, etc.) don't affect indent
-          print(
+          debugPrint(
             '[DEBUG]   -> Jinja tag (non-foldable) | Indent: $indent | Applied indent: ${indentStr.length * indent} spaces',
           );
           buffer.write(indentStr * indent);
@@ -317,7 +329,7 @@ class CodeFormatter {
           if (indent > 0) {
             indent--;
           }
-          print(
+          debugPrint(
             '[DEBUG]   -> HTML closing tag | Indent after: $indent | Applied indent: ${indentStr.length * indent} spaces',
           );
           buffer.write(indentStr * indent);
@@ -327,7 +339,7 @@ class CodeFormatter {
 
         // Check for HTML comments - treat as regular content (don't affect indent)
         if (trimmed.startsWith('<!--') && trimmed.endsWith('-->')) {
-          print(
+          debugPrint(
             '[DEBUG]   -> HTML comment | Indent: $indent | Applied indent: ${indentStr.length * indent} spaces',
           );
           buffer.write(indentStr * indent);
@@ -337,7 +349,7 @@ class CodeFormatter {
 
         // Check for self-closing tags
         if (trimmed.contains('/>')) {
-          print(
+          debugPrint(
             '[DEBUG]   -> Self-closing tag | Indent: $indent | Applied indent: ${indentStr.length * indent} spaces',
           );
           buffer.write(indentStr * indent);
@@ -355,7 +367,7 @@ class CodeFormatter {
 
           // If it's a self-contained tag, don't increase indent
           if (selfContainedMatch) {
-            print(
+            debugPrint(
               '[DEBUG]   -> Self-contained HTML tag | Indent: $indent | Applied indent: ${indentStr.length * indent} spaces',
             );
             buffer.write(indentStr * indent);
@@ -369,7 +381,7 @@ class CodeFormatter {
               !trimmed.endsWith('/>');
 
           // Write opening tag at current indent level
-          print(
+          debugPrint(
             '[DEBUG]   -> HTML opening tag (isOpeningTag: $isOpeningTag) | Indent before: $indent | Applied indent: ${indentStr.length * indent} spaces',
           );
           buffer.write(indentStr * indent);
@@ -379,13 +391,13 @@ class CodeFormatter {
           if (isOpeningTag) {
             // Increase indent AFTER writing the opening tag
             indent++;
-            print('[DEBUG]   -> Indent increased to: $indent');
+            debugPrint('[DEBUG]   -> Indent increased to: $indent');
           }
           continue;
         }
 
         // Regular content (indented one level from its parent tag)
-        print(
+        debugPrint(
           '[DEBUG]   -> Regular content | Indent: $indent | Applied indent: ${indentStr.length * indent} spaces',
         );
         buffer.write(indentStr * indent);

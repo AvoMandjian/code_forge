@@ -64,97 +64,13 @@ class _MyAppState extends State<MyApp> {
 
   @override
   void initState() {
-    _controller.text = """{# ============================
-   MACROS
-   ============================ #}
-
-{% macro json_string(value) -%}
-{{ value | replace('\\', '\\\\') | replace('"', '\\"') }}
-{%- endmacro %}
-
-{% macro comma_if_not_last(loop) -%}
-{% if not loop.last %},{% endif %}
-{%- endmacro %}
-
-{# ============================
-   ROOT OBJECT
-   ============================ #}
-
-{
-  "meta": {
-    "generated_at": "{{ generated_at | default("1970-01-01T00:00:00Z") }}",
-    "version": "{{ version | default("1.0.0") }}",
-    "environment": "{{ environment | default("production") }}",
-    "record_count": {{ users | length | default(0) }}
-  },
-
-  "settings": {
-    "features": {
-      "email_enabled": {{ settings.email_enabled | default(false) | lower }},
-      "sms_enabled": {{ settings.sms_enabled | default(false) | lower }},
-      "push_enabled": {{ settings.push_enabled | default(true) | lower }}
-    },
-    "limits": {
-      "max_users": {{ settings.max_users | default(1000) }},
-      "max_projects": {{ settings.max_projects | default(10) }}
-    }
-  },
-
-  "users": [
-    {% for user in users %}
-    {
-      "id": {{ user.id }},
-      "username": "{{ json_string(user.username) }}",
-      "email": "{{ json_string(user.email) }}",
-      "active": {{ user.active | default(true) | lower }},
-      "created_at": "{{ user.created_at }}",
-
-      "profile": {
-        "first_name": "{{ json_string(user.profile.first_name | default("")) }}",
-        "last_name": "{{ json_string(user.profile.last_name | default("")) }}",
-        "age": {{ user.profile.age | default(null) }},
-        "country": "{{ user.profile.country | default("AM") }}"
-      },
-
-      "roles": [
-        {% for role in user.roles %}
-        "{{ json_string(role) }}"{{ comma_if_not_last(loop) }}
-        {% endfor %}
-      ],
-
-      "permissions": {
-        "admin": {{ "admin" in user.roles | lower }},
-        "editor": {{ "editor" in user.roles | lower }},
-        "viewer": {{ "viewer" in user.roles | lower }}
-      },
-
-      "projects": [
-        {% for project in user.projects %}
-        {
-          "id": {{ project.id }},
-          "name": "{{ json_string(project.name) }}",
-          "status": "{{ project.status | default("inactive") }}",
-          "budget": {{ project.budget | default(0) }},
-          "tags": [
-            {% for tag in project.tags %}
-            "{{ json_string(tag) }}"{{ comma_if_not_last(loop) }}
-            {% endfor %}
-          ],
-          "created_at": "{{ project.created_at }}"
-        }{{ comma_if_not_last(loop) }}
-        {% endfor %}
-      ]
-    }{{ comma_if_not_last(loop) }}
-    {% endfor %}
-  ],
-
-  "statistics": {
-    "total_users": {{ users | length }},
-    "active_users": {{ users | selectattr("active") | list | length }},
-    "inactive_users": {{ users | rejectattr("active") | list | length }}
+    _controller.text = """
+ {
+    "id": 1,
+    "name": "John Doe",
+    "email": "john.doe@example.com"
   }
-}""";
-    _controller.setRulers([80]);
+  """;
     _updateRuler();
     _controller.disableAiCompletion();
 
@@ -388,7 +304,7 @@ class _MyAppState extends State<MyApp> {
                           //   ),
                           // ),
                           saveFile: () {
-                            print('saveFile: ${_controller.text}');
+                            debugPrint('saveFile: ${_controller.text}');
                           },
                           lineWrap: true,
                           lspConfig: snapshot.data,
