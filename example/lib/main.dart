@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:code_forge/code_forge.dart';
+import 'package:code_forge/code_forge/suggestion_model.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:re_highlight/languages/all.dart';

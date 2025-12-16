@@ -1,5 +1,6 @@
 import 'package:code_forge/code_forge.dart';
 import 'package:code_forge/code_forge/controller.dart';
+import 'package:code_forge/code_forge/suggestion_model.dart';
 
 /// Returns Go-specific suggestions.
 List<SuggestionModel> getGoSuggestions() {

@@ -4,6 +4,8 @@
 /// an opening tag (`<tag>`) or closing tag (`</tag>`).
 library;
 
+import 'package:code_forge/code_forge/suggestion_model.dart';
+
 import 'controller.dart';
 
 /// Represents the context of a tag completion request.

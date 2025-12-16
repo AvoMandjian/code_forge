@@ -1,5 +1,6 @@
 import 'package:code_forge/code_forge.dart';
 import 'package:code_forge/code_forge/controller.dart';
+import 'package:code_forge/code_forge/suggestion_model.dart';
 
 /// Returns PHP-specific suggestions.
 List<SuggestionModel> getPhpSuggestions() {

@@ -1,5 +1,6 @@
 import 'package:code_forge/code_forge.dart';
 import 'package:code_forge/code_forge/controller.dart';
+import 'package:code_forge/code_forge/suggestion_model.dart';
 import 'package:code_forge/code_forge/suggestions/get_sql_suggestions.dart';
 import 'package:code_forge/code_forge/suggestions/get_cpp_suggestions.dart';
 import 'package:code_forge/code_forge/suggestions/get_csharp_suggestions.dart';

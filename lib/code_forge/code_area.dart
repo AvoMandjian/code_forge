@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
 
+import 'package:code_forge/code_forge/suggestion_model.dart';
 import 'package:code_forge/code_forge/suggestions/initialize_language_specific_suggestions.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
