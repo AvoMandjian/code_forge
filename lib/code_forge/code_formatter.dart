@@ -2,6 +2,32 @@ import 'dart:convert';
 
 /// Code formatter utilities for various languages
 class CodeFormatter {
+  /// Helper to check if content contains Jinja tags
+  static bool _hasJinjaTags(String content) {
+    return RegExp(r'\{%[\s\S]*?%\}').hasMatch(content) ||
+        RegExp(r'\{\{[\s\S]*?\}\}').hasMatch(content);
+  }
+
+  /// Helper to extract Jinja tags from content
+  static List<({int start, int end, String tag})> _extractJinjaTags(
+    String content,
+  ) {
+    final tags = <({int start, int end, String tag})>[];
+    final blockPattern = RegExp(r'\{%[\s\S]*?%\}');
+    final varPattern = RegExp(r'\{\{[\s\S]*?\}\}');
+
+    for (final match in blockPattern.allMatches(content)) {
+      tags.add((start: match.start, end: match.end, tag: match.group(0)!));
+    }
+
+    for (final match in varPattern.allMatches(content)) {
+      tags.add((start: match.start, end: match.end, tag: match.group(0)!));
+    }
+
+    tags.sort((a, b) => a.start.compareTo(b.start));
+    return tags;
+  }
+
   /// Formats code based on the language type
   ///
   /// [rulerColumn] is an optional column position (e.g., from editor rulers)
@@ -16,15 +42,6 @@ class CodeFormatter {
     if (languageName == null) return null;
 
     final langLower = languageName.toLowerCase();
-
-    // Check if content contains Jinja tags - if so, format as Jinja regardless of language
-    final hasJinjaTags = RegExp(r'\{%[\s\S]*?%\}').hasMatch(code);
-    final hasHtmlTags = RegExp(r'<[^>]+>').hasMatch(code);
-
-    // If content has Jinja tags but no HTML tags, format as Jinja
-    if (hasJinjaTags && !hasHtmlTags) {
-      return formatJinja(code);
-    }
 
     if (langLower == 'json' || langLower.contains('json')) {
       return formatJson(code);
@@ -46,15 +63,159 @@ class CodeFormatter {
     return null;
   }
 
-  /// Formats JSON code
+  /// Formats JSON code (supports Jinja tags)
   static String formatJson(String json) {
+    print('[DEBUG JSON Format] ==========================================');
+    print('[DEBUG JSON Format] Input JSON length: ${json.length}');
+    print(
+      '[DEBUG JSON Format] Input JSON (first 200 chars): ${json.length > 200 ? "${json.substring(0, 200)}..." : json}',
+    );
+    print(
+      '[DEBUG JSON Format] Input JSON (last 200 chars): ${json.length > 200 ? "...${json.substring(json.length - 200)}" : json}',
+    );
+
+    // Check for Jinja tags
+    final hasJinja = _hasJinjaTags(json);
+    print('[DEBUG JSON Format] Has Jinja tags: $hasJinja');
+
+    if (hasJinja) {
+      print('[DEBUG JSON Format] Processing JSON with Jinja tags...');
+      // Format as hybrid: format JSON structure while preserving Jinja tags
+      return _formatJsonWithJinja(json);
+    }
+
     try {
       // Parse and pretty print JSON using dart:convert
+      print('[DEBUG JSON Format] Attempting to decode JSON...');
       final dynamic decoded = jsonDecode(json);
-      const encoder = JsonEncoder.withIndent('  ');
-      return encoder.convert(decoded);
-    } catch (e) {
+      print('[DEBUG JSON Format] JSON decoded successfully');
+      print('[DEBUG JSON Format] Decoded type: ${decoded.runtimeType}');
+
+      const indentStr = '  ';
+      print(
+        '[DEBUG JSON Format] Using indent string: "$indentStr" (${indentStr.length} spaces)',
+      );
+      const encoder = JsonEncoder.withIndent(indentStr);
+
+      print('[DEBUG JSON Format] Converting to formatted JSON...');
+      final formatted = encoder.convert(decoded);
+      print('[DEBUG JSON Format] Formatted JSON length: ${formatted.length}');
+      print(
+        '[DEBUG JSON Format] Formatted JSON (first 300 chars): ${formatted.length > 300 ? "${formatted.substring(0, 300)}..." : formatted}',
+      );
+
+      // Check indentation by counting leading spaces in first few lines
+      final lines = formatted.split('\n');
+      print(
+        '[DEBUG JSON Format] Total lines in formatted output: ${lines.length}',
+      );
+      if (lines.length > 1) {
+        print('[DEBUG JSON Format] First 5 lines with leading space counts:');
+        for (int i = 0; i < lines.length && i < 5; i++) {
+          final leadingSpaces = lines[i].length - lines[i].trimLeft().length;
+          print(
+            '[DEBUG JSON Format]   Line $i: $leadingSpaces leading spaces | "${lines[i].length > 60 ? "${lines[i].substring(0, 60)}..." : lines[i]}"',
+          );
+        }
+      }
+
+      print('[DEBUG JSON Format] ==========================================');
+      return formatted;
+    } catch (e, stackTrace) {
+      print('[DEBUG JSON Format] ERROR: Failed to parse JSON');
+      print('[DEBUG JSON Format] Error: $e');
+      print('[DEBUG JSON Format] Stack trace: $stackTrace');
+      print('[DEBUG JSON Format] Returning original JSON');
+      print('[DEBUG JSON Format] ==========================================');
       return json; // Return original if parsing fails
+    }
+  }
+
+  /// Formats JSON with Jinja tags preserved
+  static String _formatJsonWithJinja(String json) {
+    print('[DEBUG JSON Format] Formatting JSON with Jinja support...');
+    final buffer = StringBuffer();
+    final indentStr = '  ';
+    int indent = 0;
+
+    // Extract all Jinja tags with their positions
+    final jinjaTags = _extractJinjaTags(json);
+    print('[DEBUG JSON Format] Found ${jinjaTags.length} Jinja tags');
+
+    // Try to format as JSON first, handling Jinja tags in string values
+    try {
+      // Replace Jinja tags temporarily with placeholders
+      final placeholders = <String, String>{};
+      String processedJson = json;
+      int placeholderIndex = 0;
+
+      for (final tag in jinjaTags) {
+        final placeholder = '__JINJA_PLACEHOLDER_${placeholderIndex}__';
+        placeholders[placeholder] = tag.tag;
+        processedJson = processedJson.replaceRange(
+          tag.start,
+          tag.end,
+          '"$placeholder"',
+        );
+        placeholderIndex++;
+      }
+
+      // Format the JSON
+      final dynamic decoded = jsonDecode(processedJson);
+      final encoder = JsonEncoder.withIndent(indentStr);
+      var formatted = encoder.convert(decoded);
+
+      // Restore Jinja tags
+      placeholders.forEach((placeholder, originalTag) {
+        formatted = formatted.replaceAll('"$placeholder"', originalTag);
+      });
+
+      print('[DEBUG JSON Format] Successfully formatted JSON with Jinja');
+      return formatted;
+    } catch (e) {
+      print(
+        '[DEBUG JSON Format] Failed to parse JSON with placeholders, using line-by-line formatting',
+      );
+      // Fallback: format line by line, preserving Jinja tags
+      final lines = json.split('\n');
+      for (final line in lines) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty) {
+          buffer.writeln();
+          continue;
+        }
+
+        // Check for Jinja tags
+        if (_hasJinjaTags(trimmed)) {
+          // Format Jinja content
+          final jinjaFormatted = formatJinja(trimmed);
+          final jinjaLines = jinjaFormatted.split('\n');
+          for (final jinjaLine in jinjaLines) {
+            if (jinjaLine.trim().isNotEmpty) {
+              buffer.write(indentStr * indent);
+              buffer.writeln(jinjaLine);
+            }
+          }
+        } else {
+          // Regular JSON line
+          buffer.write(indentStr * indent);
+          buffer.writeln(trimmed);
+        }
+
+        // Update indent based on braces
+        final openBraces = '{['
+            .split('')
+            .where((c) => trimmed.contains(c))
+            .length;
+        final closeBraces = '}]'
+            .split('')
+            .where((c) => trimmed.contains(c))
+            .length;
+        indent += openBraces - closeBraces;
+        indent = indent.clamp(0, double.infinity).toInt();
+      }
+
+      return buffer.toString().trim();
     }
   }
 
@@ -475,8 +636,16 @@ class CodeFormatter {
     return false;
   }
 
-  /// Formats SQL code
+  /// Formats SQL code (supports Jinja tags)
   static String formatSql(String sql) {
+    // Check for Jinja tags
+    final hasJinja = _hasJinjaTags(sql);
+
+    if (hasJinja) {
+      // Format as hybrid: format SQL while preserving Jinja tags
+      return _formatSqlWithJinja(sql);
+    }
+
     final buffer = StringBuffer();
     int indent = 0;
     final indentStr = '  ';
@@ -538,6 +707,121 @@ class CodeFormatter {
             !upper.startsWith('ELSE')) {
           indent++;
           break;
+        }
+      }
+    }
+
+    return buffer.toString().trim();
+  }
+
+  /// Formats SQL with Jinja tags preserved
+  static String _formatSqlWithJinja(String sql) {
+    final buffer = StringBuffer();
+    int indent = 0;
+    final indentStr = '  ';
+
+    // SQL keywords that increase indent
+    final indentKeywords = [
+      'SELECT',
+      'FROM',
+      'WHERE',
+      'JOIN',
+      'INNER JOIN',
+      'LEFT JOIN',
+      'RIGHT JOIN',
+      'FULL JOIN',
+      'GROUP BY',
+      'ORDER BY',
+      'HAVING',
+      'UNION',
+      'INSERT',
+      'UPDATE',
+      'DELETE',
+      'CREATE',
+      'ALTER',
+      'CASE',
+      'WHEN',
+      'THEN',
+      'ELSE',
+      'END',
+    ];
+
+    // Keywords that decrease indent
+    final outdentKeywords = ['END', 'ELSE'];
+
+    final lines = sql.split('\n');
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) {
+        buffer.writeln();
+        continue;
+      }
+
+      // Check for Jinja closing tags first
+      if (trimmed.startsWith('{% end')) {
+        if (indent > 0) {
+          indent--;
+        }
+        buffer.write(indentStr * indent);
+        buffer.writeln(trimmed);
+        continue;
+      }
+
+      // Check for Jinja opening tags
+      if (trimmed.startsWith('{%')) {
+        final tagMatch = RegExp(r'\{%\s*(\w+)').firstMatch(trimmed);
+        if (tagMatch != null) {
+          final tagName = tagMatch.group(1)?.toLowerCase();
+          final foldableTags = [
+            'if',
+            'for',
+            'block',
+            'macro',
+            'filter',
+            'with',
+            'set',
+            'call',
+            'raw',
+          ];
+          if (tagName != null && foldableTags.contains(tagName)) {
+            buffer.write(indentStr * indent);
+            buffer.writeln(trimmed);
+            indent++;
+            continue;
+          }
+        }
+        // Non-foldable Jinja tag
+        buffer.write(indentStr * indent);
+        buffer.writeln(trimmed);
+        continue;
+      }
+
+      // Process SQL line (may contain Jinja expressions like {{ variable }})
+      final upper = trimmed.toUpperCase();
+
+      // Check for outdent keywords (but ignore if they're inside Jinja tags)
+      bool hasOutdent = false;
+      for (final keyword in outdentKeywords) {
+        if (upper.startsWith(keyword) && !_hasJinjaTags(trimmed)) {
+          indent = (indent - 1).clamp(0, double.infinity).toInt();
+          hasOutdent = true;
+          break;
+        }
+      }
+
+      buffer.write(indentStr * indent);
+      buffer.writeln(trimmed);
+
+      // Check for indent keywords (but ignore if they're inside Jinja tags)
+      if (!hasOutdent) {
+        for (final keyword in indentKeywords) {
+          if (upper.contains(keyword) &&
+              !upper.startsWith('END') &&
+              !upper.startsWith('ELSE') &&
+              !_hasJinjaTags(trimmed)) {
+            indent++;
+            break;
+          }
         }
       }
     }
