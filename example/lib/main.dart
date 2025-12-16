@@ -23,6 +23,8 @@ class _MyAppState extends State<MyApp> {
   final absFilePath = p.join(Directory.current.path, "lib/example_code.dart");
   String _selectedLanguage = 'html';
   String _selectedTheme = 'vs2015';
+  final _rulerController = TextEditingController(text: '80');
+  bool _aiCompletionEnabled = true;
 
   Future<LspConfig> getLsp() async {
     final absWorkspacePath = p.join(Directory.current.path, "lib");
@@ -143,7 +145,23 @@ class _MyAppState extends State<MyApp> {
 </html>
 """;
     _controller.setRulers([80]);
+    _updateRuler();
     super.initState();
+  }
+
+  void _updateRuler() {
+    final rulerValue = int.tryParse(_rulerController.text);
+    if (rulerValue != null && rulerValue > 0) {
+      _controller.setRulers([rulerValue]);
+    } else {
+      _controller.clearRulers();
+    }
+  }
+
+  @override
+  void dispose() {
+    _rulerController.dispose();
+    super.dispose();
   }
 
   @override
@@ -243,6 +261,59 @@ class _MyAppState extends State<MyApp> {
                           },
                           icon: const Icon(Icons.format_align_left),
                           label: const Text('Format'),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _aiCompletionEnabled = !_aiCompletionEnabled;
+                            });
+                            if (_aiCompletionEnabled) {
+                              _controller.enableAiCompletion();
+                            } else {
+                              _controller.disableAiCompletion();
+                            }
+                            ScaffoldMessenger.of(scaffoldContext).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  _aiCompletionEnabled
+                                      ? 'AI completion enabled'
+                                      : 'AI completion disabled',
+                                ),
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                          icon: Icon(
+                            _aiCompletionEnabled
+                                ? Icons.smart_toy
+                                : Icons.smart_toy_outlined,
+                          ),
+                          label: Text(
+                            _aiCompletionEnabled ? 'AI On' : 'AI Off',
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _aiCompletionEnabled
+                                ? Colors.green
+                                : Colors.grey,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 80,
+                          child: TextField(
+                            controller: _rulerController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Ruler',
+                              hintText: '80',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                              contentPadding: EdgeInsets.all(8),
+                            ),
+                            onSubmitted: (_) => _updateRuler(),
+                            onChanged: (_) => _updateRuler(),
+                          ),
                         ),
                       ],
                     ),
