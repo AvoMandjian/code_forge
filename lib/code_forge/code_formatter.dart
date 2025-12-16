@@ -47,8 +47,6 @@ class CodeFormatter {
     int indent = 0;
     final indentStr = '  ';
     final lines = html.split('\n');
-    final tagStack =
-        <String>[]; // Track opening tags to match with closing tags
 
     for (final line in lines) {
       final trimmed = line.trim();
@@ -57,18 +55,25 @@ class CodeFormatter {
         continue;
       }
 
-      // Check for closing tags
+      // Check if line contains both opening and closing tag (e.g., <h1>text</h1>)
+      final hasOpeningAndClosing = RegExp(
+        r'<[^>]+>.*</[^>]+>',
+      ).hasMatch(trimmed);
+      if (hasOpeningAndClosing) {
+        // Complete tag pair on one line - write at current indent, don't change indent
+        buffer.write(indentStr * indent);
+        buffer.writeln(trimmed);
+        continue;
+      }
+
+      // Check for closing tags first
       if (trimmed.startsWith('</')) {
-        // Decrease indent first so closing tag aligns with its opening tag
+        // Decrease indent BEFORE writing so closing tag aligns with its opening tag
         if (indent > 0) {
           indent--;
         }
         buffer.write(indentStr * indent);
         buffer.writeln(trimmed);
-        // Pop from stack if we have matching tags
-        if (tagStack.isNotEmpty) {
-          tagStack.removeLast();
-        }
         continue;
       }
 
@@ -81,22 +86,18 @@ class CodeFormatter {
 
       // Check for opening tags
       if (trimmed.startsWith('<') && trimmed.contains('>')) {
-        final tagMatch = RegExp(
-          r'<\s*([a-zA-Z][a-zA-Z0-9-]*)',
-        ).firstMatch(trimmed);
         final isOpeningTag =
             !trimmed.contains('/>') &&
             !_isVoidElement(trimmed) &&
             !trimmed.endsWith('/>');
 
+        // Write opening tag at current indent level
         buffer.write(indentStr * indent);
         buffer.writeln(trimmed);
 
         // If it's an opening tag (not self-closing or void), increase indent for content
         if (isOpeningTag) {
-          if (tagMatch != null) {
-            tagStack.add(tagMatch.group(1)!.toLowerCase());
-          }
+          // Increase indent AFTER writing the opening tag
           indent++;
         }
         continue;
