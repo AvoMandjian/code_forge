@@ -96,12 +96,79 @@ class CodeFormatter {
 
       // If HTML is already formatted, skip tag pair processing and handle line by line
       if (isAlreadyFormatted) {
-        // Check for closing tags first
+        print('[DEBUG] Line: "$trimmed" | Indent before: $indent');
+
+        // Check for Jinja closing tags first (before HTML closing tags)
+        if (trimmed.startsWith('{% end')) {
+          // Decrease indent BEFORE writing so closing tag aligns with its opening tag
+          if (indent > 0) {
+            indent--;
+          }
+          print(
+            '[DEBUG]   -> Jinja closing tag | Indent after: $indent | Applied indent: ${indentStr.length * indent} spaces',
+          );
+          buffer.write(indentStr * indent);
+          buffer.writeln(trimmed);
+          continue;
+        }
+
+        // Check for Jinja opening tags that affect indentation
+        if (trimmed.startsWith('{%')) {
+          final tagMatch = RegExp(r'\{%\s*(\w+)').firstMatch(trimmed);
+          if (tagMatch != null) {
+            final tagName = tagMatch.group(1)?.toLowerCase();
+            final foldableTags = [
+              'if',
+              'for',
+              'block',
+              'macro',
+              'filter',
+              'with',
+              'set',
+              'call',
+              'raw',
+            ];
+            if (tagName != null && foldableTags.contains(tagName)) {
+              // Write Jinja opening tag at current indent level
+              print(
+                '[DEBUG]   -> Jinja opening tag ($tagName) | Indent before: $indent | Applied indent: ${indentStr.length * indent} spaces',
+              );
+              buffer.write(indentStr * indent);
+              buffer.writeln(trimmed);
+              // Increase indent AFTER writing the opening tag
+              indent++;
+              print('[DEBUG]   -> Indent increased to: $indent');
+              continue;
+            }
+          }
+          // Other Jinja tags (like {% set %}, {% include %}, etc.) don't affect indent
+          print(
+            '[DEBUG]   -> Jinja tag (non-foldable) | Indent: $indent | Applied indent: ${indentStr.length * indent} spaces',
+          );
+          buffer.write(indentStr * indent);
+          buffer.writeln(trimmed);
+          continue;
+        }
+
+        // Check for HTML closing tags
         if (trimmed.startsWith('</')) {
           // Decrease indent BEFORE writing so closing tag aligns with its opening tag
           if (indent > 0) {
             indent--;
           }
+          print(
+            '[DEBUG]   -> HTML closing tag | Indent after: $indent | Applied indent: ${indentStr.length * indent} spaces',
+          );
+          buffer.write(indentStr * indent);
+          buffer.writeln(trimmed);
+          continue;
+        }
+
+        // Check for HTML comments - treat as regular content (don't affect indent)
+        if (trimmed.startsWith('<!--') && trimmed.endsWith('-->')) {
+          print(
+            '[DEBUG]   -> HTML comment | Indent: $indent | Applied indent: ${indentStr.length * indent} spaces',
+          );
           buffer.write(indentStr * indent);
           buffer.writeln(trimmed);
           continue;
@@ -109,19 +176,41 @@ class CodeFormatter {
 
         // Check for self-closing tags
         if (trimmed.contains('/>')) {
+          print(
+            '[DEBUG]   -> Self-closing tag | Indent: $indent | Applied indent: ${indentStr.length * indent} spaces',
+          );
           buffer.write(indentStr * indent);
           buffer.writeln(trimmed);
           continue;
         }
 
-        // Check for opening tags
+        // Check for HTML opening tags
         if (trimmed.startsWith('<') && trimmed.contains('>')) {
+          // Check if this is a self-contained tag (opening and closing on same line)
+          // e.g., <th>#</th>, <td>{{ value }}</td>
+          final selfContainedMatch = RegExp(
+            r'<([a-zA-Z][a-zA-Z0-9-]*)([^>]*)>.*?</\1>',
+          ).hasMatch(trimmed);
+
+          // If it's a self-contained tag, don't increase indent
+          if (selfContainedMatch) {
+            print(
+              '[DEBUG]   -> Self-contained HTML tag | Indent: $indent | Applied indent: ${indentStr.length * indent} spaces',
+            );
+            buffer.write(indentStr * indent);
+            buffer.writeln(trimmed);
+            continue;
+          }
+
           final isOpeningTag =
               !trimmed.contains('/>') &&
               !_isVoidElement(trimmed) &&
               !trimmed.endsWith('/>');
 
           // Write opening tag at current indent level
+          print(
+            '[DEBUG]   -> HTML opening tag (isOpeningTag: $isOpeningTag) | Indent before: $indent | Applied indent: ${indentStr.length * indent} spaces',
+          );
           buffer.write(indentStr * indent);
           buffer.writeln(trimmed);
 
@@ -129,11 +218,15 @@ class CodeFormatter {
           if (isOpeningTag) {
             // Increase indent AFTER writing the opening tag
             indent++;
+            print('[DEBUG]   -> Indent increased to: $indent');
           }
           continue;
         }
 
         // Regular content (indented one level from its parent tag)
+        print(
+          '[DEBUG]   -> Regular content | Indent: $indent | Applied indent: ${indentStr.length * indent} spaces',
+        );
         buffer.write(indentStr * indent);
         buffer.writeln(trimmed);
         continue;

@@ -22,7 +22,7 @@ class _MyAppState extends State<MyApp> {
   final _controller = CodeForgeController();
   final undoController = UndoRedoController();
   final absFilePath = p.join(Directory.current.path, "lib/example_code.dart");
-  String _selectedLanguage = 'html';
+  String _selectedLanguage = 'json';
   String _selectedTheme = 'vs2015';
   final _rulerController = TextEditingController(text: '80');
   bool _aiCompletionEnabled = false;
@@ -64,106 +64,96 @@ class _MyAppState extends State<MyApp> {
 
   @override
   void initState() {
-    _controller.text = """<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>{{ page_title | default("Admin Dashboard") }}</title>
+    _controller.text = """{# ============================
+   MACROS
+   ============================ #}
 
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
+{% macro json_string(value) -%}
+{{ value | replace('\\', '\\\\') | replace('"', '\\"') }}
+{%- endmacro %}
 
-<body>
+{% macro comma_if_not_last(loop) -%}
+{% if not loop.last %},{% endif %}
+{%- endmacro %}
 
-<div class="container">
+{# ============================
+   ROOT OBJECT
+   ============================ #}
 
-    <!-- HEADER -->
-    <div class="card header">
-        <h2>{{ app_name | default("My Application") }}</h2>
+{
+  "meta": {
+    "generated_at": "{{ generated_at | default("1970-01-01T00:00:00Z") }}",
+    "version": "{{ version | default("1.0.0") }}",
+    "environment": "{{ environment | default("production") }}",
+    "record_count": {{ users | length | default(0) }}
+  },
 
-        {% if current_user %}
-            <div>
-                Logged in as <strong>{{ current_user.name }}</strong>
-                {% if current_user.is_admin %}
-                    <span class="badge active">Admin</span>
-                {% else %}
-                    <span class="badge inactive">User</span>
-                {% endif %}
-            </div>
-        {% else %}
-            <span class="badge inactive">Guest</span>
-        {% endif %}
-    </div>
+  "settings": {
+    "features": {
+      "email_enabled": {{ settings.email_enabled | default(false) | lower }},
+      "sms_enabled": {{ settings.sms_enabled | default(false) | lower }},
+      "push_enabled": {{ settings.push_enabled | default(true) | lower }}
+    },
+    "limits": {
+      "max_users": {{ settings.max_users | default(1000) }},
+      "max_projects": {{ settings.max_projects | default(10) }}
+    }
+  },
 
-    <!-- FLASH MESSAGES -->
-    {% if messages %}
-        {% for msg in messages %}
-            <div class="card">
-                <strong>{{ msg.level | upper }}:</strong>
-                {{ msg.text }}
-            </div>
+  "users": [
+    {% for user in users %}
+    {
+      "id": {{ user.id }},
+      "username": "{{ json_string(user.username) }}",
+      "email": "{{ json_string(user.email) }}",
+      "active": {{ user.active | default(true) | lower }},
+      "created_at": "{{ user.created_at }}",
+
+      "profile": {
+        "first_name": "{{ json_string(user.profile.first_name | default("")) }}",
+        "last_name": "{{ json_string(user.profile.last_name | default("")) }}",
+        "age": {{ user.profile.age | default(null) }},
+        "country": "{{ user.profile.country | default("AM") }}"
+      },
+
+      "roles": [
+        {% for role in user.roles %}
+        "{{ json_string(role) }}"{{ comma_if_not_last(loop) }}
         {% endfor %}
-    {% endif %}
+      ],
 
-    <!-- USERS TABLE -->
-    <div class="card">
-        <h3>Users</h3>
+      "permissions": {
+        "admin": {{ "admin" in user.roles | lower }},
+        "editor": {{ "editor" in user.roles | lower }},
+        "viewer": {{ "viewer" in user.roles | lower }}
+      },
 
-        {% if users and users|length > 0 %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Status</th>
-                        <th>Joined</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for user in users %}
-                        <tr>
-                            <td>{{ loop.index }}</td>
-                            <td>{{ user.name }}</td>
-                            <td>{{ user.email }}</td>
-                            <td>
-                                {% if user.active %}
-                                    <span class="badge active">Active</span>
-                                {% else %}
-                                    <span class="badge inactive">Inactive</span>
-                                {% endif %}
-                            </td>
-                            <td>{{ user.created_at | date("Y-m-d") }}</td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        {% else %}
-            <p>No users found.</p>
-        {% endif %}
-    </div>
+      "projects": [
+        {% for project in user.projects %}
+        {
+          "id": {{ project.id }},
+          "name": "{{ json_string(project.name) }}",
+          "status": "{{ project.status | default("inactive") }}",
+          "budget": {{ project.budget | default(0) }},
+          "tags": [
+            {% for tag in project.tags %}
+            "{{ json_string(tag) }}"{{ comma_if_not_last(loop) }}
+            {% endfor %}
+          ],
+          "created_at": "{{ project.created_at }}"
+        }{{ comma_if_not_last(loop) }}
+        {% endfor %}
+      ]
+    }{{ comma_if_not_last(loop) }}
+    {% endfor %}
+  ],
 
-    <!-- STATISTICS -->
-    <div class="card">
-        <h3>Statistics</h3>
-
-        <ul>
-            <li>Total users: {{ stats.total_users | default(0) }}</li>
-            <li>Active users: {{ stats.active_users | default(0) }}</li>
-            <li>Inactive users: {{ stats.inactive_users | default(0) }}</li>
-        </ul>
-    </div>
-
-    <!-- FOOTER -->
-    <div class="footer">
-        &copy; {{ current_year }} {{ company_name | default("Your Company") }}.
-        Generated at {{ generated_at | date("Y-m-d H:i") }}.
-    </div>
-
-</div>
-
-</body>
-</html>""";
+  "statistics": {
+    "total_users": {{ users | length }},
+    "active_users": {{ users | selectattr("active") | list | length }},
+    "inactive_users": {{ users | rejectattr("active") | list | length }}
+  }
+}""";
     _controller.setRulers([80]);
     _updateRuler();
     _controller.disableAiCompletion();

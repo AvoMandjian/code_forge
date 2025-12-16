@@ -6,8 +6,6 @@ library;
 
 import 'package:code_forge/code_forge/suggestion_model.dart';
 
-import 'controller.dart';
-
 /// Represents the context of a tag completion request.
 class TagContext {
   /// Whether the cursor is within a tag context.
