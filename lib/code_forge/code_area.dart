@@ -4771,18 +4771,16 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     final contentLeft = offset.dx + _gutterWidth + (innerPadding?.left ?? 0);
     final contentRight = offset.dx + size.width;
 
-    // Draw each ruler
+    // Draw each ruler - always show if rulers are set, regardless of line content length
     for (final column in _rulers!) {
       // Calculate X position for this column
       final rulerX =
           contentLeft + (column * characterWidth) - horizontalScrollOffset;
 
-      // Only draw if ruler is within visible horizontal range
-      if (rulerX < contentLeft || rulerX > contentRight) {
-        continue;
-      }
-
+      // Only draw if ruler is within visible horizontal range (accounting for scroll)
+      // This ensures rulers are visible when scrolled into view, but not drawn when scrolled out
       // Draw vertical line spanning the full viewport height
+      // This ensures rulers are always visible regardless of line content length
       canvas.drawLine(
         Offset(rulerX, viewportTop),
         Offset(rulerX, viewportBottom),
