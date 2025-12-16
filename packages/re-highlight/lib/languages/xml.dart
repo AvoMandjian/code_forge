@@ -3,6 +3,7 @@
 import 'package:re_highlight/re_highlight.dart';
 
 final langXml = Mode(
+    subLanguage: 'jinja',
     refs: {
       '~contains~0~contains~0~contains~0': Mode(
           className: 'keyword', begin: "#?[a-z_][a-z1-9_-]+", illegal: "\\n"),

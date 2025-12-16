@@ -87,6 +87,7 @@ import 'isbl.dart';
 import 'java.dart';
 import 'javascript.dart';
 import 'jboss-cli.dart';
+import 'jinja.dart';
 import 'json.dart';
 import 'julia-repl.dart';
 import 'julia.dart';
@@ -290,6 +291,9 @@ final builtinLanguages = {
   'java': langJava,
   'javascript': langJavascript,
   'jboss-cli': langJbossCli,
+  'jinja': langJinja,
+  'jinja2': langJinja,
+  'j2': langJinja,
   'json': langJson,
   'julia': langJulia,
   'julia-repl': langJuliaRepl,

@@ -21,7 +21,7 @@ class _MyAppState extends State<MyApp> {
   final _controller = CodeForgeController();
   final undoController = UndoRedoController();
   final absFilePath = p.join(Directory.current.path, "lib/example_code.dart");
-  String _selectedLanguage = 'html';
+  String _selectedLanguage = 'json';
   String _selectedTheme = 'vs2015';
 
   Future<LspConfig> getLsp() async {
@@ -56,7 +56,9 @@ class _MyAppState extends State<MyApp> {
                       child: DropdownButton<String>(
                         value: _selectedLanguage,
                         isExpanded: true,
-                        items: ['html', 'json', 'sql'].map((String key) {
+                        items: ['jinja', 'html', 'json', 'sql'].map((
+                          String key,
+                        ) {
                           return DropdownMenuItem<String>(
                             value: key,
                             child: Text(key),
@@ -112,7 +114,6 @@ class _MyAppState extends State<MyApp> {
                         model: Gemini(
                           apiKey: Platform.environment['GEMINI_API_KEY'] ?? '',
                         ),
-                        debounceTime: 300,
                       ),
                       lineWrap: true,
                       lspConfig: snapshot.data,

@@ -3,6 +3,7 @@
 import 'package:re_highlight/re_highlight.dart';
 
 final langJson = Mode(
+    subLanguage: 'jinja',
     refs: {},
     name: "JSON",
     keywords: {

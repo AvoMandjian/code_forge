@@ -3,6 +3,7 @@
 import 'package:re_highlight/re_highlight.dart';
 
 final langDart = Mode(
+    subLanguage: 'jinja',
     refs: {
       '~contains~0': Mode(className: 'string', variants: <Mode>[
         Mode(begin: "r'''", end: "'''"),

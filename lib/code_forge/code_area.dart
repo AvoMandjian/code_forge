@@ -9,6 +9,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:re_highlight/languages/dart.dart';
+import 'package:re_highlight/languages/jinja.dart';
 import 'package:re_highlight/re_highlight.dart';
 import 'package:re_highlight/styles/vs2015.dart';
 
@@ -2963,6 +2964,50 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     if (!enableFolding) return null;
 
     final line = controller.getLineText(lineIndex);
+
+    // Jinja template tag folding: {% if %}, {% for %}, {% block %}, etc.
+    if (_language == langJinja || _language.name == 'Jinja') {
+      final jinjaTagMatch = RegExp(r'\{%\s*(\w+)').firstMatch(line);
+      if (jinjaTagMatch != null) {
+        final tagName = jinjaTagMatch.group(1);
+        // Check if this is a foldable opening tag
+        final foldableTags = {
+          'if',
+          'for',
+          'block',
+          'macro',
+          'filter',
+          'with',
+          'set',
+          'call',
+          'raw',
+        };
+
+        if (tagName != null && foldableTags.contains(tagName.toLowerCase())) {
+          final tagNameLower = tagName.toLowerCase();
+          int depth = 1;
+
+          for (int i = lineIndex + 1; i < controller.lineCount; i++) {
+            final checkLine = controller.getLineText(i).toLowerCase();
+
+            // Check for matching end tag (case-insensitive)
+            final endTagRegex = RegExp(r'\{%\s*end' + tagNameLower + r'\s*%\}');
+            if (endTagRegex.hasMatch(checkLine)) {
+              depth--;
+              if (depth == 0) {
+                return FoldRange(lineIndex, i);
+              }
+            }
+
+            // Check for nested opening tags of the same type (case-insensitive)
+            final nestedTagRegex = RegExp(r'\{%\s*' + tagNameLower + r'\s*');
+            if (nestedTagRegex.hasMatch(checkLine)) {
+              depth++;
+            }
+          }
+        }
+      }
+    }
 
     if (line.contains('{')) {
       int braceCount = 0;
