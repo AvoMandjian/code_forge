@@ -606,6 +606,7 @@ class _CodeForgeState extends State<CodeForge>
           final matchingSuggestions = _checkTriggerPatterns(
             textBeforeCursor,
             textAfterCursor,
+            cursorPosition,
           );
           if (matchingSuggestions.isNotEmpty) {
             // Show matching custom suggestions
@@ -674,6 +675,7 @@ class _CodeForgeState extends State<CodeForge>
         final matchingSuggestions = _checkTriggerPatterns(
           textBeforeCursor,
           textAfterCursor,
+          cursorPosition,
         );
         if (matchingSuggestions.isNotEmpty) {
           // Show matching custom suggestions
@@ -774,16 +776,101 @@ class _CodeForgeState extends State<CodeForge>
     return match?.group(0) ?? '';
   }
 
+  /// Checks if the cursor is within a Jinja block (`{% ... %}` or `{{ ... }}`).
+  ///
+  /// Searches backwards from the cursor for opening tags (`{%` or `{{`) and
+  /// forwards for closing tags (`%}` or `}}`), ensuring they match correctly.
+  ///
+  /// Returns true if the cursor is between matching Jinja tags.
+  bool _isCursorInJinjaBlock(
+    String textBeforeCursor,
+    String? textAfterCursor,
+    int cursorPosition,
+  ) {
+    textAfterCursor ??= '';
+
+    // Find the nearest opening tag before cursor
+    int statementOpenIndex = textBeforeCursor.lastIndexOf('{%');
+    int expressionOpenIndex = textBeforeCursor.lastIndexOf('{{');
+
+    // Determine which type of block we're potentially in
+    bool inStatementBlock = statementOpenIndex != -1;
+    bool inExpressionBlock = expressionOpenIndex != -1;
+
+    // If we found both, use the one closest to cursor
+    if (inStatementBlock && inExpressionBlock) {
+      if (statementOpenIndex > expressionOpenIndex) {
+        inExpressionBlock = false;
+      } else {
+        inStatementBlock = false;
+      }
+    }
+
+    if (!inStatementBlock && !inExpressionBlock) {
+      return false;
+    }
+
+    // Find the corresponding closing tag after cursor
+    int closingIndex = -1;
+    if (inStatementBlock) {
+      closingIndex = textAfterCursor.indexOf('%}');
+    } else if (inExpressionBlock) {
+      closingIndex = textAfterCursor.indexOf('}}');
+    }
+
+    if (closingIndex == -1) {
+      // No closing tag found, but we might be typing it
+      // Check if we're in an incomplete block (opening without closing)
+      // For filter suggestions, we allow incomplete blocks
+      return true;
+    }
+
+    // Verify the block is properly formed
+    // Check that there's no unmatched closing tag before our opening tag
+    final openIndex = inStatementBlock
+        ? statementOpenIndex
+        : expressionOpenIndex;
+    final openTag = inStatementBlock ? '{%' : '{{';
+    final closeTag = inStatementBlock ? '%}' : '}}';
+
+    // Count nested blocks between opening and cursor
+    final textBetween = textBeforeCursor.substring(openIndex + 2);
+
+    // Count opening and closing tags in the text between opening tag and cursor
+    int openCount = textBetween.split(openTag).length - 1;
+    int closeCount = textBetween.split(closeTag).length - 1;
+
+    // If we have more closing tags than opening tags before cursor, we're outside
+    if (closeCount > openCount) {
+      return false;
+    }
+
+    // Check if there are any unmatched closing tags before our opening tag
+    final beforeOpen = textBeforeCursor.substring(0, openIndex);
+    final unmatchedCloses =
+        (beforeOpen.split(closeTag).length - 1) -
+        (beforeOpen.split(openTag).length - 1);
+    if (unmatchedCloses > 0) {
+      // There are unmatched closing tags, so we might be in a nested block
+      // This is acceptable - we're still in a Jinja block
+    }
+
+    return true;
+  }
+
   /// Checks for matching trigger patterns in the text before cursor.
   ///
   /// Returns a list of suggestions whose trigger patterns match as a prefix
   /// of the text before the cursor. Handles multiple triggers by prioritizing
   /// longest matches first. Also handles cases where the cursor is in the middle
   /// of a trigger pattern (e.g., "{{|}}" where | is cursor).
+  ///
+  /// Validates context requirements before including suggestions in the results.
   List<SuggestionModel> _checkTriggerPatterns(
-    String textBeforeCursor, [
+    String textBeforeCursor,
     String? textAfterCursor,
-  ]) {
+    int cursorPosition,
+  ) {
     final registeredSuggestions = _controller.registeredCustomSuggestions;
     if (registeredSuggestions.isEmpty) {
       return [];
@@ -817,10 +904,19 @@ class _CodeForgeState extends State<CodeForge>
         // Only add if we haven't already matched this exact trigger
         if (!matchedTriggers.contains(trigger)) {
           matchedTriggers.add(trigger);
-          // Add all suggestions with this trigger
-          matchingSuggestions.addAll(
-            registeredSuggestions.where((s) => s.triggeredAt == trigger),
-          );
+          // Add all suggestions with this trigger, validating context
+          final suggestionsWithTrigger = registeredSuggestions
+              .where((s) => s.triggeredAt == trigger)
+              .where(
+                (s) => _validateSuggestionContext(
+                  s,
+                  textBeforeCursor,
+                  textAfterCursor,
+                  cursorPosition,
+                ),
+              )
+              .toList();
+          matchingSuggestions.addAll(suggestionsWithTrigger);
         }
       } else if (trigger.length <= textToCheck.length) {
         // Check if trigger is a prefix of what we're typing (for partial matches)
@@ -832,9 +928,18 @@ class _CodeForgeState extends State<CodeForge>
           // Partial match - user is typing the trigger
           if (!matchedTriggers.contains(trigger)) {
             matchedTriggers.add(trigger);
-            matchingSuggestions.addAll(
-              registeredSuggestions.where((s) => s.triggeredAt == trigger),
-            );
+            final suggestionsWithTrigger = registeredSuggestions
+                .where((s) => s.triggeredAt == trigger)
+                .where(
+                  (s) => _validateSuggestionContext(
+                    s,
+                    textBeforeCursor,
+                    textAfterCursor,
+                    cursorPosition,
+                  ),
+                )
+                .toList();
+            matchingSuggestions.addAll(suggestionsWithTrigger);
           }
         }
       }
@@ -851,30 +956,18 @@ class _CodeForgeState extends State<CodeForge>
             // Cursor is in the middle of the trigger pattern
             if (!matchedTriggers.contains(trigger)) {
               matchedTriggers.add(trigger);
-              matchingSuggestions.addAll(
-                registeredSuggestions.where((s) => s.triggeredAt == trigger),
-              );
-            }
-            break;
-          }
-        }
-      }
-
-      // Check if cursor is in the middle of the trigger pattern
-      // e.g., trigger is "{{}}" and we have "{{" before cursor and "}}" after cursor
-      if (textAfterCursor != null && trigger.length > 2) {
-        // Try to find if the trigger pattern spans across the cursor
-        for (int i = 1; i < trigger.length; i++) {
-          final triggerPrefix = trigger.substring(0, i);
-          final triggerSuffix = trigger.substring(i);
-          if (textBeforeCursor.endsWith(triggerPrefix) &&
-              textAfterCursor.startsWith(triggerSuffix)) {
-            // Cursor is in the middle of the trigger pattern
-            if (!matchedTriggers.contains(trigger)) {
-              matchedTriggers.add(trigger);
-              matchingSuggestions.addAll(
-                registeredSuggestions.where((s) => s.triggeredAt == trigger),
-              );
+              final suggestionsWithTrigger = registeredSuggestions
+                  .where((s) => s.triggeredAt == trigger)
+                  .where(
+                    (s) => _validateSuggestionContext(
+                      s,
+                      textBeforeCursor,
+                      textAfterCursor,
+                      cursorPosition,
+                    ),
+                  )
+                  .toList();
+              matchingSuggestions.addAll(suggestionsWithTrigger);
             }
             break;
           }
@@ -883,6 +976,33 @@ class _CodeForgeState extends State<CodeForge>
     }
 
     return matchingSuggestions;
+  }
+
+  /// Validates if a suggestion's context requirement is satisfied.
+  ///
+  /// Returns true if the suggestion should be shown based on its context
+  /// requirement, false otherwise.
+  bool _validateSuggestionContext(
+    SuggestionModel suggestion,
+    String textBeforeCursor,
+    String? textAfterCursor,
+    int cursorPosition,
+  ) {
+    final context = suggestion.context;
+    if (context == null || context == SuggestionContext.none) {
+      return true; // No context restriction
+    }
+
+    switch (context) {
+      case SuggestionContext.jinjaBlock:
+        return _isCursorInJinjaBlock(
+          textBeforeCursor,
+          textAfterCursor,
+          cursorPosition,
+        );
+      case SuggestionContext.none:
+        return true;
+    }
   }
 
   int _scoreMatch(String label, String prefix) {

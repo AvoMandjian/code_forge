@@ -1,3 +1,12 @@
+/// Context requirements for suggestion validation.
+enum SuggestionContext {
+  /// No context restriction - suggestion can appear anywhere.
+  none,
+
+  /// Cursor must be within Jinja statement blocks (`{% ... %}`) or expression blocks (`{{ ... }}`).
+  jinjaBlock,
+}
+
 /// Model representing a custom suggestion item for the code editor.
 ///
 /// Each suggestion contains:
@@ -5,6 +14,7 @@
 /// - [replacedOnClick]: The text inserted when the suggestion is selected
 /// - [description]: Optional description text shown below the label
 /// - [triggeredAt]: The string pattern that triggers this suggestion when typed
+/// - [context]: Optional context requirement for when the suggestion should be shown
 class SuggestionModel {
   /// The text displayed in the suggestion list.
   final String label;
@@ -21,6 +31,12 @@ class SuggestionModel {
   /// will be triggered. For example, if [triggeredAt] is "{{}}", typing
   /// "{{}}" will show the suggestions.
   final String triggeredAt;
+
+  /// The context requirement for this suggestion.
+  ///
+  /// Returns the context that must be satisfied for this suggestion to be shown.
+  /// Defaults to [SuggestionContext.none] (no restriction).
+  SuggestionContext? get context => SuggestionContext.none;
 
   /// Creates a [SuggestionModel] instance.
   ///
@@ -79,4 +95,25 @@ class SuggestionModel {
   int get hashCode {
     return Object.hash(label, replacedOnClick, description, triggeredAt);
   }
+}
+
+class SuggestionModelJinja extends SuggestionModel {
+  SuggestionModelJinja({
+    required super.label,
+    required super.replacedOnClick,
+    required super.triggeredAt,
+    super.description,
+  });
+
+  @override
+  SuggestionContext? get context => SuggestionContext.jinjaBlock;
+}
+
+class SuggestionModelHtml extends SuggestionModel {
+  SuggestionModelHtml({
+    required super.label,
+    required super.replacedOnClick,
+    required super.triggeredAt,
+    super.description,
+  });
 }
