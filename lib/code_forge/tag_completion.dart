@@ -4,6 +4,8 @@
 /// an opening tag (`<tag>`) or closing tag (`</tag>`).
 library;
 
+import 'controller.dart';
+
 /// Represents the context of a tag completion request.
 class TagContext {
   /// Whether the cursor is within a tag context.
@@ -520,50 +522,108 @@ class TagCompletion {
   /// [text] is the full document text.
   /// [cursorPosition] is the current cursor position.
   /// [language] is the language name ('html' or 'jinja').
+  /// [registeredSuggestions] is the list of registered custom suggestions from the controller.
   ///
-  /// Returns a list of tag suggestions matching the prefix.
+  /// Returns a list of tag suggestions (SuggestionModel) matching the prefix with descriptions.
   /// When inside `{% %}`, only Jinja tags are shown.
   /// When inside `<>`, only HTML tags are shown.
-  static List<String> getTagSuggestions(
+  static List<SuggestionModel> getTagSuggestions(
     String text,
     int cursorPosition,
-    String? language,
-  ) {
+    String? language, {
+    List<SuggestionModel>? registeredSuggestions,
+  }) {
     final context = analyzeTagContext(text, cursorPosition);
 
     if (!context.isInTag) {
       return [];
     }
 
-    // Determine which tag list to use based on tag context first
-    List<String> availableTags = [];
+    // Determine which suggestions to use based on tag context
+    List<SuggestionModel> availableSuggestions = [];
 
-    if (context.isJinjaTag) {
-      // Inside {% %} - only show Jinja tags
-      availableTags = List.from(jinjaTags);
-    } else {
-      // Inside <> - show HTML tags
-      // If the base language is Jinja, also include Jinja tags
-      availableTags = List.from(htmlTags);
-      if (language?.toLowerCase() == 'jinja' ||
-          language?.toLowerCase() == 'jinja2') {
-        // For Jinja templates, also include Jinja tags when in HTML context
-        availableTags.addAll(jinjaTags);
+    if (registeredSuggestions != null && registeredSuggestions.isNotEmpty) {
+      // Use registered suggestions directly to preserve descriptions
+      if (context.isJinjaTag) {
+        // Inside {% %} - filter Jinja suggestions triggered at '{%'
+        availableSuggestions = List<SuggestionModel>.from(
+          registeredSuggestions.where((s) => s.triggeredAt == '{%'),
+        );
+      } else {
+        // Inside <> - filter HTML suggestions triggered at '<'
+        availableSuggestions = List<SuggestionModel>.from(
+          registeredSuggestions.where((s) => s.triggeredAt == '<'),
+        );
+
+        // If the base language is Jinja, also include Jinja tags
+        if (language?.toLowerCase() == 'jinja' ||
+            language?.toLowerCase() == 'jinja2') {
+          final jinjaSuggestions = List<SuggestionModel>.from(
+            registeredSuggestions.where((s) => s.triggeredAt == '{%'),
+          );
+          availableSuggestions.addAll(jinjaSuggestions);
+        }
       }
+    } else {
+      // Fallback to static lists - create SuggestionModel objects from tag names
+      List<String> availableTags = [];
+      if (context.isJinjaTag) {
+        availableTags = List.from(jinjaTags);
+      } else {
+        availableTags = List.from(htmlTags);
+        if (language?.toLowerCase() == 'jinja' ||
+            language?.toLowerCase() == 'jinja2') {
+          availableTags.addAll(jinjaTags);
+        }
+      }
+
+      // Convert tag names to SuggestionModel objects
+      availableSuggestions = availableTags.map((tag) {
+        final isJinja = context.isJinjaTag || jinjaTags.contains(tag);
+        final template = getTagTemplate(tag, false, isJinjaTag: isJinja);
+        String replacedOnClick;
+        if (template != null) {
+          final processedTemplate = processTagTemplate(template);
+          replacedOnClick = isJinja
+              ? '{% $processedTemplate'
+              : '<$processedTemplate';
+        } else {
+          replacedOnClick = isJinja ? '{% $tag %}' : '<$tag></$tag>';
+        }
+
+        return SuggestionModel(
+          label: tag,
+          description: 'Insert a $tag ${isJinja ? 'Jinja' : 'HTML'} tag',
+          replacedOnClick: replacedOnClick,
+          triggeredAt: isJinja ? '{%' : '<',
+        );
+      }).toList();
     }
 
-    // Filter by prefix if present
+    // Filter by prefix if present (match against extracted tag name)
     if (context.prefix.isNotEmpty) {
       final lowerPrefix = context.prefix.toLowerCase();
-      availableTags = availableTags
-          .where((tag) => tag.toLowerCase().startsWith(lowerPrefix))
-          .toList();
+      availableSuggestions = availableSuggestions.where((suggestion) {
+        final tagName = _extractTagNameFromSuggestion(
+          suggestion,
+          isJinja: context.isJinjaTag,
+        );
+        return tagName.toLowerCase().startsWith(lowerPrefix);
+      }).toList();
     }
 
-    // Sort suggestions (exact prefix matches first, then alphabetical)
-    availableTags.sort((a, b) {
-      final aLower = a.toLowerCase();
-      final bLower = b.toLowerCase();
+    // Sort suggestions (exact prefix matches first, then alphabetical by tag name)
+    availableSuggestions.sort((a, b) {
+      final aTagName = _extractTagNameFromSuggestion(
+        a,
+        isJinja: context.isJinjaTag,
+      );
+      final bTagName = _extractTagNameFromSuggestion(
+        b,
+        isJinja: context.isJinjaTag,
+      );
+      final aLower = aTagName.toLowerCase();
+      final bLower = bTagName.toLowerCase();
       final prefixLower = context.prefix.toLowerCase();
 
       // Exact prefix match gets priority
@@ -574,10 +634,40 @@ class TagCompletion {
         return 1;
       }
 
-      return a.compareTo(b);
+      return aTagName.compareTo(bTagName);
     });
 
-    return availableTags;
+    return availableSuggestions;
+  }
+
+  /// Extracts tag name from a suggestion's replacedOnClick content.
+  ///
+  /// For HTML tags, extracts from patterns like "<div>", "<span>", etc.
+  /// For Jinja tags, extracts from patterns like "{% if %}", "{% for %}", etc.
+  static String _extractTagNameFromSuggestion(
+    SuggestionModel suggestion, {
+    required bool isJinja,
+  }) {
+    final content = suggestion.replacedOnClick;
+
+    if (isJinja) {
+      // Extract from patterns like "{% if condition %}", "{% for item %}", etc.
+      final jinjaPattern = RegExp(r'{%\s*(\w+)');
+      final match = jinjaPattern.firstMatch(content);
+      if (match != null && match.groupCount >= 1) {
+        return match.group(1) ?? '';
+      }
+      return '';
+    } else {
+      // Extract from patterns like "<div>", "<span>", "<a href="">", etc.
+      final htmlPattern = RegExp(r'<(\w+)');
+      final match = htmlPattern.firstMatch(content);
+      if (match != null && match.groupCount >= 1) {
+        return match.group(1) ?? '';
+      }
+      // Fallback: try to extract from label (capitalized tag name)
+      return suggestion.label.toLowerCase();
+    }
   }
 
   /// Checks if the current language supports tag completion.

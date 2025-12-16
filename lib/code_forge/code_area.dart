@@ -289,6 +289,11 @@ class _CodeForgeState extends State<CodeForge>
     // Sync widget language back to controller if controller doesn't have one
     if (_controller.currentLanguage == null && widget.language != null) {
       _controller.currentLanguage = widget.language;
+      // Initialize language-specific suggestions
+      _controller.initializeLanguageSpecificSuggestions();
+    } else if (_controller.currentLanguage != null) {
+      // Initialize suggestions if language is already set
+      _controller.initializeLanguageSpecificSuggestions();
     }
     _suggestionNotifier = ValueNotifier(null);
     _hoverNotifier = ValueNotifier(null);
@@ -434,6 +439,7 @@ class _CodeForgeState extends State<CodeForge>
       if (_controller.currentLanguage != null &&
           _controller.currentLanguage != _language) {
         _language = _controller.currentLanguage!;
+        // Language changed - suggestions will be re-initialized by controller
         styleChanged = true;
       }
       if (_controller.currentTheme != null &&
@@ -568,6 +574,7 @@ class _CodeForgeState extends State<CodeForge>
               text,
               cursorPosition,
               language,
+              registeredSuggestions: _controller.registeredCustomSuggestions,
             );
             if (tagSuggestions.isNotEmpty) {
               _suggestions = tagSuggestions;
@@ -694,6 +701,7 @@ class _CodeForgeState extends State<CodeForge>
             text,
             cursorPosition,
             _controller.currentLanguage?.name,
+            registeredSuggestions: _controller.registeredCustomSuggestions,
           );
           if (tagSuggestions.isNotEmpty) {
             _suggestions = tagSuggestions;
@@ -908,8 +916,12 @@ class _CodeForgeState extends State<CodeForge>
 
   void _sortSuggestions(String prefix) {
     _suggestions.sort((a, b) {
-      final aLabel = a is LspCompletion ? a.label : a.toString();
-      final bLabel = b is LspCompletion ? b.label : b.toString();
+      final aLabel = a is LspCompletion
+          ? a.label
+          : (a is SuggestionModel ? a.label : a.toString());
+      final bLabel = b is LspCompletion
+          ? b.label
+          : (b is SuggestionModel ? b.label : b.toString());
       final aScore = _scoreMatch(aLabel, prefix);
       final bScore = _scoreMatch(bLabel, prefix);
 
@@ -2011,326 +2023,391 @@ class _CodeForgeState extends State<CodeForge>
                       _sugSelIndex = 0;
                       return SizedBox.shrink();
                     }
-                    return Positioned(
-                      width: screenWidth < 700
-                          ? screenWidth * 0.63
-                          : screenWidth * 0.3,
-                      top: offset.dy + (widget.textStyle?.fontSize ?? 14) + 10,
-                      left: offset.dx,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxHeight: 400,
-                          maxWidth: 400,
-                          minWidth: 70,
-                        ),
-                        child: Card(
-                          shape: _suggestionStyle.shape,
-                          elevation: _suggestionStyle.elevation,
-                          color: _suggestionStyle.backgroundColor,
-                          margin: EdgeInsets.zero,
-                          child: RawScrollbar(
-                            thumbVisibility: true,
-                            thumbColor: _editorTheme['root']!.color!.withAlpha(
-                              80,
+                    // Get the selected suggestion to check for description
+                    final selectedSuggestion = _sugSelIndex < sugg.length
+                        ? sugg[_sugSelIndex]
+                        : null;
+                    final hasDescription =
+                        selectedSuggestion is SuggestionModel &&
+                        selectedSuggestion.description != null &&
+                        selectedSuggestion.description!.isNotEmpty;
+
+                    final descriptionWidgets = <Widget>[];
+                    if (hasDescription) {
+                      final suggestion = selectedSuggestion;
+                      descriptionWidgets.add(
+                        Positioned(
+                          top:
+                              offset.dy +
+                              (widget.textStyle?.fontSize ?? 14) +
+                              10,
+                          left:
+                              offset.dx +
+                              (screenWidth < 700
+                                  ? screenWidth * 0.63
+                                  : screenWidth * 0.3) +
+                              8,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxHeight: 400,
+                              maxWidth: screenWidth < 700
+                                  ? screenWidth * 0.3
+                                  : 400,
+                              minWidth: 200,
                             ),
-                            controller: _suggScrollController,
-                            child: ListView.builder(
-                              itemExtent:
-                                  (widget.textStyle?.fontSize ?? 14) + 6.5,
-                              controller: _suggScrollController,
-                              padding: EdgeInsets.only(right: 5),
-                              shrinkWrap: true,
-                              itemCount: sugg.length,
-                              itemBuilder: (_, indx) {
-                                final item = sugg[indx];
-                                return Container(
-                                  color: _sugSelIndex == indx
-                                      ? Color(0xff024281)
-                                      : Colors.transparent,
-                                  child: InkWell(
-                                    canRequestFocus: false,
-                                    hoverColor: _suggestionStyle.hoverColor,
-                                    focusColor: _suggestionStyle.focusColor,
-                                    splashColor: _suggestionStyle.splashColor,
-                                    onTap: () {
-                                      if (mounted) {
-                                        setState(() {
-                                          _sugSelIndex = indx;
+                            child: Card(
+                              shape: _suggestionStyle.shape,
+                              elevation: _suggestionStyle.elevation,
+                              color: _suggestionStyle.backgroundColor,
+                              margin: EdgeInsets.zero,
+                              child: Padding(
+                                padding: const EdgeInsets.all(12.0),
+                                child: SingleChildScrollView(
+                                  child: MarkdownBlock(
+                                    data: suggestion.description!,
+                                    config: MarkdownConfig.darkConfig.copy(
+                                      configs: [
+                                        PConfig(
+                                          textStyle: _suggestionStyle.textStyle,
+                                        ),
+                                        PreConfig(
+                                          language:
+                                              widget.lspConfig?.languageId
+                                                  .toLowerCase() ??
+                                              "dart",
+                                          theme: _editorTheme,
+                                          textStyle: TextStyle(
+                                            fontSize:
+                                                _suggestionStyle
+                                                    .textStyle
+                                                    .fontSize ??
+                                                14,
+                                          ),
+                                          styleNotMatched: TextStyle(
+                                            fontSize:
+                                                _suggestionStyle
+                                                    .textStyle
+                                                    .fontSize ??
+                                                14,
+                                            color: _suggestionStyle
+                                                .textStyle
+                                                .color,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }
 
-                                          // Get text and cursor position first
-                                          final text = _controller.text;
-                                          final cursorPos = _controller
-                                              .selection
-                                              .extentOffset;
+                    return Stack(
+                      children: [
+                        // Suggestion list
+                        Positioned(
+                          width: screenWidth < 700
+                              ? screenWidth * 0.63
+                              : screenWidth * 0.3,
+                          top:
+                              offset.dy +
+                              (widget.textStyle?.fontSize ?? 14) +
+                              10,
+                          left: offset.dx,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxHeight: 400,
+                              maxWidth: 400,
+                              minWidth: 70,
+                            ),
+                            child: Card(
+                              shape: _suggestionStyle.shape,
+                              elevation: _suggestionStyle.elevation,
+                              color: _suggestionStyle.backgroundColor,
+                              margin: EdgeInsets.zero,
+                              child: RawScrollbar(
+                                thumbVisibility: true,
+                                thumbColor: _editorTheme['root']!.color!
+                                    .withAlpha(80),
+                                controller: _suggScrollController,
+                                child: ListView.builder(
+                                  itemExtent:
+                                      (widget.textStyle?.fontSize ?? 14) + 6.5,
+                                  controller: _suggScrollController,
+                                  padding: EdgeInsets.only(right: 5),
+                                  shrinkWrap: true,
+                                  itemCount: sugg.length,
+                                  itemBuilder: (_, indx) {
+                                    final item = sugg[indx];
+                                    return Container(
+                                      color: _sugSelIndex == indx
+                                          ? Color(0xff024281)
+                                          : Colors.transparent,
+                                      child: InkWell(
+                                        canRequestFocus: false,
+                                        hoverColor: _suggestionStyle.hoverColor,
+                                        focusColor: _suggestionStyle.focusColor,
+                                        splashColor:
+                                            _suggestionStyle.splashColor,
+                                        onTap: () {
+                                          if (mounted) {
+                                            setState(() {
+                                              _sugSelIndex = indx;
 
-                                          // Extract text to insert based on item type
-                                          final String textToInsert;
-                                          if (item is LspCompletion) {
-                                            textToInsert = item.label;
-                                          } else if (item is SuggestionModel) {
-                                            // Custom suggestions with SuggestionModel
-                                            // Check if trigger pattern exists before cursor and replace it entirely
-                                            // Also handle cases where cursor is in the middle of the trigger pattern
-                                            final textBeforeCursor = text
-                                                .substring(0, cursorPos);
-                                            final textAfterCursor = text
-                                                .substring(cursorPos);
-                                            final triggerPattern =
-                                                item.triggeredAt;
+                                              // Get text and cursor position first
+                                              final text = _controller.text;
+                                              final cursorPos = _controller
+                                                  .selection
+                                                  .extentOffset;
 
-                                            if (triggerPattern.isNotEmpty) {
-                                              // Check if trigger pattern exists entirely before cursor
-                                              if (textBeforeCursor.endsWith(
-                                                triggerPattern,
-                                              )) {
-                                                // Trigger pattern found - replace the entire trigger pattern with replacedOnClick
-                                                final triggerStartPos =
-                                                    cursorPos -
-                                                    triggerPattern.length;
-                                                _controller.replaceRange(
-                                                  triggerStartPos,
-                                                  cursorPos,
-                                                  item.replacedOnClick,
-                                                );
-                                                _suggestionNotifier.value =
-                                                    null;
-                                                return;
-                                              }
+                                              // Extract text to insert based on item type
+                                              final String textToInsert;
+                                              if (item is LspCompletion) {
+                                                textToInsert = item.label;
+                                              } else if (item
+                                                  is SuggestionModel) {
+                                                // Custom suggestions with SuggestionModel
+                                                // Check if trigger pattern exists before cursor and replace it entirely
+                                                // Also handle cases where cursor is in the middle of the trigger pattern
+                                                final textBeforeCursor = text
+                                                    .substring(0, cursorPos);
+                                                final textAfterCursor = text
+                                                    .substring(cursorPos);
+                                                final triggerPattern =
+                                                    item.triggeredAt;
 
-                                              // Check if cursor is in the middle of the trigger pattern
-                                              // e.g., trigger is "{{}}" and we have "{{" before cursor and "}}" after cursor
-                                              for (
-                                                int i = 1;
-                                                i < triggerPattern.length;
-                                                i++
-                                              ) {
-                                                final triggerPrefix =
-                                                    triggerPattern.substring(
-                                                      0,
-                                                      i,
-                                                    );
-                                                final triggerSuffix =
-                                                    triggerPattern.substring(i);
-                                                if (textBeforeCursor.endsWith(
-                                                      triggerPrefix,
-                                                    ) &&
-                                                    textAfterCursor.startsWith(
-                                                      triggerSuffix,
-                                                    )) {
-                                                  // Cursor is in the middle of the trigger pattern - replace entire pattern
-                                                  final triggerStartPos =
-                                                      cursorPos -
-                                                      triggerPrefix.length;
-                                                  final triggerEndPos =
-                                                      cursorPos +
-                                                      triggerSuffix.length;
-                                                  _controller.replaceRange(
-                                                    triggerStartPos,
-                                                    triggerEndPos,
-                                                    item.replacedOnClick,
-                                                  );
-                                                  _suggestionNotifier.value =
-                                                      null;
-                                                  return;
-                                                }
-                                              }
-                                            }
-
-                                            // No trigger pattern found - use normal insertion
-                                            textToInsert = item.replacedOnClick;
-                                          } else if (item is Map) {
-                                            // Legacy map format support
-                                            textToInsert =
-                                                item['replacedOnClick'] ??
-                                                item['insertText'] ??
-                                                item['label'] ??
-                                                '';
-                                          } else {
-                                            textToInsert = item as String;
-                                          }
-
-                                          final tagName = textToInsert;
-
-                                          // Check if this is a tag completion
-                                          final language =
-                                              _controller.currentLanguage?.name;
-                                          if (TagCompletion.supportsTagCompletion(
-                                                language,
-                                                text: text,
-                                                cursorPosition: cursorPos,
-                                              ) &&
-                                              widget.lspConfig == null) {
-                                            final tagContext =
-                                                TagCompletion.analyzeTagContext(
-                                                  text,
-                                                  cursorPos,
-                                                );
-
-                                            if (tagContext.isInTag) {
-                                              // Get the template for this tag
-                                              final insertText =
-                                                  TagCompletion.getInsertTextForTag(
-                                                    tagName,
-                                                    tagContext.isClosingTag,
-                                                    tagContext,
-                                                  );
-
-                                              // Calculate what to replace
-                                              // For HTML: Replace from after '<' (or '</') to cursor
-                                              // For Jinja: Replace from after '{%' to cursor (or up to '%}' if tag is already closed)
-                                              final replaceStart =
-                                                  tagContext.isJinjaTag
-                                                  ? (tagContext.isClosingTag
-                                                        ? tagContext.tagStart +
-                                                              5 // '{% end'
-                                                        : tagContext.tagStart +
-                                                              2) // '{%'
-                                                  : (tagContext.isClosingTag
-                                                        ? tagContext.tagStart +
-                                                              2 // '</'
-                                                        : tagContext.tagStart +
-                                                              1); // '<'
-
-                                              // For Jinja tags, if tagEnd is found (meaning '%}' exists),
-                                              // replace up to tagEnd+1 (to include the '}') to avoid duplicating '%}'
-                                              int replaceEnd = cursorPos;
-                                              if (tagContext.isJinjaTag &&
-                                                  tagContext.tagEnd != null) {
-                                                // tagEnd points to the '}' character, so include it
-                                                replaceEnd =
-                                                    tagContext.tagEnd! + 1;
-                                              }
-
-                                              // Replace the prefix with the template
-                                              _controller.replaceRange(
-                                                replaceStart,
-                                                replaceEnd,
-                                                insertText,
-                                              );
-
-                                              // Position cursor appropriately
-                                              if (!tagContext.isClosingTag) {
-                                                if (tagContext.isJinjaTag) {
-                                                  // For Jinja tags, place cursor after '%}' if template has it
-                                                  if (insertText.contains(
-                                                    '%}',
+                                                if (triggerPattern.isNotEmpty) {
+                                                  // Check if trigger pattern exists entirely before cursor
+                                                  if (textBeforeCursor.endsWith(
+                                                    triggerPattern,
                                                   )) {
-                                                    final tagEndIndex =
-                                                        insertText.indexOf(
-                                                          '%}',
-                                                        );
-                                                    final newCursorPos =
-                                                        replaceStart +
-                                                        tagEndIndex +
-                                                        2;
-                                                    _controller.selection =
-                                                        TextSelection.collapsed(
-                                                          offset: newCursorPos
-                                                              .clamp(
-                                                                0,
-                                                                _controller
-                                                                    .length,
-                                                              ),
-                                                        );
+                                                    // Trigger pattern found - replace the entire trigger pattern with replacedOnClick
+                                                    final triggerStartPos =
+                                                        cursorPos -
+                                                        triggerPattern.length;
+                                                    _controller.replaceRange(
+                                                      triggerStartPos,
+                                                      cursorPos,
+                                                      item.replacedOnClick,
+                                                    );
+                                                    _suggestionNotifier.value =
+                                                        null;
+                                                    return;
+                                                  }
+
+                                                  // Check if cursor is in the middle of the trigger pattern
+                                                  // e.g., trigger is "{{}}" and we have "{{" before cursor and "}}" after cursor
+                                                  for (
+                                                    int i = 1;
+                                                    i < triggerPattern.length;
+                                                    i++
+                                                  ) {
+                                                    final triggerPrefix =
+                                                        triggerPattern
+                                                            .substring(0, i);
+                                                    final triggerSuffix =
+                                                        triggerPattern
+                                                            .substring(i);
+                                                    if (textBeforeCursor
+                                                            .endsWith(
+                                                              triggerPrefix,
+                                                            ) &&
+                                                        textAfterCursor
+                                                            .startsWith(
+                                                              triggerSuffix,
+                                                            )) {
+                                                      // Cursor is in the middle of the trigger pattern - replace entire pattern
+                                                      final triggerStartPos =
+                                                          cursorPos -
+                                                          triggerPrefix.length;
+                                                      final triggerEndPos =
+                                                          cursorPos +
+                                                          triggerSuffix.length;
+                                                      _controller.replaceRange(
+                                                        triggerStartPos,
+                                                        triggerEndPos,
+                                                        item.replacedOnClick,
+                                                      );
+                                                      _suggestionNotifier
+                                                              .value =
+                                                          null;
+                                                      return;
+                                                    }
+                                                  }
+                                                }
+
+                                                // No trigger pattern found - use normal insertion
+                                                textToInsert =
+                                                    item.replacedOnClick;
+                                              } else if (item is Map) {
+                                                // Legacy map format support
+                                                textToInsert =
+                                                    item['replacedOnClick'] ??
+                                                    item['insertText'] ??
+                                                    item['label'] ??
+                                                    '';
+                                              } else {
+                                                textToInsert = item as String;
+                                              }
+
+                                              final tagName = textToInsert;
+
+                                              // Check if this is a tag completion
+                                              final language = _controller
+                                                  .currentLanguage
+                                                  ?.name;
+                                              if (TagCompletion.supportsTagCompletion(
+                                                    language,
+                                                    text: text,
+                                                    cursorPosition: cursorPos,
+                                                  ) &&
+                                                  widget.lspConfig == null) {
+                                                final tagContext =
+                                                    TagCompletion.analyzeTagContext(
+                                                      text,
+                                                      cursorPos,
+                                                    );
+
+                                                if (tagContext.isInTag) {
+                                                  // Get the template for this tag
+                                                  final insertText =
+                                                      TagCompletion.getInsertTextForTag(
+                                                        tagName,
+                                                        tagContext.isClosingTag,
+                                                        tagContext,
+                                                      );
+
+                                                  // Calculate what to replace
+                                                  // For HTML: Replace from after '<' (or '</') to cursor
+                                                  // For Jinja: Replace from after '{%' to cursor (or up to '%}' if tag is already closed)
+                                                  final replaceStart =
+                                                      tagContext.isJinjaTag
+                                                      ? (tagContext.isClosingTag
+                                                            ? tagContext
+                                                                      .tagStart +
+                                                                  5 // '{% end'
+                                                            : tagContext
+                                                                      .tagStart +
+                                                                  2) // '{%'
+                                                      : (tagContext.isClosingTag
+                                                            ? tagContext
+                                                                      .tagStart +
+                                                                  2 // '</'
+                                                            : tagContext
+                                                                      .tagStart +
+                                                                  1); // '<'
+
+                                                  // For Jinja tags, if tagEnd is found (meaning '%}' exists),
+                                                  // replace up to tagEnd+1 (to include the '}') to avoid duplicating '%}'
+                                                  int replaceEnd = cursorPos;
+                                                  if (tagContext.isJinjaTag &&
+                                                      tagContext.tagEnd !=
+                                                          null) {
+                                                    // tagEnd points to the '}' character, so include it
+                                                    replaceEnd =
+                                                        tagContext.tagEnd! + 1;
+                                                  }
+
+                                                  // Replace the prefix with the template
+                                                  _controller.replaceRange(
+                                                    replaceStart,
+                                                    replaceEnd,
+                                                    insertText,
+                                                  );
+
+                                                  // Position cursor appropriately
+                                                  if (!tagContext
+                                                      .isClosingTag) {
+                                                    if (tagContext.isJinjaTag) {
+                                                      // For Jinja tags, place cursor after '%}' if template has it
+                                                      if (insertText.contains(
+                                                        '%}',
+                                                      )) {
+                                                        final tagEndIndex =
+                                                            insertText.indexOf(
+                                                              '%}',
+                                                            );
+                                                        final newCursorPos =
+                                                            replaceStart +
+                                                            tagEndIndex +
+                                                            2;
+                                                        _controller.selection =
+                                                            TextSelection.collapsed(
+                                                              offset: newCursorPos
+                                                                  .clamp(
+                                                                    0,
+                                                                    _controller
+                                                                        .length,
+                                                                  ),
+                                                            );
+                                                      }
+                                                    } else {
+                                                      // For HTML tags, place cursor after '>'
+                                                      if (insertText.contains(
+                                                        '>',
+                                                      )) {
+                                                        final tagEndIndex =
+                                                            insertText.indexOf(
+                                                              '>',
+                                                            );
+                                                        final newCursorPos =
+                                                            replaceStart +
+                                                            tagEndIndex +
+                                                            1;
+                                                        _controller.selection =
+                                                            TextSelection.collapsed(
+                                                              offset: newCursorPos
+                                                                  .clamp(
+                                                                    0,
+                                                                    _controller
+                                                                        .length,
+                                                                  ),
+                                                            );
+                                                      }
+                                                    }
                                                   }
                                                 } else {
-                                                  // For HTML tags, place cursor after '>'
-                                                  if (insertText.contains(
-                                                    '>',
-                                                  )) {
-                                                    final tagEndIndex =
-                                                        insertText.indexOf('>');
-                                                    final newCursorPos =
-                                                        replaceStart +
-                                                        tagEndIndex +
-                                                        1;
-                                                    _controller.selection =
-                                                        TextSelection.collapsed(
-                                                          offset: newCursorPos
-                                                              .clamp(
-                                                                0,
-                                                                _controller
-                                                                    .length,
-                                                              ),
-                                                        );
-                                                  }
+                                                  // Fallback to normal insertion
+                                                  _controller
+                                                      .insertAtCurrentCursor(
+                                                        tagName,
+                                                        replaceTypedChar: true,
+                                                      );
                                                 }
+                                              } else {
+                                                // Normal suggestion insertion
+                                                _controller
+                                                    .insertAtCurrentCursor(
+                                                      tagName,
+                                                      replaceTypedChar: true,
+                                                    );
                                               }
-                                            } else {
-                                              // Fallback to normal insertion
-                                              _controller.insertAtCurrentCursor(
-                                                tagName,
-                                                replaceTypedChar: true,
-                                              );
-                                            }
-                                          } else {
-                                            // Normal suggestion insertion
-                                            _controller.insertAtCurrentCursor(
-                                              tagName,
-                                              replaceTypedChar: true,
-                                            );
+                                              _suggestionNotifier.value = null;
+                                            });
                                           }
-                                          _suggestionNotifier.value = null;
-                                        });
-                                      }
-                                    },
-                                    child: Row(
-                                      children: [
-                                        if (item is LspCompletion) ...[
-                                          item.icon,
-                                          const SizedBox(width: 10),
-                                          Expanded(
-                                            child: Text(
-                                              item.label,
-                                              style: _suggestionStyle.textStyle,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                          const Expanded(child: SizedBox()),
-                                          if (item.importUri?[0] != null)
-                                            Expanded(
-                                              child: Text(
-                                                item.importUri![0],
-                                                style: _suggestionStyle
-                                                    .textStyle
-                                                    .copyWith(
-                                                      color: _suggestionStyle
-                                                          .textStyle
-                                                          .color
-                                                          ?.withAlpha(150),
-                                                    ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                        ],
-                                        if (item is String)
-                                          Expanded(
-                                            child: Text(
-                                              item,
-                                              style: _suggestionStyle.textStyle,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        if (item is SuggestionModel) ...[
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Text(
+                                        },
+                                        child: Row(
+                                          children: [
+                                            if (item is LspCompletion) ...[
+                                              item.icon,
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: Text(
                                                   item.label,
                                                   style: _suggestionStyle
                                                       .textStyle,
                                                   overflow:
                                                       TextOverflow.ellipsis,
                                                 ),
-                                                if (item.description != null &&
-                                                    item
-                                                        .description!
-                                                        .isNotEmpty)
-                                                  Text(
-                                                    item.description!,
+                                              ),
+                                              const Expanded(child: SizedBox()),
+                                              if (item.importUri?[0] != null)
+                                                Expanded(
+                                                  child: Text(
+                                                    item.importUri![0],
                                                     style: _suggestionStyle
                                                         .textStyle
                                                         .copyWith(
@@ -2341,76 +2418,93 @@ class _CodeForgeState extends State<CodeForge>
                                                                   ?.withAlpha(
                                                                     150,
                                                                   ),
-                                                          fontSize:
-                                                              (_suggestionStyle
-                                                                      .textStyle
-                                                                      .fontSize ??
-                                                                  14) *
-                                                              0.85,
                                                         ),
                                                     overflow:
                                                         TextOverflow.ellipsis,
-                                                    maxLines: 2,
                                                   ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                        if (item is Map) ...[
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Text(
-                                                  item['label'] ?? '',
+                                                ),
+                                            ],
+                                            if (item is String)
+                                              Expanded(
+                                                child: Text(
+                                                  item,
                                                   style: _suggestionStyle
                                                       .textStyle,
                                                   overflow:
                                                       TextOverflow.ellipsis,
                                                 ),
-                                                if (item['description'] !=
-                                                        null &&
-                                                    item['description']
-                                                        .toString()
-                                                        .isNotEmpty)
-                                                  Text(
-                                                    item['description'],
-                                                    style: _suggestionStyle
-                                                        .textStyle
-                                                        .copyWith(
-                                                          color:
-                                                              _suggestionStyle
-                                                                  .textStyle
-                                                                  .color
-                                                                  ?.withAlpha(
-                                                                    150,
-                                                                  ),
-                                                          fontSize:
-                                                              (_suggestionStyle
+                                              ),
+                                            if (item is SuggestionModel) ...[
+                                              Expanded(
+                                                child: Text(
+                                                  item.label,
+                                                  style: _suggestionStyle
+                                                      .textStyle,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                            if (item is Map) ...[
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Text(
+                                                      item['label'] ?? '',
+                                                      style: _suggestionStyle
+                                                          .textStyle,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
+                                                    if (item['description'] !=
+                                                            null &&
+                                                        item['description']
+                                                            .toString()
+                                                            .isNotEmpty)
+                                                      Text(
+                                                        item['description'],
+                                                        style: _suggestionStyle
+                                                            .textStyle
+                                                            .copyWith(
+                                                              color:
+                                                                  _suggestionStyle
                                                                       .textStyle
-                                                                      .fontSize ??
-                                                                  14) *
-                                                              0.85,
-                                                        ),
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    maxLines: 2,
-                                                  ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
+                                                                      .color
+                                                                      ?.withAlpha(
+                                                                        150,
+                                                                      ),
+                                                              fontSize:
+                                                                  (_suggestionStyle
+                                                                          .textStyle
+                                                                          .fontSize ??
+                                                                      14) *
+                                                                  0.85,
+                                                            ),
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        maxLines: 2,
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                        // Description panel (shown next to suggestion list when description exists)
+                        ...descriptionWidgets,
+                      ],
                     );
                   },
                 );

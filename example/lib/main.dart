@@ -414,8 +414,8 @@ class _MyAppState extends State<MyApp> {
                       ],
                     ),
                   ),
+
                   // Instructions banner
-                  
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(8.0),
