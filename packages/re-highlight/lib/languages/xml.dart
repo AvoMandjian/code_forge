@@ -51,7 +51,7 @@ final langXml = Mode(
             ])
           ])
     },
-    name: "HTML, XML",
+    name: "html",
     aliases: [
       "html",
       "xhtml",

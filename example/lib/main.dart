@@ -149,87 +149,136 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       home: Scaffold(
-        body: SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButton<String>(
-                        value: _selectedLanguage,
-                        isExpanded: true,
-                        items: ['jinja', 'html', 'json', 'sql'].map((
-                          String key,
-                        ) {
-                          return DropdownMenuItem<String>(
-                            value: key,
-                            child: Text(key),
-                          );
-                        }).toList(),
-                        onChanged: (String? newValue) {
-                          if (newValue != null) {
-                            setState(() {
-                              _selectedLanguage = newValue;
-                            });
-                            _controller.setLanguage(newValue);
-                          }
-                        },
-                      ),
+        body: Builder(
+          builder: (BuildContext scaffoldContext) {
+            return SafeArea(
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButton<String>(
+                            value: _selectedLanguage,
+                            isExpanded: true,
+                            items: ['jinja', 'html', 'json', 'sql'].map((
+                              String key,
+                            ) {
+                              return DropdownMenuItem<String>(
+                                value: key,
+                                child: Text(key),
+                              );
+                            }).toList(),
+                            onChanged: (String? newValue) {
+                              if (newValue != null) {
+                                setState(() {
+                                  _selectedLanguage = newValue;
+                                });
+                                _controller.setLanguage(newValue);
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: DropdownButton<String>(
+                            value: _selectedTheme,
+                            isExpanded: true,
+                            items: builtinAllThemes.keys.map((String key) {
+                              return DropdownMenuItem<String>(
+                                value: key,
+                                child: Text(key),
+                              );
+                            }).toList(),
+                            onChanged: (String? newValue) {
+                              if (newValue != null) {
+                                setState(() {
+                                  _selectedTheme = newValue;
+                                });
+                                _controller.setTheme(newValue);
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            try {
+                              _controller.saveFile();
+                              ScaffoldMessenger.of(
+                                scaffoldContext,
+                              ).showSnackBar(
+                                const SnackBar(
+                                  content: Text('File saved successfully'),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            } catch (e) {
+                              ScaffoldMessenger.of(
+                                scaffoldContext,
+                              ).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error saving file: $e'),
+                                  backgroundColor: Colors.red,
+                                  duration: const Duration(seconds: 3),
+                                ),
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.save),
+                          label: const Text('Save'),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            _controller.formatCode();
+                            ScaffoldMessenger.of(scaffoldContext).showSnackBar(
+                              const SnackBar(
+                                content: Text('Code formatted'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.format_align_left),
+                          label: const Text('Format'),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: DropdownButton<String>(
-                        value: _selectedTheme,
-                        isExpanded: true,
-                        items: builtinAllThemes.keys.map((String key) {
-                          return DropdownMenuItem<String>(
-                            value: key,
-                            child: Text(key),
+                  ),
+                  Expanded(
+                    child: FutureBuilder<LspConfig>(
+                      future: getLsp(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
                           );
-                        }).toList(),
-                        onChanged: (String? newValue) {
-                          if (newValue != null) {
-                            setState(() {
-                              _selectedTheme = newValue;
-                            });
-                            _controller.setTheme(newValue);
-                          }
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: FutureBuilder<LspConfig>(
-                  future: getLsp(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    return CodeForge(
-                      undoController: undoController,
-                      language: builtinAllLanguages[_selectedLanguage],
-                      controller: _controller,
-                      // aiCompletion: AiCompletion(
-                      //   model: Gemini(
-                      //     apiKey: Platform.environment['GEMINI_API_KEY'] ?? '',
-                      //   ),
-                      // ),
-                      saveFile: () {
-                        print('saveFile');
+                        }
+                        return CodeForge(
+                          undoController: undoController,
+                          language: builtinAllLanguages[_selectedLanguage],
+                          controller: _controller,
+                          // aiCompletion: AiCompletion(
+                          //   model: Gemini(
+                          //     apiKey: Platform.environment['GEMINI_API_KEY'] ?? '',
+                          //   ),
+                          // ),
+                          saveFile: () {
+                            print('saveFile');
+                          },
+                          lineWrap: true,
+                          lspConfig: snapshot.data,
+                          filePath: absFilePath,
+                        );
                       },
-                      lineWrap: true,
-                      lspConfig: snapshot.data,
-                      filePath: absFilePath,
-                    );
-                  },
-                ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );

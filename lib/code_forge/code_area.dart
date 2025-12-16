@@ -276,6 +276,11 @@ class _CodeForgeState extends State<CodeForge>
     _editorTheme =
         _controller.currentTheme ?? widget.editorTheme ?? vs2015Theme;
     _language = _controller.currentLanguage ?? widget.language ?? langDart;
+
+    // Sync widget language back to controller if controller doesn't have one
+    if (_controller.currentLanguage == null && widget.language != null) {
+      _controller.currentLanguage = widget.language;
+    }
     _suggestionNotifier = ValueNotifier(null);
     _hoverNotifier = ValueNotifier(null);
     _diagnosticsNotifier = ValueNotifier<List<LspErrors>>([]);
@@ -285,6 +290,7 @@ class _CodeForgeState extends State<CodeForge>
     _selectionActiveNotifier = ValueNotifier(false);
     _isHoveringPopup = ValueNotifier<bool>(false);
     _controller.manualAiCompletion = getManualAiSuggestion;
+    _controller.saveFileCallback = widget.saveFile;
     _controller.readOnly = widget.readOnly;
     _selectionStyle = widget.selectionStyle ?? CodeSelectionStyle();
     _undoRedoController = widget.undoController ?? UndoRedoController();
@@ -946,7 +952,7 @@ class _CodeForgeState extends State<CodeForge>
     _resetCursorBlink();
   }
 
-  void _formatCode() {
+  void handleFormatCode() {
     final currentText = _controller.text;
     String? formattedText;
 
@@ -1406,7 +1412,7 @@ class _CodeForgeState extends State<CodeForge>
                                       switch (event.logicalKey) {
                                         case LogicalKeyboardKey.keyF:
                                           // Format code shortcut: Command+Shift+F (or Ctrl+Shift+F)
-                                          _formatCode();
+                                          handleFormatCode();
                                           return KeyEventResult.handled;
                                         case LogicalKeyboardKey.arrowUp:
                                           _moveLineUp();

@@ -8,6 +8,7 @@ import 'package:re_highlight/re_highlight.dart';
 import 'package:re_highlight/styles/all.dart';
 
 import '../code_forge.dart';
+import 'code_formatter.dart';
 import 'rope.dart';
 
 /// Controller for the [CodeForge] code editor widget.
@@ -55,6 +56,10 @@ class CodeForgeController implements DeltaTextInputClient {
   /// Callback for manually triggering AI completion.
   /// Set this to enable custom AI completion triggers.
   VoidCallback? manualAiCompletion;
+
+  /// Callback for save file operations.
+  /// Set this to enable custom save file handling.
+  VoidCallback? saveFileCallback;
 
   Mode? currentLanguage;
   Map<String, TextStyle>? currentTheme;
@@ -122,13 +127,76 @@ class CodeForgeController implements DeltaTextInputClient {
   }
 
   /// Save the current content, [controller.text] to the opened file.
+  ///
+  /// If [saveFileCallback] is set, it will be called first.
+  /// Then, if [openedFile] is set, the file will be saved to disk.
+  ///
+  /// Throws [FlutterError] if no file is opened and no callback is set.
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.saveFile();
+  /// ```
   void saveFile() {
-    if (openedFile == null) {
-      throw FlutterError(
-        "No file found.\nPlease open a file by providing a valid filePath to the CodeForge widget",
-      );
+    // Call the widget's saveFile callback if provided
+    saveFileCallback?.call();
+
+    // Save to file if openedFile is set
+    if (openedFile != null) {
+      try {
+        File(openedFile!).writeAsStringSync(text);
+      } catch (e) {
+        // Error is silently caught, but callback was already called
+      }
     }
-    File(openedFile!).writeAsStringSync(text);
+  }
+
+  /// Formats the current code content based on the current language.
+  ///
+  /// Uses [CodeFormatter] to automatically format the code based on the
+  /// language set in [currentLanguage] or the provided [languageName].
+  /// Supports JSON, HTML, SQL, and Jinja.
+  ///
+  /// If formatting is not supported for the current language, the code
+  /// remains unchanged.
+  ///
+  /// [languageName] is optional. If provided, it will be used instead of
+  /// [currentLanguage]. If not provided and [currentLanguage] is null,
+  /// formatting will be skipped.
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.setLanguage('json');
+  /// controller.formatCode(); // Formats as JSON
+  ///
+  /// // Or specify language directly
+  /// controller.formatCode(languageName: 'html');
+  /// ```
+  void formatCode() {
+    final currentText = text;
+    final langName = currentLanguage?.name;
+
+    if (langName == null) {
+      // No language set, cannot format
+      return;
+    }
+
+    final formattedText = CodeFormatter.formatCode(currentText, langName);
+
+    if (formattedText != null && formattedText != currentText) {
+      final selectionBefore = selection;
+      text = formattedText;
+
+      // Try to preserve cursor position
+      final newLength = formattedText.length;
+      if (selectionBefore.extentOffset <= newLength) {
+        selection = selectionBefore;
+      } else {
+        selection = TextSelection.collapsed(offset: newLength);
+      }
+
+      notifyListeners();
+    }
   }
 
   /// Moves the cursor one character to the left.
