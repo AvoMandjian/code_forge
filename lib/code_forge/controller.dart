@@ -68,6 +68,22 @@ class CodeForgeController implements DeltaTextInputClient {
   /// The callback receives a list of [SuggestionModel] instances.
   void Function(List<SuggestionModel>)? showCustomSuggestionsCallback;
 
+  /// Internal callback for code changes.
+  void Function(String currentCode)? _onCodeChanged;
+
+  /// Registers a callback to be notified whenever the code content changes.
+  /// The callback receives the current code text as a parameter.
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.onCodeChanged((String currentCode) {
+  ///   debugPrint('Code changed: ${currentCode.length} characters');
+  /// });
+  /// ```
+  void onCodeChanged(void Function(String currentCode) callback) {
+    _onCodeChanged = callback;
+  }
+
   /// Reference to the AI completion configuration.
   /// Set by the widget to allow controller-based enable/disable control.
   AiCompletion? _aiCompletion;
@@ -835,6 +851,7 @@ class CodeForgeController implements DeltaTextInputClient {
     _selection = TextSelection.collapsed(offset: newText.length);
     dirtyRegion = TextRange(start: 0, end: newText.length);
 
+    _notifyCodeChanged();
     notifyListeners();
   }
 
@@ -910,6 +927,11 @@ class CodeForgeController implements DeltaTextInputClient {
     for (final listener in _listeners) {
       listener();
     }
+  }
+
+  /// Notifies the onCodeChanged callback if it's set.
+  void _notifyCodeChanged() {
+    _onCodeChanged?.call(text);
   }
 
   @override
@@ -1034,6 +1056,7 @@ class CodeForgeController implements DeltaTextInputClient {
     }
 
     _syncToConnection();
+    _notifyCodeChanged();
     notifyListeners();
   }
 
@@ -1068,6 +1091,7 @@ class CodeForgeController implements DeltaTextInputClient {
     }
 
     _syncToConnection();
+    _notifyCodeChanged();
     notifyListeners();
   }
 
@@ -1160,6 +1184,7 @@ class CodeForgeController implements DeltaTextInputClient {
       );
     }
 
+    _notifyCodeChanged();
     notifyListeners();
   }
 
@@ -1375,6 +1400,7 @@ class CodeForgeController implements DeltaTextInputClient {
     }
 
     _syncToConnection();
+    _notifyCodeChanged();
     notifyListeners();
   }
 
@@ -1470,6 +1496,7 @@ class CodeForgeController implements DeltaTextInputClient {
     _currentVersion++;
 
     dirtyLine = lineToInvalidate;
+    _notifyCodeChanged();
     notifyListeners();
   }
 
@@ -1586,6 +1613,7 @@ class CodeForgeController implements DeltaTextInputClient {
         );
       }
 
+      _notifyCodeChanged();
       notifyListeners();
       return;
     }
@@ -1761,6 +1789,8 @@ class CodeForgeController implements DeltaTextInputClient {
               selectionBefore,
               newSelection,
             );
+            _notifyCodeChanged();
+            notifyListeners();
             return;
           }
 
@@ -1812,6 +1842,8 @@ class CodeForgeController implements DeltaTextInputClient {
       dirtyRegion = TextRange(start: range.start, end: range.start);
 
       _recordDeletion(range.start, deletedText, selectionBefore, newSelection);
+      _notifyCodeChanged();
+      notifyListeners();
       return;
     }
 
@@ -1866,6 +1898,9 @@ class CodeForgeController implements DeltaTextInputClient {
       selectionBefore,
       newSelection,
     );
+
+    _notifyCodeChanged();
+    notifyListeners();
   }
 
   void _initBuffer(int lineIndex) {

@@ -11,6 +11,14 @@
             "type": "dart",
             "flutterMode": "debug",
             "deviceId": "macos"
+        },
+        {
+            "name": "code_forge WEB",
+            "request": "launch",
+            "cwd": "example",
+            "type": "dart",
+            "flutterMode": "debug",
+            "deviceId": "chrome"
         }
     ]
 }
