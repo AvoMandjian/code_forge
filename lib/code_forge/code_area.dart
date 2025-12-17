@@ -133,6 +133,9 @@ class CodeForge extends StatefulWidget {
   /// Styling options for the autocomplete suggestion popup.
   final SuggestionStyle? suggestionStyle;
 
+  /// Styling options for the autocomplete suggestion description popup.
+  final SuggestionStyle? suggestionDescriptionStyle;
+
   /// Styling options for hover documentation popup.
   final HoverDetailsStyle? hoverDetailsStyle;
 
@@ -225,6 +228,7 @@ class CodeForge extends StatefulWidget {
     this.selectionStyle,
     this.gutterStyle,
     this.suggestionStyle,
+    this.suggestionDescriptionStyle,
     this.hoverDetailsStyle,
     this.saveFile,
     this.formatCode,
@@ -246,6 +250,7 @@ class _CodeForgeState extends State<CodeForge>
   late final CodeSelectionStyle _selectionStyle;
   late GutterStyle _gutterStyle;
   late SuggestionStyle _suggestionStyle;
+  late SuggestionStyle _suggestionDescriptionStyle;
   late HoverDetailsStyle _hoverDetailsStyle;
   late final ValueNotifier<List<dynamic>?> _suggestionNotifier, _hoverNotifier;
   late final ValueNotifier<List<LspErrors>> _diagnosticsNotifier;
@@ -1111,6 +1116,32 @@ class _CodeForgeState extends State<CodeForge>
         widget.suggestionStyle ??
         SuggestionStyle(
           elevation: 6,
+          highlightColor: Colors.blueAccent.withAlpha(50),
+          textStyle: (() {
+            TextStyle style = widget.textStyle ?? TextStyle();
+            if (style.color == null) {
+              style = style.copyWith(color: _editorTheme['root']!.color);
+            }
+            return style;
+          })(),
+          backgroundColor:
+              _editorTheme['root']?.backgroundColor ?? Colors.white,
+          focusColor: Colors.blueAccent.withAlpha(50),
+          hoverColor: Colors.grey.withAlpha(15),
+          splashColor: Colors.blueAccent.withAlpha(50),
+          shape: BeveledRectangleBorder(
+            side: BorderSide(
+              color: _editorTheme['root']!.color ?? Colors.grey[400]!,
+              width: 0.2,
+            ),
+          ),
+        );
+
+    _suggestionDescriptionStyle =
+        widget.suggestionDescriptionStyle ??
+        SuggestionStyle(
+          elevation: 6,
+          highlightColor: Colors.blueAccent.withAlpha(50),
           textStyle: (() {
             TextStyle style = widget.textStyle ?? TextStyle();
             if (style.color == null) {
@@ -1134,6 +1165,7 @@ class _CodeForgeState extends State<CodeForge>
     _hoverDetailsStyle =
         widget.hoverDetailsStyle ??
         HoverDetailsStyle(
+          highlightColor: Colors.blueAccent.withAlpha(50),
           shape: BeveledRectangleBorder(
             side: BorderSide(
               color: _editorTheme['root']!.color ?? Colors.grey[400]!,
@@ -2187,19 +2219,21 @@ class _CodeForgeState extends State<CodeForge>
                               minWidth: 200,
                             ),
                             child: Card(
-                              shape: _suggestionStyle.shape,
-                              elevation: _suggestionStyle.elevation,
-                              color: _suggestionStyle.backgroundColor,
+                              shape: _suggestionDescriptionStyle.shape,
+                              elevation: _suggestionDescriptionStyle.elevation,
+                              color:
+                                  _suggestionDescriptionStyle.backgroundColor,
                               margin: EdgeInsets.zero,
                               child: Padding(
                                 padding: const EdgeInsets.all(12.0),
                                 child: SingleChildScrollView(
                                   child: MarkdownBlock(
                                     data: suggestion.description!,
-                                    config: MarkdownConfig.darkConfig.copy(
+                                    config: MarkdownConfig.defaultConfig.copy(
                                       configs: [
                                         PConfig(
-                                          textStyle: _suggestionStyle.textStyle,
+                                          textStyle: _suggestionDescriptionStyle
+                                              .textStyle,
                                         ),
                                         PreConfig(
                                           language:
@@ -2209,18 +2243,18 @@ class _CodeForgeState extends State<CodeForge>
                                           theme: _editorTheme,
                                           textStyle: TextStyle(
                                             fontSize:
-                                                _suggestionStyle
+                                                _suggestionDescriptionStyle
                                                     .textStyle
                                                     .fontSize ??
                                                 14,
                                           ),
                                           styleNotMatched: TextStyle(
                                             fontSize:
-                                                _suggestionStyle
+                                                _suggestionDescriptionStyle
                                                     .textStyle
                                                     .fontSize ??
                                                 14,
-                                            color: _suggestionStyle
+                                            color: _suggestionDescriptionStyle
                                                 .textStyle
                                                 .color,
                                           ),
@@ -2275,12 +2309,14 @@ class _CodeForgeState extends State<CodeForge>
                                     final item = sugg[indx];
                                     return Container(
                                       color: _sugSelIndex == indx
-                                          ? Color(0xff024281)
+                                          ? _suggestionStyle.highlightColor
                                           : Colors.transparent,
                                       child: InkWell(
                                         canRequestFocus: false,
                                         hoverColor: _suggestionStyle.hoverColor,
                                         focusColor: _suggestionStyle.focusColor,
+                                        highlightColor:
+                                            _suggestionStyle.highlightColor,
                                         splashColor:
                                             _suggestionStyle.splashColor,
                                         onTap: () {

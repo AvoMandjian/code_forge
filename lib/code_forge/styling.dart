@@ -103,6 +103,9 @@ sealed class OverlayStyle {
   /// The color used when the overlay is focused.
   final Color focusColor;
 
+  /// The color used when the overlay is highlighted.
+  final Color highlightColor;
+
   /// The color used when the overlay is hovered.
   final Color hoverColor;
 
@@ -121,6 +124,7 @@ sealed class OverlayStyle {
     required this.shape,
     required this.backgroundColor,
     required this.focusColor,
+    required this.highlightColor,
     required this.hoverColor,
     required this.splashColor,
     required this.textStyle,
@@ -150,6 +154,7 @@ class SuggestionStyle extends OverlayStyle {
     required super.shape,
     required super.backgroundColor,
     required super.focusColor,
+    required super.highlightColor,
     required super.hoverColor,
     required super.splashColor,
     required super.textStyle,
@@ -180,6 +185,7 @@ class HoverDetailsStyle extends OverlayStyle {
     required super.shape,
     required super.backgroundColor,
     required super.focusColor,
+    required super.highlightColor,
     required super.hoverColor,
     required super.splashColor,
     required super.textStyle,
