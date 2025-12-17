@@ -10,7 +10,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:markdown_widget/markdown_widget.dart';
+import 'package:flutter_html/flutter_html.dart';
 import 'package:re_highlight/languages/dart.dart';
 import 'package:re_highlight/re_highlight.dart';
 import 'package:re_highlight/styles/vs2015.dart';
@@ -2227,40 +2227,49 @@ class _CodeForgeState extends State<CodeForge>
                               child: Padding(
                                 padding: const EdgeInsets.all(12.0),
                                 child: SingleChildScrollView(
-                                  child: MarkdownBlock(
+                                  child: Html(
                                     data: suggestion.description!,
-                                    config: MarkdownConfig.defaultConfig.copy(
-                                      configs: [
-                                        PConfig(
-                                          textStyle: _suggestionDescriptionStyle
-                                              .textStyle,
+                                    style: {
+                                      "p": Style(
+                                        fontSize: FontSize(
+                                          _suggestionDescriptionStyle
+                                                  .textStyle
+                                                  .fontSize ??
+                                              14,
                                         ),
-                                        PreConfig(
-                                          language:
-                                              widget.lspConfig?.languageId
-                                                  .toLowerCase() ??
-                                              "dart",
-                                          theme: _editorTheme,
-                                          textStyle: TextStyle(
-                                            fontSize:
-                                                _suggestionDescriptionStyle
-                                                    .textStyle
-                                                    .fontSize ??
-                                                14,
-                                          ),
-                                          styleNotMatched: TextStyle(
-                                            fontSize:
-                                                _suggestionDescriptionStyle
-                                                    .textStyle
-                                                    .fontSize ??
-                                                14,
-                                            color: _suggestionDescriptionStyle
-                                                .textStyle
-                                                .color,
-                                          ),
+                                        color: _suggestionDescriptionStyle
+                                            .textStyle
+                                            .color,
+                                        fontWeight: _suggestionDescriptionStyle
+                                            .textStyle
+                                            .fontWeight,
+                                      ),
+                                      "pre": Style(
+                                        fontSize: FontSize(
+                                          _suggestionDescriptionStyle
+                                                  .textStyle
+                                                  .fontSize ??
+                                              14,
                                         ),
-                                      ],
-                                    ),
+                                        color: _suggestionDescriptionStyle
+                                            .textStyle
+                                            .color,
+                                        backgroundColor: _editorTheme['root']!
+                                            .backgroundColor,
+                                        padding: HtmlPaddings.all(8),
+                                      ),
+                                      "code": Style(
+                                        fontSize: FontSize(
+                                          _suggestionDescriptionStyle
+                                                  .textStyle
+                                                  .fontSize ??
+                                              14,
+                                        ),
+                                        color: _suggestionDescriptionStyle
+                                            .textStyle
+                                            .color,
+                                      ),
+                                    },
                                   ),
                                 ),
                               ),
@@ -2896,47 +2905,55 @@ class _CodeForgeState extends State<CodeForge>
                                             .withAlpha(100),
                                         child: SingleChildScrollView(
                                           controller: hoverScrollController,
-                                          child: MarkdownBlock(
+                                          child: Html(
                                             data: hoverMessage,
-                                            config: MarkdownConfig.darkConfig.copy(
-                                              configs: [
-                                                PConfig(
-                                                  textStyle: _hoverDetailsStyle
-                                                      .textStyle,
+                                            style: {
+                                              "p": Style(
+                                                fontSize: FontSize(
+                                                  _hoverDetailsStyle
+                                                          .textStyle
+                                                          .fontSize ??
+                                                      14,
                                                 ),
-                                                PreConfig(
-                                                  language:
-                                                      widget
-                                                          .lspConfig
-                                                          ?.languageId
-                                                          .toLowerCase() ??
-                                                      "dart",
-                                                  theme: _editorTheme,
-                                                  textStyle: TextStyle(
-                                                    fontSize: _hoverDetailsStyle
-                                                        .textStyle
-                                                        .fontSize,
-                                                  ),
-                                                  styleNotMatched: TextStyle(
-                                                    color: _editorTheme['root']!
-                                                        .color,
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    color: _editorTheme['root']!
+                                                color: _hoverDetailsStyle
+                                                    .textStyle
+                                                    .color,
+                                                fontWeight: _hoverDetailsStyle
+                                                    .textStyle
+                                                    .fontWeight,
+                                              ),
+                                              "pre": Style(
+                                                fontSize: FontSize(
+                                                  _hoverDetailsStyle
+                                                          .textStyle
+                                                          .fontSize ??
+                                                      14,
+                                                ),
+                                                color:
+                                                    _editorTheme['root']!.color,
+                                                backgroundColor:
+                                                    _editorTheme['root']!
                                                         .backgroundColor!,
-                                                    borderRadius:
-                                                        BorderRadius.zero,
-                                                    border: Border.all(
-                                                      width: 0.2,
-                                                      color:
-                                                          _editorTheme['root']!
-                                                              .color ??
-                                                          Colors.grey,
-                                                    ),
-                                                  ),
+                                                padding: HtmlPaddings.all(8),
+                                                border: Border.all(
+                                                  width: 0.2,
+                                                  color:
+                                                      _editorTheme['root']!
+                                                          .color ??
+                                                      Colors.grey,
                                                 ),
-                                              ],
-                                            ),
+                                              ),
+                                              "code": Style(
+                                                fontSize: FontSize(
+                                                  _hoverDetailsStyle
+                                                          .textStyle
+                                                          .fontSize ??
+                                                      14,
+                                                ),
+                                                color:
+                                                    _editorTheme['root']!.color,
+                                              ),
+                                            },
                                           ),
                                         ),
                                       ),

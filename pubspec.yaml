@@ -11,7 +11,7 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^1.6.0
-  markdown_widget: ^2.3.2+8
+  flutter_html: ^3.0.0
   meta: ^1.17.0
   re_highlight:
     path: packages/re-highlight

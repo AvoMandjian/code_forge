@@ -6,91 +6,91 @@ List<SuggestionModel> getHtmlSuggestions() {
     SuggestionModel(
       label: 'Div',
       description:
-          '## `<div>` Element\n\n**Block-level container** for grouping and organizing content.\n\n```html\n<div>\n  <!-- Content here -->\n</div>\n```\n\n**Common uses:**\n- Layout structure\n- Content grouping\n- Styling containers',
+          '<h2>&lt;div&gt; Element</h2><p><strong>Block-level container</strong> for grouping and organizing content.</p><pre><code>&lt;div&gt;\n  &lt;!-- Content here --&gt;\n&lt;/div&gt;</code></pre><p><strong>Common uses:</strong></p><ul><li>Layout structure</li><li>Content grouping</li><li>Styling containers</li></ul>',
       replacedOnClick: '<div>\n  \n</div>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Span',
       description:
-          '## `<span>` Element\n\n**Inline container** for text styling and grouping.\n\n```html\n<span>Inline content</span>\n```\n\n**Common uses:**\n- Text styling\n- Inline content grouping\n- Applying CSS to portions of text',
+          '<h2>&lt;span&gt; Element</h2><p><strong>Inline container</strong> for text styling and grouping.</p><pre><code>&lt;span&gt;Inline content&lt;/span&gt;</code></pre><p><strong>Common uses:</strong></p><ul><li>Text styling</li><li>Inline content grouping</li><li>Applying CSS to portions of text</li></ul>',
       replacedOnClick: '<span></span>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Link',
       description:
-          '## `<a>` Anchor Link\n\n**Hyperlink** for navigation to other pages or sections.\n\n```html\n<a href="https://example.com">Link Text</a>\n```\n\n**Key attributes:**\n- `href` — URL or anchor target\n- `target` — Open in new window (`_blank`)\n- `rel` — Relationship type (e.g., `noopener`)',
+          '<h2>&lt;a&gt; Anchor Link</h2><p><strong>Hyperlink</strong> for navigation to other pages or sections.</p><pre><code>&lt;a href=&quot;https://example.com&quot;&gt;Link Text&lt;/a&gt;</code></pre><p><strong>Key attributes:</strong></p><ul><li><code>href</code> &mdash; URL or anchor target</li><li><code>target</code> &mdash; Open in new window (<code>_blank</code>)</li><li><code>rel</code> &mdash; Relationship type (e.g., <code>noopener</code>)</li></ul>',
       replacedOnClick: '<a href="">Link Text</a>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Image',
       description:
-          '## `<img>` Image Element\n\n**Embeds an image** in the document.\n\n```html\n<img src="image.jpg" alt="Description" />\n```\n\n**Required:**\n- `src` — Image URL or path\n- `alt` — Alternative text for accessibility\n\n**Optional:** `width`, `height`, `loading="lazy"`, `srcset`',
+          '<h2>&lt;img&gt; Image Element</h2><p><strong>Embeds an image</strong> in the document.</p><pre><code>&lt;img src=&quot;image.jpg&quot; alt=&quot;Description&quot; /&gt;</code></pre><p><strong>Required:</strong></p><ul><li><code>src</code> &mdash; Image URL or path</li><li><code>alt</code> &mdash; Alternative text for accessibility</li></ul><p><strong>Optional:</strong> <code>width</code>, <code>height</code>, <code>loading=&quot;lazy&quot;</code>, <code>srcset</code></p>',
       replacedOnClick: '<img src="" alt="" />',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Paragraph',
       description:
-          '## `<p>` Paragraph\n\n**Block-level element** for text paragraphs.\n\n```html\n<p>Paragraph text content</p>\n```\n\n**Semantic meaning:** Represents a distinct paragraph of text content.',
+          '<h2>&lt;p&gt; Paragraph</h2><p><strong>Block-level element</strong> for text paragraphs.</p><pre><code>&lt;p&gt;Paragraph text content&lt;/p&gt;</code></pre><p><strong>Semantic meaning:</strong> Represents a distinct paragraph of text content.</p>',
       replacedOnClick: '<p>\n  \n</p>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Heading 1',
       description:
-          '## `<h1>` Heading Level 1\n\n**Main page title** — highest heading level.\n\n```html\n<h1>Main Title</h1>\n```\n\n**Best practice:** Use **one** `<h1>` per page for optimal SEO and accessibility.',
+          '<h2>&lt;h1&gt; Heading Level 1</h2><p><strong>Main page title</strong> &mdash; highest heading level.</p><pre><code>&lt;h1&gt;Main Title&lt;/h1&gt;</code></pre><p><strong>Best practice:</strong> Use <strong>one</strong> <code>&lt;h1&gt;</code> per page for optimal SEO and accessibility.</p>',
       replacedOnClick: '<h1>\n  \n</h1>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Heading 2',
       description:
-          '## `<h2>` Heading Level 2\n\n**Section heading** — second level in the document hierarchy.\n\n```html\n<h2>Section Title</h2>\n```\n\n**Hierarchy:** `<h1>` → `<h2>` → `<h3>` → ...',
+          '<h2>&lt;h2&gt; Heading Level 2</h2><p><strong>Section heading</strong> &mdash; second level in the document hierarchy.</p><pre><code>&lt;h2&gt;Section Title&lt;/h2&gt;</code></pre><p><strong>Hierarchy:</strong> <code>&lt;h1&gt;</code> &rarr; <code>&lt;h2&gt;</code> &rarr; <code>&lt;h3&gt;</code> &rarr; ...</p>',
       replacedOnClick: '<h2>\n  \n</h2>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Button',
       description:
-          '## `<button>` Element\n\n**Clickable button** for user interactions.\n\n```html\n<button type="button">Click Me</button>\n```\n\n**Button types:**\n- `type="button"` — Standard clickable button\n- `type="submit"` — Submits a form\n- `type="reset"` — Resets form fields',
+          '<h2>&lt;button&gt; Element</h2><p><strong>Clickable button</strong> for user interactions.</p><pre><code>&lt;button type=&quot;button&quot;&gt;Click Me&lt;/button&gt;</code></pre><p><strong>Button types:</strong></p><ul><li><code>type=&quot;button&quot;</code> &mdash; Standard clickable button</li><li><code>type=&quot;submit&quot;</code> &mdash; Submits a form</li><li><code>type=&quot;reset&quot;</code> &mdash; Resets form fields</li></ul>',
       replacedOnClick: '<button type="button">Button Text</button>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Input',
       description:
-          '## `<input>` Element\n\n**Form input field** for user data entry.\n\n```html\n<input type="text" name="username" value="" />\n```\n\n**Common input types:**\n- `text` — Single-line text input\n- `email` — Email with validation\n- `password` — Masked password field\n- `number` — Numeric input\n- `checkbox` — Checkbox toggle\n- `radio` — Radio button\n- `date` — Date picker\n- `file` — File upload',
+          '<h2>&lt;input&gt; Element</h2><p><strong>Form input field</strong> for user data entry.</p><pre><code>&lt;input type=&quot;text&quot; name=&quot;username&quot; value=&quot;&quot; /&gt;</code></pre><p><strong>Common input types:</strong></p><ul><li><code>text</code> &mdash; Single-line text input</li><li><code>email</code> &mdash; Email with validation</li><li><code>password</code> &mdash; Masked password field</li><li><code>number</code> &mdash; Numeric input</li><li><code>checkbox</code> &mdash; Checkbox toggle</li><li><code>radio</code> &mdash; Radio button</li><li><code>date</code> &mdash; Date picker</li><li><code>file</code> &mdash; File upload</li></ul>',
       replacedOnClick: '<input type="text" name="" value="" />',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Form',
       description:
-          '## `<form>` Element\n\n**Container** for form inputs and submission handling.\n\n```html\n<form action="/submit" method="post">\n  <!-- Form fields -->\n</form>\n```\n\n**Key attributes:**\n- `action` — Submission URL endpoint\n- `method` — HTTP method (`get` or `post`)\n- `enctype` — Encoding type (use `multipart/form-data` for file uploads)',
+          '<h2>&lt;form&gt; Element</h2><p><strong>Container</strong> for form inputs and submission handling.</p><pre><code>&lt;form action=&quot;/submit&quot; method=&quot;post&quot;&gt;\n  &lt;!-- Form fields --&gt;\n&lt;/form&gt;</code></pre><p><strong>Key attributes:</strong></p><ul><li><code>action</code> &mdash; Submission URL endpoint</li><li><code>method</code> &mdash; HTTP method (<code>get</code> or <code>post</code>)</li><li><code>enctype</code> &mdash; Encoding type (use <code>multipart/form-data</code> for file uploads)</li></ul>',
       replacedOnClick: '<form action="" method="post">\n  \n</form>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'List',
       description:
-          '## `<ul>` Unordered List\n\n**Bulleted list** for items without specific order.\n\n```html\n<ul>\n  <li>Item 1</li>\n  <li>Item 2</li>\n</ul>\n```\n\n**Styling:** Use CSS to customize bullet styles (disc, circle, square, or custom).',
+          '<h2>&lt;ul&gt; Unordered List</h2><p><strong>Bulleted list</strong> for items without specific order.</p><pre><code>&lt;ul&gt;\n  &lt;li&gt;Item 1&lt;/li&gt;\n  &lt;li&gt;Item 2&lt;/li&gt;\n&lt;/ul&gt;</code></pre><p><strong>Styling:</strong> Use CSS to customize bullet styles (disc, circle, square, or custom).</p>',
       replacedOnClick: '<ul>\n  <li></li>\n</ul>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Ordered List',
       description:
-          '## `<ol>` Ordered List\n\n**Numbered list** for sequential or ordered items.\n\n```html\n<ol>\n  <li>First item</li>\n  <li>Second item</li>\n</ol>\n```\n\n**Attributes:** `start`, `reversed`, `type` (1, A, a, I, i)',
+          '<h2>&lt;ol&gt; Ordered List</h2><p><strong>Numbered list</strong> for sequential or ordered items.</p><pre><code>&lt;ol&gt;\n  &lt;li&gt;First item&lt;/li&gt;\n  &lt;li&gt;Second item&lt;/li&gt;\n&lt;/ol&gt;</code></pre><p><strong>Attributes:</strong> <code>start</code>, <code>reversed</code>, <code>type</code> (1, A, a, I, i)</p>',
       replacedOnClick: '<ol>\n  <li></li>\n</ol>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Table',
       description:
-          '## `<table>` Element\n\n**Structured data table** with rows and columns.\n\n```html\n<table>\n  <tr>\n    <th>Header</th>\n  </tr>\n  <tr>\n    <td>Data</td>\n  </tr>\n</table>\n```\n\n**Best structure:** Use `<thead>`, `<tbody>`, and `<tfoot>` for better organization and accessibility.',
+          '<h2>&lt;table&gt; Element</h2><p><strong>Structured data table</strong> with rows and columns.</p><pre><code>&lt;table&gt;\n  &lt;tr&gt;\n    &lt;th&gt;Header&lt;/th&gt;\n  &lt;/tr&gt;\n  &lt;tr&gt;\n    &lt;td&gt;Data&lt;/td&gt;\n  &lt;/tr&gt;\n&lt;/table&gt;</code></pre><p><strong>Best structure:</strong> Use <code>&lt;thead&gt;</code>, <code>&lt;tbody&gt;</code>, and <code>&lt;tfoot&gt;</code> for better organization and accessibility.</p>',
       replacedOnClick:
           '<table>\n  <tr>\n    <th></th>\n  </tr>\n  <tr>\n    <td></td>\n  </tr>\n</table>',
       triggeredAt: '<',
@@ -98,119 +98,119 @@ List<SuggestionModel> getHtmlSuggestions() {
     SuggestionModel(
       label: 'Script',
       description:
-          '## `<script>` Element\n\n**Embeds JavaScript** code or references external scripts.\n\n```html\n<script>\n  console.log("Hello World");\n</script>\n```\n\n**External script:**\n```html\n<script src="app.js"></script>\n```\n\n**Attributes:** `src`, `type`, `async`, `defer`',
+          '<h2>&lt;script&gt; Element</h2><p><strong>Embeds JavaScript</strong> code or references external scripts.</p><pre><code>&lt;script&gt;\n  console.log(&quot;Hello World&quot;);\n&lt;/script&gt;</code></pre><p><strong>External script:</strong></p><pre><code>&lt;script src=&quot;app.js&quot;&gt;&lt;/script&gt;</code></pre><p><strong>Attributes:</strong> <code>src</code>, <code>type</code>, <code>async</code>, <code>defer</code></p>',
       replacedOnClick: '<script>\n  \n</script>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Style',
       description:
-          '## `<style>` Element\n\n**Embeds CSS** styles directly in the document.\n\n```html\n<style>\n  body { color: #333; }\n</style>\n```\n\n**Best practice:** Use external stylesheets via `<link>` for better organization and caching.',
+          '<h2>&lt;style&gt; Element</h2><p><strong>Embeds CSS</strong> styles directly in the document.</p><pre><code>&lt;style&gt;\n  body { color: #333; }\n&lt;/style&gt;</code></pre><p><strong>Best practice:</strong> Use external stylesheets via <code>&lt;link&gt;</code> for better organization and caching.</p>',
       replacedOnClick: '<style>\n  \n</style>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Meta',
       description:
-          '## `<meta>` Element\n\n**Metadata** about the HTML document.\n\n```html\n<meta name="description" content="Page description" />\n```\n\n**Common uses:**\n- `charset` — Character encoding (UTF-8)\n- `viewport` — Responsive design settings\n- `description` — SEO description\n- `keywords` — SEO keywords\n- `author` — Page author information',
+          '<h2>&lt;meta&gt; Element</h2><p><strong>Metadata</strong> about the HTML document.</p><pre><code>&lt;meta name=&quot;description&quot; content=&quot;Page description&quot; /&gt;</code></pre><p><strong>Common uses:</strong></p><ul><li><code>charset</code> &mdash; Character encoding (UTF-8)</li><li><code>viewport</code> &mdash; Responsive design settings</li><li><code>description</code> &mdash; SEO description</li><li><code>keywords</code> &mdash; SEO keywords</li><li><code>author</code> &mdash; Page author information</li></ul>',
       replacedOnClick: '<meta name="" content="" />',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Link CSS',
       description:
-          '## `<link>` Stylesheet\n\n**Links external CSS** stylesheet to the document.\n\n```html\n<link rel="stylesheet" href="styles.css" />\n```\n\n**Key attributes:**\n- `rel="stylesheet"` — Stylesheet relationship\n- `href` — CSS file URL or path\n- `media` — Media query (e.g., `print`, `screen`)',
+          '<h2>&lt;link&gt; Stylesheet</h2><p><strong>Links external CSS</strong> stylesheet to the document.</p><pre><code>&lt;link rel=&quot;stylesheet&quot; href=&quot;styles.css&quot; /&gt;</code></pre><p><strong>Key attributes:</strong></p><ul><li><code>rel=&quot;stylesheet&quot;</code> &mdash; Stylesheet relationship</li><li><code>href</code> &mdash; CSS file URL or path</li><li><code>media</code> &mdash; Media query (e.g., <code>print</code>, <code>screen</code>)</li></ul>',
       replacedOnClick: '<link rel="stylesheet" href="" />',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Section',
       description:
-          '## `<section>` Element\n\n**Semantic container** for thematic content grouping.\n\n```html\n<section>\n  <h2>Section Title</h2>\n  <!-- Content -->\n</section>\n```\n\n**Common uses:** Chapters, topics, distinct content areas, document sections.',
+          '<h2>&lt;section&gt; Element</h2><p><strong>Semantic container</strong> for thematic content grouping.</p><pre><code>&lt;section&gt;\n  &lt;h2&gt;Section Title&lt;/h2&gt;\n  &lt;!-- Content --&gt;\n&lt;/section&gt;</code></pre><p><strong>Common uses:</strong> Chapters, topics, distinct content areas, document sections.</p>',
       replacedOnClick: '<section>\n  \n</section>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Article',
       description:
-          '## `<article>` Element\n\n**Self-contained content** that can be independently distributed.\n\n```html\n<article>\n  <h2>Article Title</h2>\n  <p>Article content...</p>\n</article>\n```\n\n**Common uses:** Blog posts, news articles, forum posts, product cards.',
+          '<h2>&lt;article&gt; Element</h2><p><strong>Self-contained content</strong> that can be independently distributed.</p><pre><code>&lt;article&gt;\n  &lt;h2&gt;Article Title&lt;/h2&gt;\n  &lt;p&gt;Article content...&lt;/p&gt;\n&lt;/article&gt;</code></pre><p><strong>Common uses:</strong> Blog posts, news articles, forum posts, product cards.</p>',
       replacedOnClick: '<article>\n  \n</article>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Header',
       description:
-          '## `<header>` Element\n\n**Header section** containing introductory content.\n\n```html\n<header>\n  <h1>Site Title</h1>\n  <nav>...</nav>\n</header>\n```\n\n**Typically contains:** Logo, navigation, site title, search bar.',
+          '<h2>&lt;header&gt; Element</h2><p><strong>Header section</strong> containing introductory content.</p><pre><code>&lt;header&gt;\n  &lt;h1&gt;Site Title&lt;/h1&gt;\n  &lt;nav&gt;...&lt;/nav&gt;\n&lt;/header&gt;</code></pre><p><strong>Typically contains:</strong> Logo, navigation, site title, search bar.</p>',
       replacedOnClick: '<header>\n  \n</header>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Footer',
       description:
-          '## `<footer>` Element\n\n**Footer section** with closing information.\n\n```html\n<footer>\n  <p>Copyright © 2024</p>\n</footer>\n```\n\n**Typically contains:** Copyright, links, contact information, social media.',
+          '<h2>&lt;footer&gt; Element</h2><p><strong>Footer section</strong> with closing information.</p><pre><code>&lt;footer&gt;\n  &lt;p&gt;Copyright &copy; 2024&lt;/p&gt;\n&lt;/footer&gt;</code></pre><p><strong>Typically contains:</strong> Copyright, links, contact information, social media.</p>',
       replacedOnClick: '<footer>\n  \n</footer>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Nav',
       description:
-          '## `<nav>` Element\n\n**Navigation section** with links to other pages.\n\n```html\n<nav>\n  <a href="/">Home</a>\n  <a href="/about">About</a>\n</nav>\n```\n\n**Semantic meaning:** Main navigation links and site structure.',
+          '<h2>&lt;nav&gt; Element</h2><p><strong>Navigation section</strong> with links to other pages.</p><pre><code>&lt;nav&gt;\n  &lt;a href=&quot;/&quot;&gt;Home&lt;/a&gt;\n  &lt;a href=&quot;/about&quot;&gt;About&lt;/a&gt;\n&lt;/nav&gt;</code></pre><p><strong>Semantic meaning:</strong> Main navigation links and site structure.</p>',
       replacedOnClick: '<nav>\n  \n</nav>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Heading 3',
       description:
-          '## `<h3>` Heading Level 3\n\n**Subsection heading** — third level in the document hierarchy.\n\n```html\n<h3>Subsection Title</h3>\n```\n\n**Semantic structure:** Part of the document outline and accessibility tree.',
+          '<h2>&lt;h3&gt; Heading Level 3</h2><p><strong>Subsection heading</strong> &mdash; third level in the document hierarchy.</p><pre><code>&lt;h3&gt;Subsection Title&lt;/h3&gt;</code></pre><p><strong>Semantic structure:</strong> Part of the document outline and accessibility tree.</p>',
       replacedOnClick: '<h3>\n  \n</h3>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Heading 4',
       description:
-          '## `<h4>` Heading Level 4\n\n**Sub-subsection heading** — fourth level in the document hierarchy.\n\n```html\n<h4>Minor Section</h4>\n```\n\n**Best practice:** Continue heading levels sequentially without skipping levels.',
+          '<h2>&lt;h4&gt; Heading Level 4</h2><p><strong>Sub-subsection heading</strong> &mdash; fourth level in the document hierarchy.</p><pre><code>&lt;h4&gt;Minor Section&lt;/h4&gt;</code></pre><p><strong>Best practice:</strong> Continue heading levels sequentially without skipping levels.</p>',
       replacedOnClick: '<h4>\n  \n</h4>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Heading 5',
       description:
-          '## `<h5>` Heading Level 5\n\n**Minor heading** — fifth level in the document hierarchy.\n\n```html\n<h5>Small Section</h5>\n```\n\n**Common usage:** For deeply nested content sections and subsections.',
+          '<h2>&lt;h5&gt; Heading Level 5</h2><p><strong>Minor heading</strong> &mdash; fifth level in the document hierarchy.</p><pre><code>&lt;h5&gt;Small Section&lt;/h5&gt;</code></pre><p><strong>Common usage:</strong> For deeply nested content sections and subsections.</p>',
       replacedOnClick: '<h5>\n  \n</h5>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Heading 6',
       description:
-          '## `<h6>` Heading Level 6\n\n**Smallest heading** — sixth and final level in HTML.\n\n```html\n<h6>Smallest Heading</h6>\n```\n\n**Note:** This is the lowest heading level available in HTML.',
+          '<h2>&lt;h6&gt; Heading Level 6</h2><p><strong>Smallest heading</strong> &mdash; sixth and final level in HTML.</p><pre><code>&lt;h6&gt;Smallest Heading&lt;/h6&gt;</code></pre><p><strong>Note:</strong> This is the lowest heading level available in HTML.</p>',
       replacedOnClick: '<h6>\n  \n</h6>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'List Item',
       description:
-          '## `<li>` List Item\n\n**Individual item** in ordered or unordered lists.\n\n```html\n<li>List item content</li>\n```\n\n**Parent elements:** Must be inside `<ul>`, `<ol>`, or `<menu>`.',
+          '<h2>&lt;li&gt; List Item</h2><p><strong>Individual item</strong> in ordered or unordered lists.</p><pre><code>&lt;li&gt;List item content&lt;/li&gt;</code></pre><p><strong>Parent elements:</strong> Must be inside <code>&lt;ul&gt;</code>, <code>&lt;ol&gt;</code>, or <code>&lt;menu&gt;</code>.</p>',
       replacedOnClick: '<li></li>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Label',
       description:
-          '## `<label>` Element\n\n**Associates text** with form input for accessibility.\n\n```html\n<label for="username">Username:</label>\n<input id="username" type="text" />\n```\n\n**Key benefits:**\n- **Accessibility** — Screen reader support\n- **Usability** — Click label to focus input\n- **Form validation** — Better error association',
+          '<h2>&lt;label&gt; Element</h2><p><strong>Associates text</strong> with form input for accessibility.</p><pre><code>&lt;label for=&quot;username&quot;&gt;Username:&lt;/label&gt;\n&lt;input id=&quot;username&quot; type=&quot;text&quot; /&gt;</code></pre><p><strong>Key benefits:</strong></p><ul><li><strong>Accessibility</strong> &mdash; Screen reader support</li><li><strong>Usability</strong> &mdash; Click label to focus input</li><li><strong>Form validation</strong> &mdash; Better error association</li></ul>',
       replacedOnClick: '<label for="">Label Text</label>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Textarea',
       description:
-          '## `<textarea>` Element\n\n**Multi-line text input** for longer content.\n\n```html\n<textarea name="message" rows="4" cols="50">\n  Default text\n</textarea>\n```\n\n**Key attributes:**\n- `rows` — Visible height in lines\n- `cols` — Visible width in characters\n- `placeholder` — Hint text\n- `maxlength` — Maximum character count',
+          '<h2>&lt;textarea&gt; Element</h2><p><strong>Multi-line text input</strong> for longer content.</p><pre><code>&lt;textarea name=&quot;message&quot; rows=&quot;4&quot; cols=&quot;50&quot;&gt;\n  Default text\n&lt;/textarea&gt;</code></pre><p><strong>Key attributes:</strong></p><ul><li><code>rows</code> &mdash; Visible height in lines</li><li><code>cols</code> &mdash; Visible width in characters</li><li><code>placeholder</code> &mdash; Hint text</li><li><code>maxlength</code> &mdash; Maximum character count</li></ul>',
       replacedOnClick: '<textarea name="" rows="4" cols="50"></textarea>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Select',
       description:
-          '## `<select>` Dropdown\n\n**Dropdown menu** for selecting from predefined options.\n\n```html\n<select name="country">\n  <option value="us">United States</option>\n  <option value="uk">United Kingdom</option>\n</select>\n```\n\n**Key attributes:** `name`, `multiple`, `size`, `required`, `disabled`',
+          '<h2>&lt;select&gt; Dropdown</h2><p><strong>Dropdown menu</strong> for selecting from predefined options.</p><pre><code>&lt;select name=&quot;country&quot;&gt;\n  &lt;option value=&quot;us&quot;&gt;United States&lt;/option&gt;\n  &lt;option value=&quot;uk&quot;&gt;United Kingdom&lt;/option&gt;\n&lt;/select&gt;</code></pre><p><strong>Key attributes:</strong> <code>name</code>, <code>multiple</code>, <code>size</code>, <code>required</code>, <code>disabled</code></p>',
       replacedOnClick:
           '<select name="">\n  <option value="">Option</option>\n</select>',
       triggeredAt: '<',
@@ -218,105 +218,105 @@ List<SuggestionModel> getHtmlSuggestions() {
     SuggestionModel(
       label: 'Option',
       description:
-          '## `<option>` Element\n\n**Choice** within a `<select>` dropdown.\n\n```html\n<option value="value">Display Text</option>\n```\n\n**Key attributes:**\n- `value` — Submitted value (required)\n- `selected` — Pre-selected option\n- `disabled` — Disabled option',
+          '<h2>&lt;option&gt; Element</h2><p><strong>Choice</strong> within a <code>&lt;select&gt;</code> dropdown.</p><pre><code>&lt;option value=&quot;value&quot;&gt;Display Text&lt;/option&gt;</code></pre><p><strong>Key attributes:</strong></p><ul><li><code>value</code> &mdash; Submitted value (required)</li><li><code>selected</code> &mdash; Pre-selected option</li><li><code>disabled</code> &mdash; Disabled option</li></ul>',
       replacedOnClick: '<option value="">Option Text</option>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Fieldset',
       description:
-          '## `<fieldset>` Element\n\n**Groups related form controls** together.\n\n```html\n<fieldset>\n  <legend>Personal Information</legend>\n  <!-- Form fields -->\n</fieldset>\n```\n\n**Key benefits:** Visual grouping, semantic organization, and improved accessibility.',
+          '<h2>&lt;fieldset&gt; Element</h2><p><strong>Groups related form controls</strong> together.</p><pre><code>&lt;fieldset&gt;\n  &lt;legend&gt;Personal Information&lt;/legend&gt;\n  &lt;!-- Form fields --&gt;\n&lt;/fieldset&gt;</code></pre><p><strong>Key benefits:</strong> Visual grouping, semantic organization, and improved accessibility.</p>',
       replacedOnClick: '<fieldset>\n  <legend>Legend</legend>\n  \n</fieldset>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Legend',
       description:
-          '## `<legend>` Element\n\n**Caption** for a `<fieldset>` element.\n\n```html\n<legend>Section Title</legend>\n```\n\n**Purpose:** Describes the purpose of the fieldset group and improves accessibility.',
+          '<h2>&lt;legend&gt; Element</h2><p><strong>Caption</strong> for a <code>&lt;fieldset&gt;</code> element.</p><pre><code>&lt;legend&gt;Section Title&lt;/legend&gt;</code></pre><p><strong>Purpose:</strong> Describes the purpose of the fieldset group and improves accessibility.</p>',
       replacedOnClick: '<legend>Legend Text</legend>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Strong',
       description:
-          '## `<strong>` Element\n\n**Semantic bold** text indicating strong importance.\n\n```html\n<strong>Important text</strong>\n```\n\n**Semantic meaning:** Conveys importance and urgency, preferred over `<b>` for accessibility.',
+          '<h2>&lt;strong&gt; Element</h2><p><strong>Semantic bold</strong> text indicating strong importance.</p><pre><code>&lt;strong&gt;Important text&lt;/strong&gt;</code></pre><p><strong>Semantic meaning:</strong> Conveys importance and urgency, preferred over <code>&lt;b&gt;</code> for accessibility.</p>',
       replacedOnClick: '<strong>Bold Text</strong>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Emphasis',
       description:
-          '## `<em>` Element\n\n**Semantic italic** text indicating emphasis.\n\n```html\n<em>Emphasized text</em>\n```\n\n**Semantic meaning:** Stressed emphasis with proper semantic meaning, preferred over `<i>` for accessibility.',
+          '<h2>&lt;em&gt; Element</h2><p><strong>Semantic italic</strong> text indicating emphasis.</p><pre><code>&lt;em&gt;Emphasized text&lt;/em&gt;</code></pre><p><strong>Semantic meaning:</strong> Stressed emphasis with proper semantic meaning, preferred over <code>&lt;i&gt;</code> for accessibility.</p>',
       replacedOnClick: '<em>Italic Text</em>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Bold',
       description:
-          '## `<b>` Element\n\n**Visual bold** text without semantic meaning.\n\n```html\n<b>Bold text</b>\n```\n\n**Note:** Use `<strong>` for semantic importance. Use `<b>` only for stylistic purposes.',
+          '<h2>&lt;b&gt; Element</h2><p><strong>Visual bold</strong> text without semantic meaning.</p><pre><code>&lt;b&gt;Bold text&lt;/b&gt;</code></pre><p><strong>Note:</strong> Use <code>&lt;strong&gt;</code> for semantic importance. Use <code>&lt;b&gt;</code> only for stylistic purposes.</p>',
       replacedOnClick: '<b>Bold Text</b>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Italic',
       description:
-          '## `<i>` Element\n\n**Visual italic** text without semantic meaning.\n\n```html\n<i>Italic text</i>\n```\n\n**Note:** Use `<em>` for semantic emphasis. Use `<i>` only for stylistic purposes (e.g., foreign words, technical terms).',
+          '<h2>&lt;i&gt; Element</h2><p><strong>Visual italic</strong> text without semantic meaning.</p><pre><code>&lt;i&gt;Italic text&lt;/i&gt;</code></pre><p><strong>Note:</strong> Use <code>&lt;em&gt;</code> for semantic emphasis. Use <code>&lt;i&gt;</code> only for stylistic purposes (e.g., foreign words, technical terms).</p>',
       replacedOnClick: '<i>Italic Text</i>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Code',
       description:
-          '## `<code>` Element\n\n**Inline code** snippet for technical terms and code references.\n\n```html\n<code>functionName()</code>\n```\n\n**Styling:** Typically displayed in monospace font. Use `<pre><code>` for code blocks.',
+          '<h2>&lt;code&gt; Element</h2><p><strong>Inline code</strong> snippet for technical terms and code references.</p><pre><code>&lt;code&gt;functionName()&lt;/code&gt;</code></pre><p><strong>Styling:</strong> Typically displayed in monospace font. Use <code>&lt;pre&gt;&lt;code&gt;</code> for code blocks.</p>',
       replacedOnClick: '<code>code</code>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Pre',
       description:
-          '## `<pre>` Element\n\n**Preformatted text** preserving whitespace and line breaks.\n\n```html\n<pre>\n  function example() {\n    return true;\n  }\n</pre>\n```\n\n**Common uses:** Code blocks (often with `<code>`), ASCII art, formatted text, poetry.',
+          '<h2>&lt;pre&gt; Element</h2><p><strong>Preformatted text</strong> preserving whitespace and line breaks.</p><pre><code>&lt;pre&gt;\n  function example() {\n    return true;\n  }\n&lt;/pre&gt;</code></pre><p><strong>Common uses:</strong> Code blocks (often with <code>&lt;code&gt;</code>), ASCII art, formatted text, poetry.</p>',
       replacedOnClick: '<pre>\n  \n</pre>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Blockquote',
       description:
-          '## `<blockquote>` Element\n\n**Block quotation** from another source.\n\n```html\n<blockquote>\n  <p>Quoted text here</p>\n  <cite>— Source Name</cite>\n</blockquote>\n```\n\n**Attribute:** `cite` — Source URL for the quotation.',
+          '<h2>&lt;blockquote&gt; Element</h2><p><strong>Block quotation</strong> from another source.</p><pre><code>&lt;blockquote&gt;\n  &lt;p&gt;Quoted text here&lt;/p&gt;\n  &lt;cite&gt;&mdash; Source Name&lt;/cite&gt;\n&lt;/blockquote&gt;</code></pre><p><strong>Attribute:</strong> <code>cite</code> &mdash; Source URL for the quotation.</p>',
       replacedOnClick: '<blockquote>\n  \n</blockquote>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Line Break',
       description:
-          '## `<br>` Element\n\n**Line break** — forces a new line.\n\n```html\nLine one<br />\nLine two\n```\n\n**Note:** Self-closing element. Use sparingly; prefer semantic HTML like `<p>` for paragraphs.',
+          '<h2>&lt;br&gt; Element</h2><p><strong>Line break</strong> &mdash; forces a new line.</p><pre><code>Line one&lt;br /&gt;\nLine two</code></pre><p><strong>Note:</strong> Self-closing element. Use sparingly; prefer semantic HTML like <code>&lt;p&gt;</code> for paragraphs.</p>',
       replacedOnClick: '<br />',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Horizontal Rule',
       description:
-          '## `<hr>` Element\n\n**Horizontal rule** — thematic break between sections.\n\n```html\n<section>Content</section>\n<hr />\n<section>More content</section>\n```\n\n**Visual:** Creates a horizontal line separator. Use for topic changes, not just styling.',
+          '<h2>&lt;hr&gt; Element</h2><p><strong>Horizontal rule</strong> &mdash; thematic break between sections.</p><pre><code>&lt;section&gt;Content&lt;/section&gt;\n&lt;hr /&gt;\n&lt;section&gt;More content&lt;/section&gt;</code></pre><p><strong>Visual:</strong> Creates a horizontal line separator. Use for topic changes, not just styling.</p>',
       replacedOnClick: '<hr />',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Aside',
       description:
-          '## `<aside>` Element\n\n**Sidebar content** tangentially related to main content.\n\n```html\n<aside>\n  <h3>Related Links</h3>\n  <!-- Sidebar content -->\n</aside>\n```\n\n**Common uses:** Sidebars, callouts, advertisements, related links, author information.',
+          '<h2>&lt;aside&gt; Element</h2><p><strong>Sidebar content</strong> tangentially related to main content.</p><pre><code>&lt;aside&gt;\n  &lt;h3&gt;Related Links&lt;/h3&gt;\n  &lt;!-- Sidebar content --&gt;\n&lt;/aside&gt;</code></pre><p><strong>Common uses:</strong> Sidebars, callouts, advertisements, related links, author information.</p>',
       replacedOnClick: '<aside>\n  \n</aside>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Main',
       description:
-          '## `<main>` Element\n\n**Main content** area of the document.\n\n```html\n<main>\n  <article>...</article>\n</main>\n```\n\n**Best practice:** Use **one** `<main>` per page for accessibility and semantic structure.',
+          '<h2>&lt;main&gt; Element</h2><p><strong>Main content</strong> area of the document.</p><pre><code>&lt;main&gt;\n  &lt;article&gt;...&lt;/article&gt;\n&lt;/main&gt;</code></pre><p><strong>Best practice:</strong> Use <strong>one</strong> <code>&lt;main&gt;</code> per page for accessibility and semantic structure.</p>',
       replacedOnClick: '<main>\n  \n</main>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Details',
       description:
-          '## `<details>` Element\n\n**Collapsible disclosure widget** showing/hiding content.\n\n```html\n<details>\n  <summary>Click to expand</summary>\n  <p>Hidden content here</p>\n</details>\n```\n\n**Attribute:** `open` — Expanded by default when present.',
+          '<h2>&lt;details&gt; Element</h2><p><strong>Collapsible disclosure widget</strong> showing/hiding content.</p><pre><code>&lt;details&gt;\n  &lt;summary&gt;Click to expand&lt;/summary&gt;\n  &lt;p&gt;Hidden content here&lt;/p&gt;\n&lt;/details&gt;</code></pre><p><strong>Attribute:</strong> <code>open</code> &mdash; Expanded by default when present.</p>',
       replacedOnClick:
           '<details>\n  <summary>Summary</summary>\n  \n</details>',
       triggeredAt: '<',
@@ -324,14 +324,14 @@ List<SuggestionModel> getHtmlSuggestions() {
     SuggestionModel(
       label: 'Summary',
       description:
-          '## `<summary>` Element\n\n**Clickable summary** for `<details>` element.\n\n```html\n<summary>Show more</summary>\n```\n\n**Purpose:** Label for collapsible content. Must be the first child of `<details>`.',
+          '<h2>&lt;summary&gt; Element</h2><p><strong>Clickable summary</strong> for <code>&lt;details&gt;</code> element.</p><pre><code>&lt;summary&gt;Show more&lt;/summary&gt;</code></pre><p><strong>Purpose:</strong> Label for collapsible content. Must be the first child of <code>&lt;details&gt;</code>.</p>',
       replacedOnClick: '<summary>Summary Text</summary>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Figure',
       description:
-          '## `<figure>` Element\n\n**Self-contained content** with optional caption.\n\n```html\n<figure>\n  <img src="image.jpg" alt="Description" />\n  <figcaption>Image caption</figcaption>\n</figure>\n```\n\n**Common uses:** Images, diagrams, code snippets, quotes, illustrations.',
+          '<h2>&lt;figure&gt; Element</h2><p><strong>Self-contained content</strong> with optional caption.</p><pre><code>&lt;figure&gt;\n  &lt;img src=&quot;image.jpg&quot; alt=&quot;Description&quot; /&gt;\n  &lt;figcaption&gt;Image caption&lt;/figcaption&gt;\n&lt;/figure&gt;</code></pre><p><strong>Common uses:</strong> Images, diagrams, code snippets, quotes, illustrations.</p>',
       replacedOnClick:
           '<figure>\n  \n  <figcaption>Caption</figcaption>\n</figure>',
       triggeredAt: '<',
@@ -339,63 +339,63 @@ List<SuggestionModel> getHtmlSuggestions() {
     SuggestionModel(
       label: 'Figcaption',
       description:
-          '## `<figcaption>` Element\n\n**Caption** for a `<figure>` element.\n\n```html\n<figcaption>Description of the figure</figcaption>\n```\n\n**Placement:** First or last child of `<figure>`. Only one `<figcaption>` per `<figure>`.',
+          '<h2>&lt;figcaption&gt; Element</h2><p><strong>Caption</strong> for a <code>&lt;figure&gt;</code> element.</p><pre><code>&lt;figcaption&gt;Description of the figure&lt;/figcaption&gt;</code></pre><p><strong>Placement:</strong> First or last child of <code>&lt;figure&gt;</code>. Only one <code>&lt;figcaption&gt;</code> per <code>&lt;figure&gt;</code>.</p>',
       replacedOnClick: '<figcaption>Caption Text</figcaption>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Table Head',
       description:
-          '## `<thead>` Element\n\n**Header section** of a table with column headers.\n\n```html\n<thead>\n  <tr>\n    <th>Column 1</th>\n    <th>Column 2</th>\n  </tr>\n</thead>\n```\n\n**Contains:** Header rows with `<th>` elements. Improves accessibility and allows for scrolling headers.',
+          '<h2>&lt;thead&gt; Element</h2><p><strong>Header section</strong> of a table with column headers.</p><pre><code>&lt;thead&gt;\n  &lt;tr&gt;\n    &lt;th&gt;Column 1&lt;/th&gt;\n    &lt;th&gt;Column 2&lt;/th&gt;\n  &lt;/tr&gt;\n&lt;/thead&gt;</code></pre><p><strong>Contains:</strong> Header rows with <code>&lt;th&gt;</code> elements. Improves accessibility and allows for scrolling headers.</p>',
       replacedOnClick: '<thead>\n  <tr>\n    <th></th>\n  </tr>\n</thead>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Table Body',
       description:
-          '## `<tbody>` Element\n\n**Body section** containing main table data.\n\n```html\n<tbody>\n  <tr>\n    <td>Data 1</td>\n    <td>Data 2</td>\n  </tr>\n</tbody>\n```\n\n**Contains:** Data rows with `<td>` elements. Can have multiple `<tbody>` sections for grouping.',
+          '<h2>&lt;tbody&gt; Element</h2><p><strong>Body section</strong> containing main table data.</p><pre><code>&lt;tbody&gt;\n  &lt;tr&gt;\n    &lt;td&gt;Data 1&lt;/td&gt;\n    &lt;td&gt;Data 2&lt;/td&gt;\n  &lt;/tr&gt;\n&lt;/tbody&gt;</code></pre><p><strong>Contains:</strong> Data rows with <code>&lt;td&gt;</code> elements. Can have multiple <code>&lt;tbody&gt;</code> sections for grouping.</p>',
       replacedOnClick: '<tbody>\n  <tr>\n    <td></td>\n  </tr>\n</tbody>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Table Foot',
       description:
-          '## `<tfoot>` Element\n\n**Footer section** with summary rows.\n\n```html\n<tfoot>\n  <tr>\n    <td>Total</td>\n    <td>\$100</td>\n  </tr>\n</tfoot>\n```\n\n**Common uses:** Totals, summaries, footnotes, column summaries.',
+          '<h2>&lt;tfoot&gt; Element</h2><p><strong>Footer section</strong> with summary rows.</p><pre><code>&lt;tfoot&gt;\n  &lt;tr&gt;\n    &lt;td&gt;Total&lt;/td&gt;\n    &lt;td&gt;\$100&lt;/td&gt;\n  &lt;/tr&gt;\n&lt;/tfoot&gt;</code></pre><p><strong>Common uses:</strong> Totals, summaries, footnotes, column summaries.</p>',
       replacedOnClick: '<tfoot>\n  <tr>\n    <td></td>\n  </tr>\n</tfoot>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Table Row',
       description:
-          '## `<tr>` Element\n\n**Table row** containing cells.\n\n```html\n<tr>\n  <td>Cell 1</td>\n  <td>Cell 2</td>\n</tr>\n```\n\n**Contains:** `<th>` (header cells) or `<td>` (data cells). Must be inside `<table>`, `<thead>`, `<tbody>`, or `<tfoot>`.',
+          '<h2>&lt;tr&gt; Element</h2><p><strong>Table row</strong> containing cells.</p><pre><code>&lt;tr&gt;\n  &lt;td&gt;Cell 1&lt;/td&gt;\n  &lt;td&gt;Cell 2&lt;/td&gt;\n&lt;/tr&gt;</code></pre><p><strong>Contains:</strong> <code>&lt;th&gt;</code> (header cells) or <code>&lt;td&gt;</code> (data cells). Must be inside <code>&lt;table&gt;</code>, <code>&lt;thead&gt;</code>, <code>&lt;tbody&gt;</code>, or <code>&lt;tfoot&gt;</code>.</p>',
       replacedOnClick: '<tr>\n  <td></td>\n</tr>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Table Header Cell',
       description:
-          '## `<th>` Element\n\n**Header cell** in table header row.\n\n```html\n<th>Column Name</th>\n```\n\n**Key attributes:** `colspan`, `rowspan`, `scope` (row, col, rowgroup, colgroup)\n\n**Styling:** Bold and centered by default. Use `scope` for accessibility.',
+          '<h2>&lt;th&gt; Element</h2><p><strong>Header cell</strong> in table header row.</p><pre><code>&lt;th&gt;Column Name&lt;/th&gt;</code></pre><p><strong>Key attributes:</strong> <code>colspan</code>, <code>rowspan</code>, <code>scope</code> (row, col, rowgroup, colgroup)</p><p><strong>Styling:</strong> Bold and centered by default. Use <code>scope</code> for accessibility.</p>',
       replacedOnClick: '<th></th>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Table Data Cell',
       description:
-          '## `<td>` Element\n\n**Data cell** containing table content.\n\n```html\n<td>Cell content</td>\n```\n\n**Key attributes:** `colspan`, `rowspan` for merging cells\n\n**Styling:** Regular text alignment (left by default).',
+          '<h2>&lt;td&gt; Element</h2><p><strong>Data cell</strong> containing table content.</p><pre><code>&lt;td&gt;Cell content&lt;/td&gt;</code></pre><p><strong>Key attributes:</strong> <code>colspan</code>, <code>rowspan</code> for merging cells</p><p><strong>Styling:</strong> Regular text alignment (left by default).</p>',
       replacedOnClick: '<td></td>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Table Caption',
       description:
-          '## `<caption>` Element\n\n**Title or description** for a table.\n\n```html\n<caption>Table Title</caption>\n```\n\n**Placement:** First child of `<table>` element. Improves accessibility and provides context.',
+          '<h2>&lt;caption&gt; Element</h2><p><strong>Title or description</strong> for a table.</p><pre><code>&lt;caption&gt;Table Title&lt;/caption&gt;</code></pre><p><strong>Placement:</strong> First child of <code>&lt;table&gt;</code> element. Improves accessibility and provides context.</p>',
       replacedOnClick: '<caption>Caption Text</caption>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Video',
       description:
-          '## `<video>` Element\n\n**Embeds video** content with native controls.\n\n```html\n<video width="640" height="360" controls>\n  <source src="video.mp4" type="video/mp4">\n  Your browser does not support video.\n</video>\n```\n\n**Key attributes:**\n- `controls` — Show playback controls\n- `autoplay` — Auto-play video (requires `muted`)\n- `loop` — Loop video playback\n- `muted` — Mute audio by default\n- `poster` — Thumbnail image URL',
+          '<h2>&lt;video&gt; Element</h2><p><strong>Embeds video</strong> content with native controls.</p><pre><code>&lt;video width=&quot;640&quot; height=&quot;360&quot; controls&gt;\n  &lt;source src=&quot;video.mp4&quot; type=&quot;video/mp4&quot;&gt;\n  Your browser does not support video.\n&lt;/video&gt;</code></pre><p><strong>Key attributes:</strong></p><ul><li><code>controls</code> &mdash; Show playback controls</li><li><code>autoplay</code> &mdash; Auto-play video (requires <code>muted</code>)</li><li><code>loop</code> &mdash; Loop video playback</li><li><code>muted</code> &mdash; Mute audio by default</li><li><code>poster</code> &mdash; Thumbnail image URL</li></ul>',
       replacedOnClick:
           '<video width="" height="" controls>\n  <source src="" type="video/mp4">\n</video>',
       triggeredAt: '<',
@@ -403,7 +403,7 @@ List<SuggestionModel> getHtmlSuggestions() {
     SuggestionModel(
       label: 'Audio',
       description:
-          '## `<audio>` Element\n\n**Embeds audio** content with native controls.\n\n```html\n<audio controls>\n  <source src="audio.mp3" type="audio/mpeg">\n  Your browser does not support audio.\n</audio>\n```\n\n**Key attributes:**\n- `controls` — Show playback controls\n- `autoplay` — Auto-play audio (may be blocked by browsers)\n- `loop` — Loop audio playback\n- `muted` — Mute audio by default',
+          '<h2>&lt;audio&gt; Element</h2><p><strong>Embeds audio</strong> content with native controls.</p><pre><code>&lt;audio controls&gt;\n  &lt;source src=&quot;audio.mp3&quot; type=&quot;audio/mpeg&quot;&gt;\n  Your browser does not support audio.\n&lt;/audio&gt;</code></pre><p><strong>Key attributes:</strong></p><ul><li><code>controls</code> &mdash; Show playback controls</li><li><code>autoplay</code> &mdash; Auto-play audio (may be blocked by browsers)</li><li><code>loop</code> &mdash; Loop audio playback</li><li><code>muted</code> &mdash; Mute audio by default</li></ul>',
       replacedOnClick:
           '<audio controls>\n  <source src="" type="audio/mpeg">\n</audio>',
       triggeredAt: '<',
@@ -411,56 +411,56 @@ List<SuggestionModel> getHtmlSuggestions() {
     SuggestionModel(
       label: 'Source',
       description:
-          '## `<source>` Element\n\n**Media source** for `<video>`, `<audio>`, and `<picture>` elements.\n\n```html\n<source src="media.mp4" type="video/mp4" />\n```\n\n**Key attributes:**\n- `src` — Media URL or path\n- `type` — MIME type (e.g., `video/mp4`, `audio/mpeg`)\n- `media` — Media query for responsive images (in `<picture>`)',
+          '<h2>&lt;source&gt; Element</h2><p><strong>Media source</strong> for <code>&lt;video&gt;</code>, <code>&lt;audio&gt;</code>, and <code>&lt;picture&gt;</code> elements.</p><pre><code>&lt;source src=&quot;media.mp4&quot; type=&quot;video/mp4&quot; /&gt;</code></pre><p><strong>Key attributes:</strong></p><ul><li><code>src</code> &mdash; Media URL or path</li><li><code>type</code> &mdash; MIME type (e.g., <code>video/mp4</code>, <code>audio/mpeg</code>)</li><li><code>media</code> &mdash; Media query for responsive images (in <code>&lt;picture&gt;</code>)</li></ul>',
       replacedOnClick: '<source src="" type="" />',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Canvas',
       description:
-          '## `<canvas>` Element\n\n**Drawing surface** for JavaScript graphics and animations.\n\n```html\n<canvas id="myCanvas" width="800" height="600"></canvas>\n```\n\n**Usage:**\n```javascript\nconst ctx = canvas.getContext("2d");\nctx.fillRect(10, 10, 100, 100);\n```\n\n**Common uses:** Charts, games, animations, image manipulation, data visualization.',
+          '<h2>&lt;canvas&gt; Element</h2><p><strong>Drawing surface</strong> for JavaScript graphics and animations.</p><pre><code>&lt;canvas id=&quot;myCanvas&quot; width=&quot;800&quot; height=&quot;600&quot;&gt;&lt;/canvas&gt;</code></pre><p><strong>Usage:</strong></p><pre><code>const ctx = canvas.getContext(&quot;2d&quot;);\nctx.fillRect(10, 10, 100, 100);</code></pre><p><strong>Common uses:</strong> Charts, games, animations, image manipulation, data visualization.</p>',
       replacedOnClick: '<canvas id="" width="" height=""></canvas>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'SVG',
       description:
-          '## `<svg>` Element\n\n**Scalable Vector Graphics** container for vector-based graphics.\n\n```html\n<svg width="100" height="100">\n  <circle cx="50" cy="50" r="40" fill="blue" />\n</svg>\n```\n\n**Key benefits:**\n- **Scalable** — No quality loss at any size\n- **Stylable** — Can be styled with CSS\n- **Accessible** — Supports ARIA attributes and text alternatives',
+          '<h2>&lt;svg&gt; Element</h2><p><strong>Scalable Vector Graphics</strong> container for vector-based graphics.</p><pre><code>&lt;svg width=&quot;100&quot; height=&quot;100&quot;&gt;\n  &lt;circle cx=&quot;50&quot; cy=&quot;50&quot; r=&quot;40&quot; fill=&quot;blue&quot; /&gt;\n&lt;/svg&gt;</code></pre><p><strong>Key benefits:</strong></p><ul><li><strong>Scalable</strong> &mdash; No quality loss at any size</li><li><strong>Stylable</strong> &mdash; Can be styled with CSS</li><li><strong>Accessible</strong> &mdash; Supports ARIA attributes and text alternatives</li></ul>',
       replacedOnClick: '<svg width="" height="">\n  \n</svg>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Iframe',
       description:
-          '## `<iframe>` Element\n\n**Inline frame** embedding another HTML page.\n\n```html\n<iframe src="https://example.com" width="800" height="600"></iframe>\n```\n\n**Key attributes:**\n- `src` — Page URL to embed\n- `width`, `height` — Frame dimensions\n- `sandbox` — Security restrictions (recommended)\n- `allow` — Permissions policy (e.g., `camera`, `microphone`)\n\n**Note:** `frameborder` is deprecated; use CSS instead.',
+          '<h2>&lt;iframe&gt; Element</h2><p><strong>Inline frame</strong> embedding another HTML page.</p><pre><code>&lt;iframe src=&quot;https://example.com&quot; width=&quot;800&quot; height=&quot;600&quot;&gt;&lt;/iframe&gt;</code></pre><p><strong>Key attributes:</strong></p><ul><li><code>src</code> &mdash; Page URL to embed</li><li><code>width</code>, <code>height</code> &mdash; Frame dimensions</li><li><code>sandbox</code> &mdash; Security restrictions (recommended)</li><li><code>allow</code> &mdash; Permissions policy (e.g., <code>camera</code>, <code>microphone</code>)</li></ul><p><strong>Note:</strong> <code>frameborder</code> is deprecated; use CSS instead.</p>',
       replacedOnClick: '<iframe src="" width="" height=""></iframe>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Embed',
       description:
-          '## `<embed>` Element\n\n**Embeds external content** or plugin (legacy element).\n\n```html\n<embed src="plugin.swf" width="400" height="300" />\n```\n\n**Note:** Consider using `<iframe>` or modern alternatives. Limited browser support for plugins.',
+          '<h2>&lt;embed&gt; Element</h2><p><strong>Embeds external content</strong> or plugin (legacy element).</p><pre><code>&lt;embed src=&quot;plugin.swf&quot; width=&quot;400&quot; height=&quot;300&quot; /&gt;</code></pre><p><strong>Note:</strong> Consider using <code>&lt;iframe&gt;</code> or modern alternatives. Limited browser support for plugins.</p>',
       replacedOnClick: '<embed src="" width="" height="" />',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Object',
       description:
-          '## `<object>` Element\n\n**Embeds external resource** or plugin.\n\n```html\n<object data="file.pdf" width="800" height="600">\n  <param name="autoplay" value="true" />\n</object>\n```\n\n**Common uses:** PDFs, Flash content (legacy), plugins\n\n**Fallback:** Content inside tag is shown if object fails to load.',
+          '<h2>&lt;object&gt; Element</h2><p><strong>Embeds external resource</strong> or plugin.</p><pre><code>&lt;object data=&quot;file.pdf&quot; width=&quot;800&quot; height=&quot;600&quot;&gt;\n  &lt;param name=&quot;autoplay&quot; value=&quot;true&quot; /&gt;\n&lt;/object&gt;</code></pre><p><strong>Common uses:</strong> PDFs, Flash content (legacy), plugins</p><p><strong>Fallback:</strong> Content inside tag is shown if object fails to load.</p>',
       replacedOnClick: '<object data="" width="" height=""></object>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Title',
       description:
-          '## `<title>` Element\n\n**Page title** shown in browser tab and search results.\n\n```html\n<title>My Website - Home Page</title>\n```\n\n**SEO importance:** Critical for search engine optimization and user experience.\n\n**Placement:** Must be inside `<head>` element. Only one `<title>` per document.',
+          '<h2>&lt;title&gt; Element</h2><p><strong>Page title</strong> shown in browser tab and search results.</p><pre><code>&lt;title&gt;My Website - Home Page&lt;/title&gt;</code></pre><p><strong>SEO importance:</strong> Critical for search engine optimization and user experience.</p><p><strong>Placement:</strong> Must be inside <code>&lt;head&gt;</code> element. Only one <code>&lt;title&gt;</code> per document.</p>',
       replacedOnClick: '<title>Page Title</title>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Head',
       description:
-          '## `<head>` Element\n\n**Document metadata** container (not displayed in page).\n\n```html\n<head>\n  <meta charset="UTF-8">\n  <title>Page Title</title>\n  <link rel="stylesheet" href="styles.css" />\n</head>\n```\n\n**Typically contains:** Meta tags, title, links, scripts, styles.',
+          '<h2>&lt;head&gt; Element</h2><p><strong>Document metadata</strong> container (not displayed in page).</p><pre><code>&lt;head&gt;\n  &lt;meta charset=&quot;UTF-8&quot;&gt;\n  &lt;title&gt;Page Title&lt;/title&gt;\n  &lt;link rel=&quot;stylesheet&quot; href=&quot;styles.css&quot; /&gt;\n&lt;/head&gt;</code></pre><p><strong>Typically contains:</strong> Meta tags, title, links, scripts, styles.</p>',
       replacedOnClick:
           '<head>\n  <meta charset="UTF-8">\n  <title>Title</title>\n</head>',
       triggeredAt: '<',
@@ -468,14 +468,14 @@ List<SuggestionModel> getHtmlSuggestions() {
     SuggestionModel(
       label: 'Body',
       description:
-          '## `<body>` Element\n\n**Main content** area visible to users.\n\n```html\n<body>\n  <header>...</header>\n  <main>...</main>\n  <footer>...</footer>\n</body>\n```\n\n**Contains:** All visible page content. Only one `<body>` per document.',
+          '<h2>&lt;body&gt; Element</h2><p><strong>Main content</strong> area visible to users.</p><pre><code>&lt;body&gt;\n  &lt;header&gt;...&lt;/header&gt;\n  &lt;main&gt;...&lt;/main&gt;\n  &lt;footer&gt;...&lt;/footer&gt;\n&lt;/body&gt;</code></pre><p><strong>Contains:</strong> All visible page content. Only one <code>&lt;body&gt;</code> per document.</p>',
       replacedOnClick: '<body>\n  \n</body>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'HTML',
       description:
-          '## Complete HTML Document\n\n**Full HTML5 document structure** with all essential elements.\n\n```html\n<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width">\n  <title>Document</title>\n</head>\n<body>\n  <!-- Content -->\n</body>\n</html>\n```\n\n**Includes:** DOCTYPE declaration, `<html>`, `<head>`, and `<body>` elements.',
+          '<h2>Complete HTML Document</h2><p><strong>Full HTML5 document structure</strong> with all essential elements.</p><pre><code>&lt;!DOCTYPE html&gt;\n&lt;html lang=&quot;en&quot;&gt;\n&lt;head&gt;\n  &lt;meta charset=&quot;UTF-8&quot;&gt;\n  &lt;meta name=&quot;viewport&quot; content=&quot;width=device-width&quot;&gt;\n  &lt;title&gt;Document&lt;/title&gt;\n&lt;/head&gt;\n&lt;body&gt;\n  &lt;!-- Content --&gt;\n&lt;/body&gt;\n&lt;/html&gt;</code></pre><p><strong>Includes:</strong> DOCTYPE declaration, <code>&lt;html&gt;</code>, <code>&lt;head&gt;</code>, and <code>&lt;body&gt;</code> elements.</p>',
       replacedOnClick:
           '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <title>Document</title>\n</head>\n<body>\n  \n</body>\n</html>',
       triggeredAt: '<',
@@ -483,98 +483,98 @@ List<SuggestionModel> getHtmlSuggestions() {
     SuggestionModel(
       label: 'Mark',
       description:
-          '## `<mark>` Element\n\n**Highlighted text** for emphasis or search results.\n\n```html\n<mark>Highlighted content</mark>\n```\n\n**Styling:** Yellow background by default (customizable with CSS).\n\n**Common uses:** Search highlights, important notes, text references.',
+          '<h2>&lt;mark&gt; Element</h2><p><strong>Highlighted text</strong> for emphasis or search results.</p><pre><code>&lt;mark&gt;Highlighted content&lt;/mark&gt;</code></pre><p><strong>Styling:</strong> Yellow background by default (customizable with CSS).</p><p><strong>Common uses:</strong> Search highlights, important notes, text references.</p>',
       replacedOnClick: '<mark>Highlighted Text</mark>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Time',
       description:
-          '## `<time>` Element\n\n**Machine-readable time/date** with human-readable display.\n\n```html\n<time datetime="2024-01-15">January 15, 2024</time>\n```\n\n**Key attributes:**\n- `datetime` — ISO 8601 format (e.g., `2024-01-15T10:30:00`)\n- `pubdate` — Publication date (deprecated in HTML5)',
+          '<h2>&lt;time&gt; Element</h2><p><strong>Machine-readable time/date</strong> with human-readable display.</p><pre><code>&lt;time datetime=&quot;2024-01-15&quot;&gt;January 15, 2024&lt;/time&gt;</code></pre><p><strong>Key attributes:</strong></p><ul><li><code>datetime</code> &mdash; ISO 8601 format (e.g., <code>2024-01-15T10:30:00</code>)</li><li><code>pubdate</code> &mdash; Publication date (deprecated in HTML5)</li></ul>',
       replacedOnClick: '<time datetime="">Time</time>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Address',
       description:
-          '## `<address>` Element\n\n**Contact information** for the author or organization.\n\n```html\n<address>\n  123 Main St<br />\n  City, State 12345\n</address>\n```\n\n**Use cases:** Author contact, business address',
+          '<h2>&lt;address&gt; Element</h2><p><strong>Contact information</strong> for the author or organization.</p><pre><code>&lt;address&gt;\n  123 Main St&lt;br /&gt;\n  City, State 12345\n&lt;/address&gt;</code></pre><p><strong>Use cases:</strong> Author contact, business address</p>',
       replacedOnClick: '<address>\n  \n</address>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Cite',
       description:
-          '## `<cite>` Element\n\n**Citation** for a creative work reference.\n\n```html\n<cite>The Art of Web Design</cite>\n```\n\n**Styling:** Italic by default\n\n**Use cases:** Book titles, article sources',
+          '<h2>&lt;cite&gt; Element</h2><p><strong>Citation</strong> for a creative work reference.</p><pre><code>&lt;cite&gt;The Art of Web Design&lt;/cite&gt;</code></pre><p><strong>Styling:</strong> Italic by default</p><p><strong>Use cases:</strong> Book titles, article sources</p>',
       replacedOnClick: '<cite>Citation</cite>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Abbr',
       description:
-          '## `<abbr>` Element\n\n**Abbreviation** with full expansion on hover.\n\n```html\n<abbr title="HyperText Markup Language">HTML</abbr>\n```\n\n**Attribute:** `title` - **Full expansion**\n\n**Accessibility:** Screen readers announce full text',
+          '<h2>&lt;abbr&gt; Element</h2><p><strong>Abbreviation</strong> with full expansion on hover.</p><pre><code>&lt;abbr title=&quot;HyperText Markup Language&quot;&gt;HTML&lt;/abbr&gt;</code></pre><p><strong>Attribute:</strong> <code>title</code> &mdash; <strong>Full expansion</strong></p><p><strong>Accessibility:</strong> Screen readers announce full text</p>',
       replacedOnClick: '<abbr title="">Abbreviation</abbr>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Del',
       description:
-          '## `<del>` Element\n\n**Deleted text** showing removed content.\n\n```html\n<del>Old price: \$100</del>\n```\n\n**Styling:** Strikethrough by default\n\n**Use cases:** Edits, price changes, revisions',
+          '<h2>&lt;del&gt; Element</h2><p><strong>Deleted text</strong> showing removed content.</p><pre><code>&lt;del&gt;Old price: \$100&lt;/del&gt;</code></pre><p><strong>Styling:</strong> Strikethrough by default</p><p><strong>Use cases:</strong> Edits, price changes, revisions</p>',
       replacedOnClick: '<del>Deleted Text</del>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Ins',
       description:
-          '## `<ins>` Element\n\n**Inserted text** showing added content.\n\n```html\n<ins>New price: \$80</ins>\n```\n\n**Styling:** Underlined by default\n\n**Use cases:** Edits, additions, updates',
+          '<h2>&lt;ins&gt; Element</h2><p><strong>Inserted text</strong> showing added content.</p><pre><code>&lt;ins&gt;New price: \$80&lt;/ins&gt;</code></pre><p><strong>Styling:</strong> Underlined by default</p><p><strong>Use cases:</strong> Edits, additions, updates</p>',
       replacedOnClick: '<ins>Inserted Text</ins>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Sub',
       description:
-          '## `<sub>` Element\n\n**Subscript text** positioned below baseline.\n\n```html\nH<sub>2</sub>O\n```\n\n**Use cases:** Chemical formulas, mathematical notation',
+          '<h2>&lt;sub&gt; Element</h2><p><strong>Subscript text</strong> positioned below baseline.</p><pre><code>H&lt;sub&gt;2&lt;/sub&gt;O</code></pre><p><strong>Use cases:</strong> Chemical formulas, mathematical notation</p>',
       replacedOnClick: '<sub>Subscript</sub>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Sup',
       description:
-          '## `<sup>` Element\n\n**Superscript text** positioned above baseline.\n\n```html\nE = mc<sup>2</sup>\n```\n\n**Use cases:** Mathematical exponents, footnotes, citations',
+          '<h2>&lt;sup&gt; Element</h2><p><strong>Superscript text</strong> positioned above baseline.</p><pre><code>E = mc&lt;sup&gt;2&lt;/sup&gt;</code></pre><p><strong>Use cases:</strong> Mathematical exponents, footnotes, citations</p>',
       replacedOnClick: '<sup>Superscript</sup>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Small',
       description:
-          '## `<small>` Element\n\n**Smaller text** for disclaimers or fine print.\n\n```html\n<small>Copyright © 2024</small>\n```\n\n**Semantic meaning:** Side comments, legal text\n\n**Note:** Not just visual styling',
+          '<h2>&lt;small&gt; Element</h2><p><strong>Smaller text</strong> for disclaimers or fine print.</p><pre><code>&lt;small&gt;Copyright &copy; 2024&lt;/small&gt;</code></pre><p><strong>Semantic meaning:</strong> Side comments, legal text</p><p><strong>Note:</strong> Not just visual styling</p>',
       replacedOnClick: '<small>Small Text</small>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Kbd',
       description:
-          '## `<kbd>` Element\n\n**Keyboard input** showing keys to press.\n\n```html\nPress <kbd>Ctrl</kbd> + <kbd>C</kbd> to copy\n```\n\n**Styling:** Monospace font, border\n\n**Use cases:** Keyboard shortcuts, commands',
+          '<h2>&lt;kbd&gt; Element</h2><p><strong>Keyboard input</strong> showing keys to press.</p><pre><code>Press &lt;kbd&gt;Ctrl&lt;/kbd&gt; + &lt;kbd&gt;C&lt;/kbd&gt; to copy</code></pre><p><strong>Styling:</strong> Monospace font, border</p><p><strong>Use cases:</strong> Keyboard shortcuts, commands</p>',
       replacedOnClick: '<kbd>Ctrl</kbd>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Samp',
       description:
-          '## `<samp>` Element\n\n**Sample output** from a program or system.\n\n```html\n<samp>Hello, World!</samp>\n```\n\n**Styling:** Monospace font\n\n**Use cases:** Program output, terminal text',
+          '<h2>&lt;samp&gt; Element</h2><p><strong>Sample output</strong> from a program or system.</p><pre><code>&lt;samp&gt;Hello, World!&lt;/samp&gt;</code></pre><p><strong>Styling:</strong> Monospace font</p><p><strong>Use cases:</strong> Program output, terminal text</p>',
       replacedOnClick: '<samp>Sample Output</samp>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Var',
       description:
-          '## `<var>` Element\n\n**Variable name** in mathematical or programming context.\n\n```html\nThe variable <var>x</var> represents the value\n```\n\n**Styling:** Italic by default\n\n**Use cases:** Math variables, code variables',
+          '<h2>&lt;var&gt; Element</h2><p><strong>Variable name</strong> in mathematical or programming context.</p><pre><code>The variable &lt;var&gt;x&lt;/var&gt; represents the value</code></pre><p><strong>Styling:</strong> Italic by default</p><p><strong>Use cases:</strong> Math variables, code variables</p>',
       replacedOnClick: '<var>variable</var>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Datalist',
       description:
-          '## `<datalist>` Element\n\n**Predefined options** for `<input>` autocomplete.\n\n```html\n<input list="browsers" />\n<datalist id="browsers">\n  <option value="Chrome">\n  <option value="Firefox">\n</datalist>\n```\n\n**Usage:** Connect to input with `list` attribute',
+          '<h2>&lt;datalist&gt; Element</h2><p><strong>Predefined options</strong> for <code>&lt;input&gt;</code> autocomplete.</p><pre><code>&lt;input list=&quot;browsers&quot; /&gt;\n&lt;datalist id=&quot;browsers&quot;&gt;\n  &lt;option value=&quot;Chrome&quot;&gt;\n  &lt;option value=&quot;Firefox&quot;&gt;\n&lt;/datalist&gt;</code></pre><p><strong>Usage:</strong> Connect to input with <code>list</code> attribute</p>',
       replacedOnClick:
           '<datalist id="">\n  <option value=""></option>\n</datalist>',
       triggeredAt: '<',
@@ -582,70 +582,70 @@ List<SuggestionModel> getHtmlSuggestions() {
     SuggestionModel(
       label: 'Output',
       description:
-          '## `<output>` Element\n\n**Calculation result** or form output.\n\n```html\n<output name="result">0</output>\n```\n\n**Use cases:** Calculator results, form calculations\n\n**Attribute:** `for` - **Related input IDs**',
+          '<h2>&lt;output&gt; Element</h2><p><strong>Calculation result</strong> or form output.</p><pre><code>&lt;output name=&quot;result&quot;&gt;0&lt;/output&gt;</code></pre><p><strong>Use cases:</strong> Calculator results, form calculations</p><p><strong>Attribute:</strong> <code>for</code> &mdash; <strong>Related input IDs</strong></p>',
       replacedOnClick: '<output name="">Output</output>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Progress',
       description:
-          '## `<progress>` Element\n\n**Progress bar** showing task completion.\n\n```html\n<progress value="70" max="100">70%</progress>\n```\n\n**Attributes:**\n- `value` - **Current value**\n- `max` - **Maximum value**\n\n**Use cases:** File uploads, downloads, task progress',
+          '<h2>&lt;progress&gt; Element</h2><p><strong>Progress bar</strong> showing task completion.</p><pre><code>&lt;progress value=&quot;70&quot; max=&quot;100&quot;&gt;70%&lt;/progress&gt;</code></pre><p><strong>Attributes:</strong></p><ul><li><code>value</code> &mdash; <strong>Current value</strong></li><li><code>max</code> &mdash; <strong>Maximum value</strong></li></ul><p><strong>Use cases:</strong> File uploads, downloads, task progress</p>',
       replacedOnClick: '<progress value="0" max="100"></progress>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Meter',
       description:
-          '## `<meter>` Element\n\n**Gauge** showing a scalar value within a range.\n\n```html\n<meter value="75" min="0" max="100">75%</meter>\n```\n\n**Attributes:**\n- `value` - **Current value**\n- `min`, `max` - **Range**\n- `low`, `high` - **Thresholds**\n- `optimum` - **Optimal value**',
+          '<h2>&lt;meter&gt; Element</h2><p><strong>Gauge</strong> showing a scalar value within a range.</p><pre><code>&lt;meter value=&quot;75&quot; min=&quot;0&quot; max=&quot;100&quot;&gt;75%&lt;/meter&gt;</code></pre><p><strong>Attributes:</strong></p><ul><li><code>value</code> &mdash; <strong>Current value</strong></li><li><code>min</code>, <code>max</code> &mdash; <strong>Range</strong></li><li><code>low</code>, <code>high</code> &mdash; <strong>Thresholds</strong></li><li><code>optimum</code> &mdash; <strong>Optimal value</strong></li></ul>',
       replacedOnClick: '<meter value="0" min="0" max="100"></meter>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Dialog',
       description:
-          '## `<dialog>` Element\n\n**Modal dialog** box for user interaction.\n\n```html\n<dialog open>\n  <p>Dialog content</p>\n  <button>Close</button>\n</dialog>\n```\n\n**JavaScript API:**\n```javascript\ndialog.showModal(); // Show modal\ndialog.close(); // Close\n```\n\n**Attribute:** `open` - **Visible by default**',
+          '<h2>&lt;dialog&gt; Element</h2><p><strong>Modal dialog</strong> box for user interaction.</p><pre><code>&lt;dialog open&gt;\n  &lt;p&gt;Dialog content&lt;/p&gt;\n  &lt;button&gt;Close&lt;/button&gt;\n&lt;/dialog&gt;</code></pre><p><strong>JavaScript API:</strong></p><pre><code>dialog.showModal(); // Show modal\ndialog.close(); // Close</code></pre><p><strong>Attribute:</strong> <code>open</code> &mdash; <strong>Visible by default</strong></p>',
       replacedOnClick: '<dialog open>\n  \n</dialog>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Template',
       description:
-          '## `<template>` Element\n\n**Inert HTML template** cloned via JavaScript.\n\n```html\n<template id="item-template">\n  <li class="item"></li>\n</template>\n```\n\n**Usage:**\n```javascript\nconst template = document.getElementById("item-template");\nconst clone = template.content.cloneNode(true);\n```\n\n**Benefits:** Not rendered until cloned',
+          '<h2>&lt;template&gt; Element</h2><p><strong>Inert HTML template</strong> cloned via JavaScript.</p><pre><code>&lt;template id=&quot;item-template&quot;&gt;\n  &lt;li class=&quot;item&quot;&gt;&lt;/li&gt;\n&lt;/template&gt;</code></pre><p><strong>Usage:</strong></p><pre><code>const template = document.getElementById(&quot;item-template&quot;);\nconst clone = template.content.cloneNode(true);</code></pre><p><strong>Benefits:</strong> Not rendered until cloned</p>',
       replacedOnClick: '<template>\n  \n</template>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Noscript',
       description:
-          '## `<noscript>` Element\n\n**Fallback content** when JavaScript is disabled.\n\n```html\n<noscript>\n  <p>Please enable JavaScript to use this site.</p>\n</noscript>\n```\n\n**Use cases:** Accessibility, graceful degradation',
+          '<h2>&lt;noscript&gt; Element</h2><p><strong>Fallback content</strong> when JavaScript is disabled.</p><pre><code>&lt;noscript&gt;\n  &lt;p&gt;Please enable JavaScript to use this site.&lt;/p&gt;\n&lt;/noscript&gt;</code></pre><p><strong>Use cases:</strong> Accessibility, graceful degradation</p>',
       replacedOnClick: '<noscript>\n  \n</noscript>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Description List',
       description:
-          '## `<dl>` Description List\n\n**List of terms** with their descriptions.\n\n```html\n<dl>\n  <dt>HTML</dt>\n  <dd>HyperText Markup Language</dd>\n  <dt>CSS</dt>\n  <dd>Cascading Style Sheets</dd>\n</dl>\n```\n\n**Use cases:** Glossaries, definitions, metadata',
+          '<h2>&lt;dl&gt; Description List</h2><p><strong>List of terms</strong> with their descriptions.</p><pre><code>&lt;dl&gt;\n  &lt;dt&gt;HTML&lt;/dt&gt;\n  &lt;dd&gt;HyperText Markup Language&lt;/dd&gt;\n  &lt;dt&gt;CSS&lt;/dt&gt;\n  &lt;dd&gt;Cascading Style Sheets&lt;/dd&gt;\n&lt;/dl&gt;</code></pre><p><strong>Use cases:</strong> Glossaries, definitions, metadata</p>',
       replacedOnClick: '<dl>\n  <dt>Term</dt>\n  <dd>Definition</dd>\n</dl>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Description Term',
       description:
-          '## `<dt>` Description Term\n\n**Term** being defined in a description list.\n\n```html\n<dt>Term Name</dt>\n```\n\n**Parent:** Must be inside `<dl>` element',
+          '<h2>&lt;dt&gt; Description Term</h2><p><strong>Term</strong> being defined in a description list.</p><pre><code>&lt;dt&gt;Term Name&lt;/dt&gt;</code></pre><p><strong>Parent:</strong> Must be inside <code>&lt;dl&gt;</code> element</p>',
       replacedOnClick: '<dt>Term</dt>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Description Definition',
       description:
-          '## `<dd>` Description Definition\n\n**Definition** of the preceding term.\n\n```html\n<dd>Definition description</dd>\n```\n\n**Parent:** Must be inside `<dl>` element\n\n**Can contain:** Multiple `<dd>` for one `<dt>`',
+          '<h2>&lt;dd&gt; Description Definition</h2><p><strong>Definition</strong> of the preceding term.</p><pre><code>&lt;dd&gt;Definition description&lt;/dd&gt;</code></pre><p><strong>Parent:</strong> Must be inside <code>&lt;dl&gt;</code> element</p><p><strong>Can contain:</strong> Multiple <code>&lt;dd&gt;</code> for one <code>&lt;dt&gt;</code></p>',
       replacedOnClick: '<dd>Definition</dd>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Picture',
       description:
-          '## `<picture>` Element\n\n**Responsive image** with multiple sources.\n\n```html\n<picture>\n  <source media="(min-width: 800px)" srcset="large.jpg">\n  <source media="(min-width: 400px)" srcset="medium.jpg">\n  <img src="small.jpg" alt="Description" />\n</picture>\n```\n\n**Benefits:** Art direction, responsive images, modern formats',
+          '<h2>&lt;picture&gt; Element</h2><p><strong>Responsive image</strong> with multiple sources.</p><pre><code>&lt;picture&gt;\n  &lt;source media=&quot;(min-width: 800px)&quot; srcset=&quot;large.jpg&quot;&gt;\n  &lt;source media=&quot;(min-width: 400px)&quot; srcset=&quot;medium.jpg&quot;&gt;\n  &lt;img src=&quot;small.jpg&quot; alt=&quot;Description&quot; /&gt;\n&lt;/picture&gt;</code></pre><p><strong>Benefits:</strong> Art direction, responsive images, modern formats</p>',
       replacedOnClick:
           '<picture>\n  <source media="(min-width: 800px)" srcset="">\n  <img src="" alt="" />\n</picture>',
       triggeredAt: '<',
@@ -653,7 +653,7 @@ List<SuggestionModel> getHtmlSuggestions() {
     SuggestionModel(
       label: 'Track',
       description:
-          '## `<track>` Element\n\n**Text track** for `<video>` and `<audio>` elements.\n\n```html\n<track src="subtitles.vtt" kind="subtitles" srclang="en" label="English" />\n```\n\n**Attributes:**\n- `kind` - **Track type** (`subtitles`, `captions`, `descriptions`)\n- `srclang` - **Language code**\n- `label` - **User-visible label**',
+          '<h2>&lt;track&gt; Element</h2><p><strong>Text track</strong> for <code>&lt;video&gt;</code> and <code>&lt;audio&gt;</code> elements.</p><pre><code>&lt;track src=&quot;subtitles.vtt&quot; kind=&quot;subtitles&quot; srclang=&quot;en&quot; label=&quot;English&quot; /&gt;</code></pre><p><strong>Attributes:</strong></p><ul><li><code>kind</code> &mdash; <strong>Track type</strong> (<code>subtitles</code>, <code>captions</code>, <code>descriptions</code>)</li><li><code>srclang</code> &mdash; <strong>Language code</strong></li><li><code>label</code> &mdash; <strong>User-visible label</strong></li></ul>',
       replacedOnClick:
           '<track src="" kind="subtitles" srclang="en" label="English" />',
       triggeredAt: '<',
@@ -661,98 +661,98 @@ List<SuggestionModel> getHtmlSuggestions() {
     SuggestionModel(
       label: 'Base',
       description:
-          '## `<base>` Element\n\n**Base URL** for all relative URLs in document.\n\n```html\n<base href="https://example.com/" target="_blank" />\n```\n\n**Attributes:**\n- `href` - **Base URL**\n- `target` - **Default target** (`_blank`, `_self`)\n\n**Placement:** First child of `<head>`',
+          '<h2>&lt;base&gt; Element</h2><p><strong>Base URL</strong> for all relative URLs in document.</p><pre><code>&lt;base href=&quot;https://example.com/&quot; target=&quot;_blank&quot; /&gt;</code></pre><p><strong>Attributes:</strong></p><ul><li><code>href</code> &mdash; <strong>Base URL</strong></li><li><code>target</code> &mdash; <strong>Default target</strong> (<code>_blank</code>, <code>_self</code>)</li></ul><p><strong>Placement:</strong> First child of <code>&lt;head&gt;</code></p>',
       replacedOnClick: '<base href="" target="_blank" />',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Wbr',
       description:
-          '## `<wbr>` Element\n\n**Word break opportunity** - suggests where to break long words.\n\n```html\nVeryLongWord<wbr />ThatNeedsBreaking\n```\n\n**Use cases:** Long URLs, technical terms, email addresses\n\n**Note:** Browser decides if break is needed',
+          '<h2>&lt;wbr&gt; Element</h2><p><strong>Word break opportunity</strong> &mdash; suggests where to break long words.</p><pre><code>VeryLongWord&lt;wbr /&gt;ThatNeedsBreaking</code></pre><p><strong>Use cases:</strong> Long URLs, technical terms, email addresses</p><p><strong>Note:</strong> Browser decides if break is needed</p>',
       replacedOnClick: '<wbr />',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Q',
       description:
-          '## `<q>` Element\n\n**Inline quotation** from another source.\n\n```html\n<q cite="https://example.com">Quoted text</q>\n```\n\n**Styling:** Quotation marks added automatically\n\n**Attribute:** `cite` - **Source URL**',
+          '<h2>&lt;q&gt; Element</h2><p><strong>Inline quotation</strong> from another source.</p><pre><code>&lt;q cite=&quot;https://example.com&quot;&gt;Quoted text&lt;/q&gt;</code></pre><p><strong>Styling:</strong> Quotation marks added automatically</p><p><strong>Attribute:</strong> <code>cite</code> &mdash; <strong>Source URL</strong></p>',
       replacedOnClick: '<q cite="">Quote</q>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Dfn',
       description:
-          '## `<dfn>` Element\n\n**Definition term** marking the term being defined.\n\n```html\n<dfn>HTML</dfn> stands for HyperText Markup Language.\n```\n\n**Styling:** Italic by default\n\n**Use cases:** First occurrence of a term',
+          '<h2>&lt;dfn&gt; Element</h2><p><strong>Definition term</strong> marking the term being defined.</p><pre><code>&lt;dfn&gt;HTML&lt;/dfn&gt; stands for HyperText Markup Language.</code></pre><p><strong>Styling:</strong> Italic by default</p><p><strong>Use cases:</strong> First occurrence of a term</p>',
       replacedOnClick: '<dfn>Definition Term</dfn>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Data',
       description:
-          '## `<data>` Element\n\n**Machine-readable value** with human-readable text.\n\n```html\n<data value="12345">Product #12345</data>\n```\n\n**Use cases:** Product IDs, measurements, dates\n\n**Benefits:** Both human and machine readable',
+          '<h2>&lt;data&gt; Element</h2><p><strong>Machine-readable value</strong> with human-readable text.</p><pre><code>&lt;data value=&quot;12345&quot;&gt;Product #12345&lt;/data&gt;</code></pre><p><strong>Use cases:</strong> Product IDs, measurements, dates</p><p><strong>Benefits:</strong> Both human and machine readable</p>',
       replacedOnClick: '<data value="">Data</data>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Ruby',
       description:
-          '## `<ruby>` Element\n\n**Ruby annotation** for East Asian typography.\n\n```html\n<ruby>\n  漢 <rt>kan</rt>\n</ruby>\n```\n\n**Use cases:** Pronunciation guides, translations\n\n**Contains:** Base text and `<rt>` annotations',
+          '<h2>&lt;ruby&gt; Element</h2><p><strong>Ruby annotation</strong> for East Asian typography.</p><pre><code>&lt;ruby&gt;\n  漢 &lt;rt&gt;kan&lt;/rt&gt;\n&lt;/ruby&gt;</code></pre><p><strong>Use cases:</strong> Pronunciation guides, translations</p><p><strong>Contains:</strong> Base text and <code>&lt;rt&gt;</code> annotations</p>',
       replacedOnClick: '<ruby>\n  漢 <rt>kan</rt>\n</ruby>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Rt',
       description:
-          '## `<rt>` Element\n\n**Ruby text** annotation above/below base text.\n\n```html\n<rt>pronunciation</rt>\n```\n\n**Parent:** Must be inside `<ruby>` element\n\n**Styling:** Smaller font, positioned above base',
+          '<h2>&lt;rt&gt; Element</h2><p><strong>Ruby text</strong> annotation above/below base text.</p><pre><code>&lt;rt&gt;pronunciation&lt;/rt&gt;</code></pre><p><strong>Parent:</strong> Must be inside <code>&lt;ruby&gt;</code> element</p><p><strong>Styling:</strong> Smaller font, positioned above base</p>',
       replacedOnClick: '<rt>Ruby Text</rt>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Rp',
       description:
-          '## `<rp>` Element\n\n**Ruby parenthesis** fallback for browsers without ruby support.\n\n```html\n<ruby>\n  漢 <rp>(</rp><rt>kan</rt><rp>)</rp>\n</ruby>\n```\n\n**Purpose:** Shows parentheses when ruby not supported',
+          '<h2>&lt;rp&gt; Element</h2><p><strong>Ruby parenthesis</strong> fallback for browsers without ruby support.</p><pre><code>&lt;ruby&gt;\n  漢 &lt;rp&gt;(&lt;/rp&gt;&lt;rt&gt;kan&lt;/rt&gt;&lt;rp&gt;)&lt;/rp&gt;\n&lt;/ruby&gt;</code></pre><p><strong>Purpose:</strong> Shows parentheses when ruby not supported</p>',
       replacedOnClick: '<rp>(</rp>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Bdi',
       description:
-          '## `<bdi>` Element\n\n**Bidirectional isolation** for mixed-direction text.\n\n```html\n<bdi>Mixed direction text</bdi>\n```\n\n**Use cases:** User-generated content, mixed languages\n\n**Benefit:** Prevents text direction issues',
+          '<h2>&lt;bdi&gt; Element</h2><p><strong>Bidirectional isolation</strong> for mixed-direction text.</p><pre><code>&lt;bdi&gt;Mixed direction text&lt;/bdi&gt;</code></pre><p><strong>Use cases:</strong> User-generated content, mixed languages</p><p><strong>Benefit:</strong> Prevents text direction issues</p>',
       replacedOnClick: '<bdi>Text</bdi>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Bdo',
       description:
-          '## `<bdo>` Element\n\n**Bidirectional override** forcing text direction.\n\n```html\n<bdo dir="rtl">Right-to-left text</bdo>\n```\n\n**Attribute:** `dir` - **Direction** (`ltr` or `rtl`)\n\n**Use cases:** Override automatic direction detection',
+          '<h2>&lt;bdo&gt; Element</h2><p><strong>Bidirectional override</strong> forcing text direction.</p><pre><code>&lt;bdo dir=&quot;rtl&quot;&gt;Right-to-left text&lt;/bdo&gt;</code></pre><p><strong>Attribute:</strong> <code>dir</code> &mdash; <strong>Direction</strong> (<code>ltr</code> or <code>rtl</code>)</p><p><strong>Use cases:</strong> Override automatic direction detection</p>',
       replacedOnClick: '<bdo dir="rtl">Text</bdo>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Menu',
       description:
-          '## `<menu>` Element\n\n**Menu list** of commands or options.\n\n```html\n<menu>\n  <li><a href="/">Home</a></li>\n  <li><a href="/about">About</a></li>\n</menu>\n```\n\n**Note:** Consider using `<nav>` for navigation menus',
+          '<h2>&lt;menu&gt; Element</h2><p><strong>Menu list</strong> of commands or options.</p><pre><code>&lt;menu&gt;\n  &lt;li&gt;&lt;a href=&quot;/&quot;&gt;Home&lt;/a&gt;&lt;/li&gt;\n  &lt;li&gt;&lt;a href=&quot;/about&quot;&gt;About&lt;/a&gt;&lt;/li&gt;\n&lt;/menu&gt;</code></pre><p><strong>Note:</strong> Consider using <code>&lt;nav&gt;</code> for navigation menus</p>',
       replacedOnClick: '<menu>\n  <li>Item</li>\n</menu>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Menuitem',
       description:
-          '## `<menuitem>` Element\n\n**Menu item** within a `<menu>` element.\n\n```html\n<menuitem>Menu Option</menuitem>\n```\n\n**Note:** Limited browser support, consider alternatives',
+          '<h2>&lt;menuitem&gt; Element</h2><p><strong>Menu item</strong> within a <code>&lt;menu&gt;</code> element.</p><pre><code>&lt;menuitem&gt;Menu Option&lt;/menuitem&gt;</code></pre><p><strong>Note:</strong> Limited browser support, consider alternatives</p>',
       replacedOnClick: '<menuitem>Item</menuitem>',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Param',
       description:
-          '## `<param>` Element\n\n**Parameter** for `<object>` element plugins.\n\n```html\n<object data="plugin.swf">\n  <param name="autoplay" value="true" />\n</object>\n```\n\n**Attributes:**\n- `name` - **Parameter name**\n- `value` - **Parameter value**\n\n**Parent:** Must be inside `<object>`',
+          '<h2>&lt;param&gt; Element</h2><p><strong>Parameter</strong> for <code>&lt;object&gt;</code> element plugins.</p><pre><code>&lt;object data=&quot;plugin.swf&quot;&gt;\n  &lt;param name=&quot;autoplay&quot; value=&quot;true&quot; /&gt;\n&lt;/object&gt;</code></pre><p><strong>Attributes:</strong></p><ul><li><code>name</code> &mdash; <strong>Parameter name</strong></li><li><code>value</code> &mdash; <strong>Parameter value</strong></li></ul><p><strong>Parent:</strong> Must be inside <code>&lt;object&gt;</code></p>',
       replacedOnClick: '<param name="" value="" />',
       triggeredAt: '<',
     ),
     SuggestionModel(
       label: 'Slot',
       description:
-          '## `<slot>` Element\n\n**Placeholder** in web component shadow DOM.\n\n```html\n<slot name="content"></slot>\n```\n\n**Usage:**\n```html\n<my-component>\n  <span slot="content">Slotted content</span>\n</my-component>\n```\n\n**Web Components:** Part of Shadow DOM API',
+          '<h2>&lt;slot&gt; Element</h2><p><strong>Placeholder</strong> in web component shadow DOM.</p><pre><code>&lt;slot name=&quot;content&quot;&gt;&lt;/slot&gt;</code></pre><p><strong>Usage:</strong></p><pre><code>&lt;my-component&gt;\n  &lt;span slot=&quot;content&quot;&gt;Slotted content&lt;/span&gt;\n&lt;/my-component&gt;</code></pre><p><strong>Web Components:</strong> Part of Shadow DOM API</p>',
       replacedOnClick: '<slot name=""></slot>',
       triggeredAt: '<',
     ),
