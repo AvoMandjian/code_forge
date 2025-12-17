@@ -1819,6 +1819,32 @@ class _CodeForgeState extends State<CodeForge>
                                             .instance
                                             .isControlPressed ||
                                         HardwareKeyboard.instance.isMetaPressed;
+
+                                    // Allow regular text input keys (like space) to pass through
+                                    // to the TextInputConnection, especially important on web.
+                                    // This ensures space and other printable characters are handled
+                                    // by the text input system rather than being intercepted.
+                                    // Using skipRemainingHandlers instead of ignored ensures the event
+                                    // bypasses other handlers in the widget tree and reaches the
+                                    // TextInputConnection directly, which is critical on web.
+                                    final key = event.logicalKey;
+                                    if (!isCtrlPressed && !isShiftPressed) {
+                                      // Space key should always pass through to text input
+                                      if (key == LogicalKeyboardKey.space) {
+                                        return KeyEventResult
+                                            .skipRemainingHandlers;
+                                      }
+                                      // Check if it's a character key (printable ASCII)
+                                      // by checking if the key has a single character label
+                                      final keyLabel = key.keyLabel;
+                                      if (keyLabel.length == 1 &&
+                                          keyLabel.codeUnitAt(0) >= 32 &&
+                                          keyLabel.codeUnitAt(0) <= 126) {
+                                        // Allow printable ASCII characters to pass through
+                                        return KeyEventResult
+                                            .skipRemainingHandlers;
+                                      }
+                                    }
                                     if (_suggestionNotifier.value != null &&
                                         _suggestionNotifier.value!.isNotEmpty) {
                                       switch (event.logicalKey) {
@@ -2421,7 +2447,7 @@ class _CodeForgeState extends State<CodeForge>
                                               } else if (item is Map) {
                                                 // Legacy map format support
                                                 textToInsert =
-                                                    item['replacedOnClick'] ??
+                                                    item['replaced_on_click'] ??
                                                     item['insertText'] ??
                                                     item['label'] ??
                                                     '';
@@ -3374,7 +3400,7 @@ class _CodeForgeState extends State<CodeForge>
     } else if (selected is Map) {
       // Legacy map format support
       insertText =
-          selected['replacedOnClick'] ??
+          selected['replaced_on_click'] ??
           selected['insertText'] ??
           selected['label'] ??
           '';

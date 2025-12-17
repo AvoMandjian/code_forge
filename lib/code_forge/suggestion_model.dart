@@ -19,6 +19,8 @@ class SuggestionModel {
   /// The text displayed in the suggestion list.
   final String label;
 
+  final Map<String, dynamic>? jinjaHtmlWidget;
+
   /// The text inserted when the suggestion is selected.
   final String replacedOnClick;
 
@@ -47,6 +49,7 @@ class SuggestionModel {
     required this.replacedOnClick,
     required this.triggeredAt,
     this.description,
+    this.jinjaHtmlWidget,
   });
 
   /// Creates a [SuggestionModel] from a map.
@@ -54,31 +57,33 @@ class SuggestionModel {
   /// Useful for deserializing from JSON or converting from legacy map format.
   /// Supports both camelCase (replacedOnClick, triggeredAt) and snake_case
   /// (replaced_on_click, triggered_at) formats for backend compatibility.
-  factory SuggestionModel.fromMap(Map<String, dynamic> map) {
+  factory SuggestionModel.fromJson(Map<String, dynamic> map) {
     return SuggestionModel(
       label: map['label'] as String,
-      replacedOnClick: map['replacedOnClick'] ?? map['replaced_on_click'] ?? '',
-      triggeredAt: map['triggeredAt'] ?? map['triggered_at'] ?? '',
+      replacedOnClick: map['replaced_on_click'] ?? '',
+      triggeredAt: map['triggered_at'] ?? '',
       description: map['description'] as String?,
+      jinjaHtmlWidget: map['jinja_html_widget'] as Map<String, dynamic>?,
     );
   }
 
   /// Converts the [SuggestionModel] to a map.
   ///
   /// Useful for serializing to JSON or converting to legacy map format.
-  Map<String, dynamic> toMap() {
+  Map<String, dynamic> toJson() {
     return {
       'label': label,
-      'replacedOnClick': replacedOnClick,
-      'triggeredAt': triggeredAt,
+      'replaced_on_click': replacedOnClick,
+      'triggered_at': triggeredAt,
       if (description != null) 'description': description,
+      if (jinjaHtmlWidget != null) 'jinja_html_widget': jinjaHtmlWidget,
     };
   }
 
   @override
   String toString() {
     return 'SuggestionModel(label: $label, replacedOnClick: $replacedOnClick, '
-        'description: $description, triggeredAt: $triggeredAt)';
+        'description: $description, triggeredAt: $triggeredAt, jinjaHtmlWidget: $jinjaHtmlWidget)';
   }
 
   @override
@@ -88,12 +93,19 @@ class SuggestionModel {
         other.label == label &&
         other.replacedOnClick == replacedOnClick &&
         other.description == description &&
-        other.triggeredAt == triggeredAt;
+        other.triggeredAt == triggeredAt &&
+        other.jinjaHtmlWidget == jinjaHtmlWidget;
   }
 
   @override
   int get hashCode {
-    return Object.hash(label, replacedOnClick, description, triggeredAt);
+    return Object.hash(
+      label,
+      replacedOnClick,
+      description,
+      triggeredAt,
+      jinjaHtmlWidget,
+    );
   }
 }
 

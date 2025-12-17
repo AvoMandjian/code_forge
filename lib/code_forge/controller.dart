@@ -252,7 +252,7 @@ class CodeForgeController implements DeltaTextInputClient {
   ///
   /// Returns a copy of the registered suggestions list.
   List<SuggestionModel> get registeredCustomSuggestions =>
-      List.unmodifiable(handleRegisteredCustomSuggestions);
+      List.from(handleRegisteredCustomSuggestions);
 
   /// Whether the editor is in read-only mode.
   ///

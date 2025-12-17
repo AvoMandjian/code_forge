@@ -39,26 +39,20 @@ class _MyAppState extends State<MyApp> {
   // }
 
   void _registerCustomSuggestions() {
-    // Example 1: Register suggestions from backend JSON format (snake_case)
-    final backendSuggestions = [];
-
-    // Convert backend JSON to SuggestionModel list
+    final backendSuggestions = [
+      {
+        "label": "Example Variables from backend",
+        "replaced_on_click": "{{ example_variable }}",
+        "triggered_at": "aaa",
+        "jinja_html_widget": {},
+        "description":
+            "<h2>&lt;{{ }}&gt; Variable Output</h2><p><strong>Jinja template variable</strong> for outputting data from backend.</p><pre><code>{{ example_variable }}</code></pre><p><strong>Usage:</strong> Inserts variable value into template</p><p><strong>Syntax:</strong> <code>{{ variable_name }}</code> &mdash; <strong>Double curly braces</strong></p>",
+      },
+    ];
     final suggestions = backendSuggestions
-        .map((item) => SuggestionModel.fromMap(item as Map<String, dynamic>))
+        .map((item) => SuggestionModel.fromJson(item as Map<String, dynamic>))
         .toList();
-
-    // Register the suggestions
     _controller.registerCustomSuggestions(suggestions);
-
-    // Example 2: You can also register suggestions directly using camelCase
-    // _controller.registerCustomSuggestions([
-    //   SuggestionModel(
-    //     label: 'Direct Example',
-    //     replacedOnClick: 'Direct replacement text',
-    //     description: 'This is a direct example',
-    //     triggeredAt: '{{}}',
-    //   ),
-    // ]);
   }
 
   @override
