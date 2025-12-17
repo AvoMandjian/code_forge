@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:code_forge/code_forge/suggestion_model.dart';
 import 'package:code_forge/code_forge/suggestions/initialize_language_specific_suggestions.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -255,7 +256,9 @@ class _CodeForgeState extends State<CodeForge>
   late final UndoRedoController _undoRedoController;
   final ValueNotifier<Offset> _offsetNotifier = ValueNotifier(Offset(0, 0));
   final Map<String, String> _cachedResponse = {};
-  final _isMobile = Platform.isAndroid || Platform.isIOS;
+  final bool _isMobile =
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
   final _suggScrollController = ScrollController();
   TextInputConnection? _connection;
   StreamSubscription? _lspResponsesSubscription;

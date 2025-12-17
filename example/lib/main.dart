@@ -1,9 +1,8 @@
-import 'dart:io';
+// import 'dart:io';
 
 import 'package:code_forge/code_forge.dart';
 import 'package:code_forge/code_forge/suggestion_model.dart';
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p;
 import 'package:re_highlight/languages/all.dart';
 import 'package:re_highlight/styles/all.dart';
 
@@ -21,23 +20,23 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   final _controller = CodeForgeController();
   final undoController = UndoRedoController();
-  final absFilePath = p.join(Directory.current.path, "lib/example_code.dart");
+  // final absFilePath = p.join(Directory.current.path, "lib/example_code.dart");
   String _selectedLanguage = 'json';
   String _selectedTheme = 'vs2015';
   final _rulerController = TextEditingController(text: '80');
   bool _aiCompletionEnabled = false;
 
-  Future<LspConfig> getLsp() async {
-    final absWorkspacePath = p.join(Directory.current.path, "lib");
-    final data = await LspStdioConfig.start(
-      executable: "dart",
-      args: ["language-server", "--protocol=lsp"],
-      filePath: absFilePath,
-      workspacePath: absWorkspacePath,
-      languageId: "dart",
-    );
-    return data;
-  }
+  // Future<LspConfig> getLsp() async {
+  //   final absWorkspacePath = p.join(Directory.current.path, "lib");
+  //   final data = await LspStdioConfig.start(
+  //     executable: "dart",
+  //     args: ["language-server", "--protocol=lsp"],
+  //     filePath: absFilePath,
+  //     workspacePath: absWorkspacePath,
+  //     languageId: "dart",
+  //   );
+  //   return data;
+  // }
 
   void _registerCustomSuggestions() {
     // Example 1: Register suggestions from backend JSON format (snake_case)
@@ -346,34 +345,20 @@ class _MyAppState extends State<MyApp> {
                     ),
                   ),
                   Expanded(
-                    child: FutureBuilder<LspConfig>(
-                      future: getLsp(),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
-                        return CodeForge(
-                          undoController: undoController,
-                          language: builtinAllLanguages[_selectedLanguage],
-                          controller: _controller,
-                          // aiCompletion: AiCompletion(
-                          //   model: Gemini(
-                          //     apiKey:
-                          //         Platform.environment['GEMINI_API_KEY'] ?? '',
-                          //   ),
-                          // ),
-                          saveFile: () {
-                            debugPrint('saveFile: ${_controller.text}');
-                          },
-                          lineWrap: true,
-                          lspConfig: snapshot.data,
-
-                          filePath: absFilePath,
-                        );
+                    child: CodeForge(
+                      undoController: undoController,
+                      language: builtinAllLanguages[_selectedLanguage],
+                      controller: _controller,
+                      // aiCompletion: AiCompletion(
+                      //   model: Gemini(
+                      //     apiKey:
+                      //         Platform.environment['GEMINI_API_KEY'] ?? '',
+                      //   ),
+                      // ),
+                      saveFile: () {
+                        debugPrint('saveFile: ${_controller.text}');
                       },
+                      lineWrap: true,
                     ),
                   ),
                 ],
