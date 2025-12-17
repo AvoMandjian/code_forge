@@ -4526,6 +4526,66 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     });
   }
 
+  /// Finds vertical indicator line block for a given fold range
+  /// Returns the block that starts at the fold start line (the block being folded)
+  ({int startLine, int endLine, int indentLevel})?
+  _getIndicatorBlockForFoldRange(int foldStartLine, int foldEndLine) {
+    final tabSize = 4;
+    final hasActiveFolds = _foldRanges.any((f) => f.isFolded);
+
+    // Start from the fold start line to find the block that begins there
+    int i = foldStartLine;
+    if (i < 0 || i >= controller.lineCount) return null;
+
+    // Skip if line is folded (but we want to process the fold range itself)
+    if (hasActiveFolds &&
+        _isLineFolded(i) &&
+        (i < foldStartLine || i > foldEndLine)) {
+      return null;
+    }
+
+    String lineText;
+    if (_lineTextCache.containsKey(i)) {
+      lineText = _lineTextCache[i]!;
+    } else {
+      lineText = controller.getLineText(i);
+      _lineTextCache[i] = lineText;
+    }
+
+    final trimmed = lineText.trimRight();
+    final endsWithBracket =
+        trimmed.endsWith('{') ||
+        trimmed.endsWith('(') ||
+        trimmed.endsWith('[') ||
+        trimmed.endsWith(':');
+
+    if (!endsWithBracket) return null;
+
+    final leadingSpaces = lineText.length - lineText.trimLeft().length;
+    final indentLevel = leadingSpaces ~/ tabSize;
+    final lastChar = trimmed[trimmed.length - 1];
+    int endLine = i + 1;
+
+    if (lastChar == '{' || lastChar == '(' || lastChar == '[') {
+      final lineStartOffset = controller.getLineStartOffset(i);
+      final bracketPos = lineStartOffset + trimmed.length - 1;
+      final matchPos = _findMatchingBracket(controller.text, bracketPos);
+
+      if (matchPos != null) {
+        endLine = controller.getLineAtOffset(matchPos) + 1;
+      } else {
+        return null;
+      }
+    } else {
+      return null; // Skip colon-based blocks for JSON
+    }
+
+    if (endLine <= i + 1) return null;
+
+    // Return the block that starts at the fold start line
+    return (startLine: i, endLine: endLine, indentLevel: indentLevel);
+  }
+
   void _foldWithChildren(FoldRange parentFold) {
     parentFold.clearOriginallyFoldedChildren();
 
@@ -4540,9 +4600,107 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     }
 
     parentFold.isFolded = true;
+
+    // Debug print for JSON language
+    if (_language.name?.toLowerCase() == 'json') {
+      final startLine = parentFold.startIndex;
+      final endLine = parentFold.endIndex;
+      final numLines = endLine - startLine;
+      final foldedLines = <String>[];
+
+      for (int i = startLine + 1; i <= endLine; i++) {
+        if (i < controller.lineCount) {
+          foldedLines.add(controller.getLineText(i));
+        }
+      }
+
+      // Get vertical indicator line block for this fold range
+      final indicatorBlock = _getIndicatorBlockForFoldRange(startLine, endLine);
+      final indicatorLineNumbers = <int>[];
+      if (indicatorBlock != null) {
+        // Vertical line is drawn from block.startLine to block.endLine - 1 (0-indexed)
+        for (
+          int line = indicatorBlock.startLine;
+          line < indicatorBlock.endLine;
+          line++
+        ) {
+          indicatorLineNumbers.add(line);
+        }
+      }
+
+      debugPrint('🔽 JSON BLOCK FOLDED:');
+      // Use indicatorBlock boundaries if available, otherwise use fold range boundaries
+      final blockStartLine = indicatorBlock?.startLine ?? startLine;
+      final blockEndLine = indicatorBlock?.endLine ?? endLine;
+      debugPrint(
+        '   Block: lines ${blockStartLine + 1}-${blockEndLine + 1} (0-indexed: $blockStartLine-$blockEndLine)',
+      );
+      debugPrint('   Number of lines folded: $numLines');
+      if (indicatorLineNumbers.isNotEmpty) {
+        debugPrint(
+          '   Vertical indicator line spans: lines ${indicatorLineNumbers.first + 1}-${indicatorLineNumbers.last + 1} (1-indexed: ${indicatorLineNumbers.first}-${indicatorLineNumbers.last})',
+        );
+        debugPrint(
+          '   Vertical indicator line numbers: ${indicatorLineNumbers.map((l) => l + 1).join(', ')} (1-indexed)',
+        );
+      }
+      debugPrint('   Folded lines:');
+      for (int i = 0; i < foldedLines.length; i++) {
+        debugPrint('     [${startLine + 1 + i}] ${foldedLines[i]}');
+      }
+    }
   }
 
   void _unfoldWithChildren(FoldRange parentFold) {
+    // Debug print for JSON language (before unfolding)
+    if (_language.name?.toLowerCase() == 'json' && parentFold.isFolded) {
+      final startLine = parentFold.startIndex;
+      final endLine = parentFold.endIndex;
+      final numLines = endLine - startLine;
+      final foldedLines = <String>[];
+
+      for (int i = startLine + 1; i <= endLine; i++) {
+        if (i < controller.lineCount) {
+          foldedLines.add(controller.getLineText(i));
+        }
+      }
+
+      // Get vertical indicator line block for this fold range
+      final indicatorBlock = _getIndicatorBlockForFoldRange(startLine, endLine);
+      final indicatorLineNumbers = <int>[];
+      if (indicatorBlock != null) {
+        // Vertical line is drawn from block.startLine to block.endLine - 1 (0-indexed)
+        for (
+          int line = indicatorBlock.startLine;
+          line < indicatorBlock.endLine;
+          line++
+        ) {
+          indicatorLineNumbers.add(line);
+        }
+      }
+
+      debugPrint('🔼 JSON BLOCK UNFOLDED:');
+      // Use indicatorBlock boundaries if available, otherwise use fold range boundaries
+      final blockStartLine = indicatorBlock?.startLine ?? startLine;
+      final blockEndLine = indicatorBlock?.endLine ?? endLine;
+      debugPrint(
+        '   Block: lines ${blockStartLine + 1}-${blockEndLine + 1} (0-indexed: $blockStartLine-$blockEndLine)',
+      );
+      debugPrint('   Number of lines that were folded: $numLines');
+      if (indicatorLineNumbers.isNotEmpty) {
+        debugPrint(
+          '   Vertical indicator line spans: lines ${indicatorLineNumbers.first + 1}-${indicatorLineNumbers.last + 1} (1-indexed: ${indicatorLineNumbers.first}-${indicatorLineNumbers.last})',
+        );
+        debugPrint(
+          '   Vertical indicator line numbers: ${indicatorLineNumbers.map((l) => l + 1).join(', ')} (1-indexed)',
+        );
+      }
+      debugPrint('   Lines that were folded:');
+      for (int i = 0; i < foldedLines.length; i++) {
+        debugPrint('     [${startLine + 1 + i}] ${foldedLines[i]}');
+      }
+    }
+
     parentFold.isFolded = false;
     for (final childFold in parentFold.originallyFoldedChildren) {
       if (childFold.startIndex > parentFold.startIndex &&
@@ -5894,12 +6052,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       processLine(i);
     }
 
-    // Cache loop bounds to prevent infinite loops if they change during iteration
-    final maxVisibleLine = lastVisibleLine;
-    final maxLineCount = controller.lineCount;
     for (
       int i = firstVisibleLine;
-      i <= maxVisibleLine && i < maxLineCount;
+      i <= lastVisibleLine && i < controller.lineCount;
       i++
     ) {
       processLine(i);

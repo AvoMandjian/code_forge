@@ -22,7 +22,7 @@ class _MyAppState extends State<MyApp> {
   final _controller = CodeForgeController();
   final undoController = UndoRedoController();
   final absFilePath = p.join(Directory.current.path, "lib/example_code.dart");
-  String _selectedLanguage = 'html';
+  String _selectedLanguage = 'json';
   String _selectedTheme = 'vs2015';
   final _rulerController = TextEditingController(text: '80');
   bool _aiCompletionEnabled = false;
@@ -65,9 +65,74 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     _controller.text = """
-<p>Hello</p>
-<p>World</p>
-  """;
+{
+  "meta": {
+    "app": "{{ app_name | default('My Application') }}",
+    "environment": "{{ env | default('production') }}",
+    "generatedAt": "{{ generated_at | date('Y-m-d\\TH:i:s') }}",
+    "requestId": "{{ request_id }}",
+    "version": "{{ version | default('1.0.0') }}"
+  },
+
+  "currentUser": {% if current_user %}
+  {
+    "id": {{ current_user.id }},
+    "name": "{{ current_user.name }}",
+    "email": "{{ current_user.email }}",
+    "roles": [
+      {% for role in current_user.roles %}
+        "{{ role }}"{% if not loop.last %},{% endif %}
+      {% endfor %}
+    ],
+    "isAdmin": {{ current_user.is_admin | lower }}
+  }
+  {% else %}
+  null
+  {% endif %},
+
+  "statistics": {
+    "totalUsers": {{ stats.total_users | default(0) }},
+    "activeUsers": {{ stats.active_users | default(0) }},
+    "inactiveUsers": {{ stats.inactive_users | default(0) }}
+  },
+
+  "users": [
+    {% for user in users %}
+    {
+      "id": {{ user.id }},
+      "name": "{{ user.name }}",
+      "email": "{{ user.email }}",
+      "status": "{{ 'active' if user.active else 'inactive' }}",
+      "createdAt": "{{ user.created_at | date('Y-m-d') }}",
+      "tags": [
+        {% for tag in user.tags %}
+          "{{ tag }}"{% if not loop.last %},{% endif %}
+        {% endfor %}
+      ]
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ],
+
+  "features": {
+    "billingEnabled": {{ features.billing_enabled | default(false) | lower }},
+    "notificationsEnabled": {{ features.notifications | default(true) | lower }},
+    "beta": {{ features.beta | default(false) | lower }}
+  },
+
+  "limits": {
+    "maxUsers": {{ limits.max_users | default(1000) }},
+    "maxRequestsPerMinute": {{ limits.rate_limit | default(60) }}
+  },
+
+  "messages": [
+    {% for msg in messages %}
+    {
+      "level": "{{ msg.level }}",
+      "text": "{{ msg.text }}"
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ]
+}""";
     _updateRuler();
     _controller.disableAiCompletion();
 
