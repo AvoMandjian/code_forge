@@ -4563,12 +4563,6 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   }
 
   int? _findMatchingBracket(String text, int pos) {
-    debugPrint('[DEBUG Bracket Match] ==========================================');
-    debugPrint('[DEBUG Bracket Match] Text length: ${text.length}, Position: $pos');
-    debugPrint(
-      '[DEBUG Bracket Match] Position valid: ${pos >= 0 && pos < text.length}',
-    );
-
     const Map<String, String> pairs = {
       '(': ')',
       '{': '}',
@@ -4579,95 +4573,32 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     };
     const String openers = '({[';
 
-    if (pos < 0 || pos >= text.length) {
-      debugPrint('[DEBUG Bracket Match] Position out of bounds, returning null');
-      debugPrint('[DEBUG Bracket Match] ==========================================');
-      return null;
-    }
+    if (pos < 0 || pos >= text.length) return null;
 
     final char = text[pos];
-    debugPrint(
-      '[DEBUG Bracket Match] Character at position $pos: "$char" (code: ${char.codeUnitAt(0)})',
-    );
-
-    if (!pairs.containsKey(char)) {
-      debugPrint(
-        '[DEBUG Bracket Match] Character "$char" is not a bracket, returning null',
-      );
-      debugPrint('[DEBUG Bracket Match] ==========================================');
-      return null;
-    }
+    if (!pairs.containsKey(char)) return null;
 
     final match = pairs[char]!;
     final isForward = openers.contains(char);
-    debugPrint('[DEBUG Bracket Match] Looking for matching bracket: "$match"');
-    debugPrint(
-      '[DEBUG Bracket Match] Direction: ${isForward ? "FORWARD" : "BACKWARD"}',
-    );
 
     int depth = 0;
     if (isForward) {
-      debugPrint(
-        '[DEBUG Bracket Match] Searching forward from position ${pos + 1} to ${text.length}',
-      );
       for (int i = pos + 1; i < text.length; i++) {
-        if (text[i] == char) {
-          depth++;
-          debugPrint(
-            '[DEBUG Bracket Match]   Found opening "$char" at $i, depth now: $depth',
-          );
-        }
+        if (text[i] == char) depth++;
         if (text[i] == match) {
-          if (depth == 0) {
-            debugPrint(
-              '[DEBUG Bracket Match]   Found matching "$match" at $i (depth=0), returning $i',
-            );
-            debugPrint(
-              '[DEBUG Bracket Match] ==========================================',
-            );
-            return i;
-          }
+          if (depth == 0) return i;
           depth--;
-          debugPrint(
-            '[DEBUG Bracket Match]   Found closing "$match" at $i, depth now: $depth',
-          );
         }
       }
-      debugPrint(
-        '[DEBUG Bracket Match] No matching bracket found (searched to end)',
-      );
     } else {
-      debugPrint(
-        '[DEBUG Bracket Match] Searching backward from position ${pos - 1} to 0',
-      );
       for (int i = pos - 1; i >= 0; i--) {
-        if (text[i] == char) {
-          depth++;
-          debugPrint(
-            '[DEBUG Bracket Match]   Found opening "$char" at $i, depth now: $depth',
-          );
-        }
+        if (text[i] == char) depth++;
         if (text[i] == match) {
-          if (depth == 0) {
-            debugPrint(
-              '[DEBUG Bracket Match]   Found matching "$match" at $i (depth=0), returning $i',
-            );
-            debugPrint(
-              '[DEBUG Bracket Match] ==========================================',
-            );
-            return i;
-          }
+          if (depth == 0) return i;
           depth--;
-          debugPrint(
-            '[DEBUG Bracket Match]   Found closing "$match" at $i, depth now: $depth',
-          );
         }
       }
-      debugPrint(
-        '[DEBUG Bracket Match] No matching bracket found (searched to start)',
-      );
     }
-    debugPrint('[DEBUG Bracket Match] ==========================================');
     return null;
   }
 
@@ -5781,16 +5712,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     int leadingSpaces,
     bool hasActiveFolds,
   ) {
-    debugPrint('[DEBUG Indent-Based] ==========================================');
-    debugPrint('[DEBUG Indent-Based] Finding end line for start line: $startLine');
-    debugPrint('[DEBUG Indent-Based] Leading spaces threshold: $leadingSpaces');
-    debugPrint('[DEBUG Indent-Based] Has active folds: $hasActiveFolds');
-    debugPrint('[DEBUG Indent-Based] Total line count: ${controller.lineCount}');
-
     int endLine = startLine + 1;
     while (endLine < controller.lineCount) {
       if (hasActiveFolds && _isLineFolded(endLine)) {
-        debugPrint('[DEBUG Indent-Based]   Line $endLine is folded, skipping');
         endLine++;
         continue;
       }
@@ -5804,27 +5728,14 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       }
 
       if (nextLine.trim().isEmpty) {
-        debugPrint('[DEBUG Indent-Based]   Line $endLine is empty, continuing');
         endLine++;
         continue;
       }
 
       final nextLeading = nextLine.length - nextLine.trimLeft().length;
-      debugPrint(
-        '[DEBUG Indent-Based]   Line $endLine: leading spaces=$nextLeading, text="${nextLine.length > 60 ? "${nextLine.substring(0, 60)}..." : nextLine}"',
-      );
-      if (nextLeading <= leadingSpaces) {
-        debugPrint(
-          '[DEBUG Indent-Based]   Line $endLine has leading spaces ($nextLeading) <= threshold ($leadingSpaces), stopping',
-        );
-        break;
-      }
+      if (nextLeading <= leadingSpaces) break;
       endLine++;
     }
-    debugPrint(
-      '[DEBUG Indent-Based] Final end line: $endLine (spans ${endLine - startLine} lines)',
-    );
-    debugPrint('[DEBUG Indent-Based] ==========================================');
     return endLine;
   }
 
@@ -5899,89 +5810,26 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       final lastChar = trimmed[trimmed.length - 1];
       int endLine = i + 1;
 
-      debugPrint(
-        '[DEBUG Block Detection] ==========================================',
-      );
-      debugPrint('[DEBUG Block Detection] Processing line $i');
-      debugPrint(
-        '[DEBUG Block Detection] Line text: "${lineText.length > 100 ? "${lineText.substring(0, 100)}..." : lineText}"',
-      );
-      debugPrint(
-        '[DEBUG Block Detection] Trimmed: "${trimmed.length > 100 ? "${trimmed.substring(0, 100)}..." : trimmed}"',
-      );
-      debugPrint('[DEBUG Block Detection] Last char: "$lastChar"');
-      debugPrint(
-        '[DEBUG Block Detection] Leading spaces: $leadingSpaces, Indent level: $indentLevel',
-      );
-      debugPrint('[DEBUG Block Detection] Jinja end line: $jinjaEndLine');
-      debugPrint('[DEBUG Block Detection] HTML end line: $htmlEndLine');
-
       // Prioritize Jinja tag matching, then HTML tag matching
       if (jinjaEndLine != null) {
         endLine = jinjaEndLine + 1;
-        debugPrint(
-          '[DEBUG Block Detection] Using Jinja tag match, endLine: $endLine',
-        );
       } else if (htmlEndLine != null) {
         endLine = htmlEndLine + 1;
-        debugPrint(
-          '[DEBUG Block Detection] Using HTML tag match, endLine: $endLine',
-        );
       } else if (lastChar == '{' || lastChar == '(' || lastChar == '[') {
         final lineStartOffset = controller.getLineStartOffset(i);
         final bracketPos = lineStartOffset + trimmed.length - 1;
-        debugPrint('[DEBUG Block Detection] Detected bracket "$lastChar"');
-        debugPrint('[DEBUG Block Detection] Line start offset: $lineStartOffset');
-        debugPrint('[DEBUG Block Detection] Trimmed length: ${trimmed.length}');
-        debugPrint(
-          '[DEBUG Block Detection] Calculated bracket position: $bracketPos',
-        );
-        debugPrint(
-          '[DEBUG Block Detection] Text around bracket: "${controller.text.length > bracketPos + 20 ? controller.text.substring(bracketPos - 10 < 0 ? 0 : bracketPos - 10, bracketPos + 20) : controller.text.substring(bracketPos - 10 < 0 ? 0 : bracketPos - 10)}"',
-        );
-
         final matchPos = _findMatchingBracket(controller.text, bracketPos);
 
         if (matchPos != null) {
-          final matchLine = controller.getLineAtOffset(matchPos);
-          endLine = matchLine + 1;
-          debugPrint(
-            '[DEBUG Block Detection] Found matching bracket at position: $matchPos',
-          );
-          debugPrint(
-            '[DEBUG Block Detection] Matching bracket is on line: $matchLine',
-          );
-          debugPrint('[DEBUG Block Detection] Calculated endLine: $endLine');
-          debugPrint(
-            '[DEBUG Block Detection] Text around match: "${controller.text.length > matchPos + 20 ? controller.text.substring(matchPos - 10 < 0 ? 0 : matchPos - 10, matchPos + 20) : controller.text.substring(matchPos - 10 < 0 ? 0 : matchPos - 10)}"',
-          );
+          endLine = controller.getLineAtOffset(matchPos) + 1;
         } else {
-          debugPrint(
-            '[DEBUG Block Detection] No matching bracket found, using indent-based detection',
-          );
           endLine = _findIndentBasedEndLine(i, leadingSpaces, hasActiveFolds);
-          debugPrint('[DEBUG Block Detection] Indent-based endLine: $endLine');
         }
       } else {
-        debugPrint(
-          '[DEBUG Block Detection] No bracket detected, using indent-based detection',
-        );
         endLine = _findIndentBasedEndLine(i, leadingSpaces, hasActiveFolds);
-        debugPrint('[DEBUG Block Detection] Indent-based endLine: $endLine');
       }
 
-      debugPrint('[DEBUG Block Detection] Final endLine: $endLine');
-      debugPrint(
-        '[DEBUG Block Detection] Block spans from line $i to line ${endLine - 1} (${endLine - i} lines)',
-      );
-      debugPrint(
-        '[DEBUG Block Detection] ==========================================',
-      );
-
       if (endLine <= i + 1) {
-        debugPrint(
-          '[DEBUG Block Detection] Block too small (endLine <= i + 1), skipping',
-        );
         return;
       }
 
@@ -6046,9 +5894,12 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       processLine(i);
     }
 
+    // Cache loop bounds to prevent infinite loops if they change during iteration
+    final maxVisibleLine = lastVisibleLine;
+    final maxLineCount = controller.lineCount;
     for (
       int i = firstVisibleLine;
-      i <= lastVisibleLine && i < controller.lineCount;
+      i <= maxVisibleLine && i < maxLineCount;
       i++
     ) {
       processLine(i);

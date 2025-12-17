@@ -22,7 +22,7 @@ class _MyAppState extends State<MyApp> {
   final _controller = CodeForgeController();
   final undoController = UndoRedoController();
   final absFilePath = p.join(Directory.current.path, "lib/example_code.dart");
-  String _selectedLanguage = 'json';
+  String _selectedLanguage = 'html';
   String _selectedTheme = 'vs2015';
   final _rulerController = TextEditingController(text: '80');
   bool _aiCompletionEnabled = false;
@@ -65,11 +65,8 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     _controller.text = """
- {
-    "id": 1,
-    "name": "John Doe",
-    "email": "john.doe@example.com"
-  }
+<p>Hello</p>
+<p>World</p>
   """;
     _updateRuler();
     _controller.disableAiCompletion();
