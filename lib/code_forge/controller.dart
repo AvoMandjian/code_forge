@@ -5,6 +5,7 @@ import 'package:code_forge/code_forge/suggestion_model.dart';
 import 'package:code_forge/code_forge/suggestions/initialize_language_specific_suggestions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:jinja_app_widgets_catalog/jinja_app_widgets_catalog.dart';
 import 'package:re_highlight/languages/all.dart';
 import 'package:re_highlight/re_highlight.dart';
 import 'package:re_highlight/styles/all.dart';
@@ -248,6 +249,8 @@ class CodeForgeController implements DeltaTextInputClient {
   /// shown when their trigger pattern is detected.
   List<SuggestionModel> handleRegisteredCustomSuggestions = [];
 
+  JinjaHtmlModel? customSuggestionJinjaFlutterHtml;
+
   /// Gets the list of registered custom suggestions.
   ///
   /// Returns a copy of the registered suggestions list.
@@ -306,6 +309,11 @@ class CodeForgeController implements DeltaTextInputClient {
   /// controller.registerCustomSuggestions(suggestions);
   /// ```
   void registerCustomSuggestions(List<SuggestionModel> suggestions) {
+    if (customSuggestionJinjaFlutterHtml != null) {
+      for (var element in suggestions) {
+        element.jinjaHtmlWidget = customSuggestionJinjaFlutterHtml;
+      }
+    }
     handleRegisteredCustomSuggestions.addAll(List.from(suggestions));
     notifyListeners();
   }

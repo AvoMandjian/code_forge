@@ -10,10 +10,12 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  code_forge: { path: ../ }
+  code_forge:
+    # path: /Users/avo/Documents/Workplace/Projects/forked_projects/code_forge
+    git:
+      url: https://github.com/AvoMandjian/code_forge.git
+      ref: DP_V1
   cupertino_icons: ^1.0.8
-  re_highlight:
-    path: ../packages/re-highlight
   google_fonts: ^6.3.3
   path: ^1.9.1
 

@@ -36,9 +36,11 @@ packages:
   code_forge:
     dependency: "direct main"
     description:
-      path: ".."
-      relative: true
-    source: path
+      path: "."
+      ref: DP_V1
+      resolved-ref: f4082af9b3321b05f7dec4e8727e440a4c101acb
+      url: "https://github.com/AvoMandjian/code_forge.git"
+    source: git
     version: "1.1.0"
   collection:
     dependency: transitive
@@ -283,11 +285,13 @@ packages:
     source: hosted
     version: "2.1.8"
   re_highlight:
-    dependency: "direct main"
+    dependency: transitive
     description:
-      path: "../packages/re-highlight"
-      relative: true
-    source: path
+      path: "packages/re-highlight"
+      ref: f4082af9b3321b05f7dec4e8727e440a4c101acb
+      resolved-ref: f4082af9b3321b05f7dec4e8727e440a4c101acb
+      url: "https://github.com/AvoMandjian/code_forge.git"
+    source: git
     version: "0.0.3"
   sky_engine:
     dependency: transitive

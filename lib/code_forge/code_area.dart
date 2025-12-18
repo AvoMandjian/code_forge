@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_html/flutter_html.dart';
+import 'package:jinja_app_widgets_catalog/jinja_app_widgets_catalog.dart';
 import 'package:re_highlight/languages/dart.dart';
 import 'package:re_highlight/re_highlight.dart';
 import 'package:re_highlight/styles/vs2015.dart';
@@ -2253,50 +2254,68 @@ class _CodeForgeState extends State<CodeForge>
                               child: Padding(
                                 padding: const EdgeInsets.all(12.0),
                                 child: SingleChildScrollView(
-                                  child: Html(
-                                    data: suggestion.description!,
-                                    style: {
-                                      "p": Style(
-                                        fontSize: FontSize(
-                                          _suggestionDescriptionStyle
+                                  child: suggestion.jinjaHtmlWidget != null
+                                      ? JinjaHtmlWidget(
+                                          htmlContent: suggestion
+                                              .jinjaHtmlWidget
+                                              ?.htmlContent
+                                              ?.replaceAll(
+                                                '{{description}}',
+                                                suggestion.description ?? '',
+                                              )
+                                              .replaceAll(
+                                                '{{ description }}',
+                                                suggestion.description ?? '',
+                                              ),
+                                        ).fromJson(
+                                          suggestion.jinjaHtmlWidget!.toJson(),
+                                        )
+                                      : Html(
+                                          data: suggestion.description!,
+                                          style: {
+                                            "p": Style(
+                                              fontSize: FontSize(
+                                                _suggestionDescriptionStyle
+                                                        .textStyle
+                                                        .fontSize ??
+                                                    14,
+                                              ),
+                                              color: _suggestionDescriptionStyle
                                                   .textStyle
-                                                  .fontSize ??
-                                              14,
-                                        ),
-                                        color: _suggestionDescriptionStyle
-                                            .textStyle
-                                            .color,
-                                        fontWeight: _suggestionDescriptionStyle
-                                            .textStyle
-                                            .fontWeight,
-                                      ),
-                                      "pre": Style(
-                                        fontSize: FontSize(
-                                          _suggestionDescriptionStyle
+                                                  .color,
+                                              fontWeight:
+                                                  _suggestionDescriptionStyle
+                                                      .textStyle
+                                                      .fontWeight,
+                                            ),
+                                            "pre": Style(
+                                              fontSize: FontSize(
+                                                _suggestionDescriptionStyle
+                                                        .textStyle
+                                                        .fontSize ??
+                                                    14,
+                                              ),
+                                              color: _suggestionDescriptionStyle
                                                   .textStyle
-                                                  .fontSize ??
-                                              14,
-                                        ),
-                                        color: _suggestionDescriptionStyle
-                                            .textStyle
-                                            .color,
-                                        backgroundColor: _editorTheme['root']!
-                                            .backgroundColor,
-                                        padding: HtmlPaddings.all(8),
-                                      ),
-                                      "code": Style(
-                                        fontSize: FontSize(
-                                          _suggestionDescriptionStyle
+                                                  .color,
+                                              backgroundColor:
+                                                  _editorTheme['root']!
+                                                      .backgroundColor,
+                                              padding: HtmlPaddings.all(8),
+                                            ),
+                                            "code": Style(
+                                              fontSize: FontSize(
+                                                _suggestionDescriptionStyle
+                                                        .textStyle
+                                                        .fontSize ??
+                                                    14,
+                                              ),
+                                              color: _suggestionDescriptionStyle
                                                   .textStyle
-                                                  .fontSize ??
-                                              14,
+                                                  .color,
+                                            ),
+                                          },
                                         ),
-                                        color: _suggestionDescriptionStyle
-                                            .textStyle
-                                            .color,
-                                      ),
-                                    },
-                                  ),
                                 ),
                               ),
                             ),

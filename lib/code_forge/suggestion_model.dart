@@ -1,3 +1,5 @@
+import 'package:jinja_app_widgets_catalog/jinja_app_widgets_catalog.dart';
+
 /// Context requirements for suggestion validation.
 enum SuggestionContext {
   /// No context restriction - suggestion can appear anywhere.
@@ -19,7 +21,7 @@ class SuggestionModel {
   /// The text displayed in the suggestion list.
   final String label;
 
-  final Map<String, dynamic>? jinjaHtmlWidget;
+  JinjaHtmlModel? jinjaHtmlWidget;
 
   /// The text inserted when the suggestion is selected.
   final String replacedOnClick;
@@ -44,7 +46,7 @@ class SuggestionModel {
   ///
   /// [label], [replacedOnClick], and [triggeredAt] are required.
   /// [description] is optional.
-  const SuggestionModel({
+  SuggestionModel({
     required this.label,
     required this.replacedOnClick,
     required this.triggeredAt,
@@ -63,9 +65,7 @@ class SuggestionModel {
       replacedOnClick: map['replaced_on_click'] ?? '',
       triggeredAt: map['triggered_at'] ?? '',
       description: map['description'] as String?,
-      jinjaHtmlWidget: Map<String, dynamic>.from(
-        map['jinja_html_widget'] ?? {},
-      ),
+      jinjaHtmlWidget: JinjaHtmlModel.fromJson(map['jinja_html_widget'] ?? {}),
     );
   }
 

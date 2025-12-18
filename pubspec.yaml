@@ -8,19 +8,31 @@ environment:
   flutter: ">=1.17.0"
 
 dependencies:
+  jinja_app_widgets_catalog:
+    git:
+      url: git@git.jinja.app:jinja.app/jinja_app_widgets_catalog.git
+      ref: dev
   flutter:
     sdk: flutter
   http: ^1.6.0
   flutter_html: ^3.0.0
   meta: ^1.17.0
   re_highlight:
-    path: packages/re-highlight
+    git:
+      url: https://github.com/AvoMandjian/code_forge.git
+      ref: DP_V1
+      path: packages/re-highlight
   web_socket_channel: ^3.0.3
+  pointer_interceptor: ^0.10.1+2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
+
+dependency_overrides:
+  intl: 0.20.2
+  # flutter_customizable_calendar: 0.3.8
 
 flutter:
   fonts:

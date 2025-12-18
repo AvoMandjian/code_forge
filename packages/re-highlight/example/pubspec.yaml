@@ -12,14 +12,16 @@ dependencies:
   flutter:
     sdk: flutter
   re_highlight:
-    path: ../  
+    git:
+      url: https://github.com/AvoMandjian/code_forge.git
+      ref: DP_V1
+      path: packages/re-highlight
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter packages.
 flutter:
-
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
