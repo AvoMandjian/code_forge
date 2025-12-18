@@ -23,7 +23,6 @@ dependencies:
       ref: DP_V1
       path: packages/re-highlight
   web_socket_channel: ^3.0.3
-  pointer_interceptor: ^0.10.1+2
 
 dev_dependencies:
   flutter_test:
@@ -32,7 +31,6 @@ dev_dependencies:
 
 dependency_overrides:
   intl: 0.20.2
-  # flutter_customizable_calendar: 0.3.8
 
 flutter:
   fonts:
