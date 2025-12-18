@@ -201,6 +201,12 @@ class CodeForge extends StatefulWidget {
   /// current language (supports JSON, HTML, SQL, Jinja).
   final String Function(String)? formatCode;
 
+  /// Callback function called when breakpoints are added or removed.
+  ///
+  /// This callback receives a [Set<int>] containing all current breakpoint
+  /// line numbers (1-indexed). Called whenever a breakpoint is toggled.
+  final void Function(Set<int> breakpoints)? onBreakpointsChanged;
+
   /// Creates a [CodeForge] code editor widget.
   const CodeForge({
     super.key,
@@ -233,6 +239,7 @@ class CodeForge extends StatefulWidget {
     this.hoverDetailsStyle,
     this.saveFile,
     this.formatCode,
+    this.onBreakpointsChanged,
   });
 
   @override
@@ -3866,7 +3873,11 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         final digits = controller.lineCount.toString().length;
         final digitWidth = digits * _gutterPadding * 0.6;
         final foldIconSpace = enableFolding ? fontSize + 4 : 0;
-        _gutterWidth = digitWidth + foldIconSpace + _gutterPadding;
+        final breakpointColumnWidth = (_gutterStyle.showBreakpoints)
+            ? fontSize * 1.5
+            : 0;
+        _gutterWidth =
+            breakpointColumnWidth + digitWidth + foldIconSpace + _gutterPadding;
       }
     } else {
       _gutterWidth = 0;
@@ -5868,18 +5879,48 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
           color: lineNumberColor,
         );
 
+        // Draw breakpoint indicator if enabled and breakpoint exists for this line
+        final fontSize = _textStyle?.fontSize ?? 14.0;
+        final breakpointColumnWidth = (_gutterStyle.showBreakpoints)
+            ? fontSize * 1.5
+            : 0;
+        if (_gutterStyle.showBreakpoints &&
+            controller.breakpoints.contains(i + 1)) {
+          final breakpointPaint = Paint()
+            ..color = _gutterStyle.breakpointColor
+            ..style = PaintingStyle.fill;
+          final breakpointRadius = 4.0;
+          final breakpointCenterX = offset.dx + breakpointRadius + 2;
+          final breakpointCenterY =
+              offset.dy +
+              (innerPadding?.top ?? 0) +
+              contentTop -
+              vscrollController.offset +
+              lineHeight / 2;
+          canvas.drawCircle(
+            Offset(breakpointCenterX, breakpointCenterY),
+            breakpointRadius,
+            breakpointPaint,
+          );
+        }
+
         final lineNumPara = _buildLineNumberParagraph(
           (i + 1).toString(),
           lineNumberStyle,
         );
         final numWidth = lineNumPara.longestLine;
 
+        // Adjust line number position to account for breakpoint column
+        final lineNumberXOffset =
+            breakpointColumnWidth +
+            ((_gutterWidth - breakpointColumnWidth - numWidth) / 2) -
+            (enableFolding ? (lineNumberStyle.fontSize ?? 14) / 2 : 0);
+
         canvas.drawParagraph(
           lineNumPara,
           offset +
               Offset(
-                (_gutterWidth - numWidth) / 2 -
-                    (enableFolding ? (lineNumberStyle.fontSize ?? 14) / 2 : 0),
+                lineNumberXOffset,
                 (innerPadding?.top ?? 0) +
                     contentTop -
                     vscrollController.offset,
@@ -7110,6 +7151,18 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
             (innerPadding?.top ?? 0) +
             vscrollController.offset;
         final clickedLine = _findVisibleLineByYPosition(clickY);
+
+        // Check if click is in breakpoint column area
+        final fontSize = _textStyle?.fontSize ?? 14.0;
+        final breakpointColumnWidth = (_gutterStyle.showBreakpoints)
+            ? fontSize * 1.5
+            : 0;
+        if (_gutterStyle.showBreakpoints &&
+            localPosition.dx < breakpointColumnWidth) {
+          // Toggle breakpoint for this line (convert 0-indexed to 1-indexed)
+          controller.toggleBreakpoint(clickedLine + 1);
+          return;
+        }
 
         if (enableFolding) {
           final foldRange = _getFoldRangeAtLine(clickedLine);

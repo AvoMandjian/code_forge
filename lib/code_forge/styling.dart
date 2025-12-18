@@ -70,6 +70,14 @@ class GutterStyle {
   /// If null, a low opacity version of the selection color is used.
   final Color? foldedLineHighlightColor;
 
+  /// Whether to show breakpoints in the gutter.
+  /// When true, breakpoint indicators will be displayed in the leftmost column of the gutter.
+  final bool showBreakpoints;
+
+  /// The color used for breakpoint indicators.
+  /// Defaults to red.
+  final Color breakpointColor;
+
   GutterStyle({
     this.lineNumberStyle,
     this.backgroundColor,
@@ -84,6 +92,8 @@ class GutterStyle {
     this.errorLineNumberColor = const Color(0xFFE53935),
     this.warningLineNumberColor = const Color(0xFFFFA726),
     this.foldedLineHighlightColor,
+    this.showBreakpoints = true,
+    this.breakpointColor = Colors.red,
   });
 }
 

@@ -53,6 +53,13 @@ class CodeForgeController implements DeltaTextInputClient {
   void Function(int lineNumber)? _toggleFoldCallback;
   VoidCallback? _foldAllCallback, _unfoldAllCallback;
 
+  /// Callback for breakpoint changes.
+  /// Set this to be notified when breakpoints are added or removed.
+  void Function(Set<int> breakpoints)? _onBreakpointsChanged;
+
+  /// Set of line numbers (1-indexed) that have breakpoints set.
+  final breakpoints = <int>{};
+
   /// Currently opened file.
   String? openedFile;
 
@@ -83,6 +90,10 @@ class CodeForgeController implements DeltaTextInputClient {
   /// ```
   void onCodeChanged(void Function(String currentCode) callback) {
     _onCodeChanged = callback;
+  }
+
+  void onBreakpointsChanged(void Function(Set<int> breakpoints) callback) {
+    _onBreakpointsChanged = callback;
   }
 
   /// Reference to the AI completion configuration.
@@ -1342,6 +1353,29 @@ class CodeForgeController implements DeltaTextInputClient {
       throw StateError('Folding is not enabled or editor is not initialized');
     }
     _unfoldAllCallback!();
+  }
+
+  /// Toggles a breakpoint at the specified line number.
+  ///
+  /// [line] is 1-indexed (1 for the first line), matching the displayed line number.
+  /// If a breakpoint exists at the line, it will be removed. Otherwise, a new
+  /// breakpoint will be added.
+  ///
+  /// This method will call [_onBreakpointsChanged] if it is set, and notify
+  /// all listeners to update the UI.
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.toggleBreakpoint(5); // Toggle breakpoint at line 5
+  /// ```
+  void toggleBreakpoint(int line) {
+    if (breakpoints.contains(line)) {
+      breakpoints.remove(line);
+    } else {
+      breakpoints.add(line);
+    }
+    _onBreakpointsChanged?.call(breakpoints);
+    notifyListeners();
   }
 
   /// Disposes of the controller and releases resources.
