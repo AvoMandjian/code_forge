@@ -3877,7 +3877,11 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
             ? fontSize * 1.5
             : 0;
         _gutterWidth =
-            breakpointColumnWidth + digitWidth + foldIconSpace + _gutterPadding;
+            breakpointColumnWidth +
+            digitWidth +
+            foldIconSpace +
+            _gutterPadding -
+            15;
       }
     } else {
       _gutterWidth = 0;
@@ -5890,7 +5894,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
             ..color = _gutterStyle.breakpointColor
             ..style = PaintingStyle.fill;
           final breakpointRadius = 4.0;
-          final breakpointCenterX = offset.dx + breakpointRadius + 2;
+          final breakpointCenterX = offset.dx + breakpointColumnWidth / 2;
           final breakpointCenterY =
               offset.dy +
               (innerPadding?.top ?? 0) +
@@ -5898,7 +5902,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
               vscrollController.offset +
               lineHeight / 2;
           canvas.drawCircle(
-            Offset(breakpointCenterX, breakpointCenterY),
+            Offset((breakpointCenterX), breakpointCenterY),
             breakpointRadius,
             breakpointPaint,
           );
