@@ -4770,29 +4770,6 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
           foldedLines.add(controller.getLineText(i));
         }
       }
-      final numLines = foldedLines.length;
-
-      debugPrint('🔽 JSON BLOCK FOLDED:');
-      debugPrint(
-        '   Block: lines ${blockStartLine + 1}-${blockEndLine + 1} (0-indexed: $blockStartLine-$blockEndLine)',
-      );
-      debugPrint('   Number of lines folded: $numLines');
-      if (indicatorLineNumbers.isNotEmpty) {
-        debugPrint(
-          '   Vertical indicator line spans: lines ${indicatorLineNumbers.first + 1}-${indicatorLineNumbers.last + 1} (1-indexed: ${indicatorLineNumbers.first}-${indicatorLineNumbers.last})',
-        );
-        debugPrint(
-          '   Vertical indicator line numbers: ${indicatorLineNumbers.map((l) => l + 1).join(', ')} (1-indexed)',
-        );
-      }
-      debugPrint('   Folded lines:');
-      for (int i = 0; i < foldedLines.length; i++) {
-        final lineNumber =
-            foldStart +
-            1 +
-            i; // foldStart (0-indexed) + 1 (to 1-indexed) + i (offset)
-        debugPrint('     [$lineNumber] ${foldedLines[i]}');
-      }
     }
   }
 
@@ -4831,29 +4808,6 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         if (i < controller.lineCount) {
           foldedLines.add(controller.getLineText(i));
         }
-      }
-      final numLines = foldedLines.length;
-
-      debugPrint('🔼 JSON BLOCK UNFOLDED:');
-      debugPrint(
-        '   Block: lines ${blockStartLine + 1}-${blockEndLine + 1} (0-indexed: $blockStartLine-$blockEndLine)',
-      );
-      debugPrint('   Number of lines that were folded: $numLines');
-      if (indicatorLineNumbers.isNotEmpty) {
-        debugPrint(
-          '   Vertical indicator line spans: lines ${indicatorLineNumbers.first + 1}-${indicatorLineNumbers.last + 1} (1-indexed: ${indicatorLineNumbers.first}-${indicatorLineNumbers.last})',
-        );
-        debugPrint(
-          '   Vertical indicator line numbers: ${indicatorLineNumbers.map((l) => l + 1).join(', ')} (1-indexed)',
-        );
-      }
-      debugPrint('   Lines that were folded:');
-      for (int i = 0; i < foldedLines.length; i++) {
-        final lineNumber =
-            foldStart +
-            1 +
-            i; // foldStart (0-indexed) + 1 (to 1-indexed) + i (offset)
-        debugPrint('     [$lineNumber] ${foldedLines[i]}');
       }
     }
 
