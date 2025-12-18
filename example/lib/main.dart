@@ -48,6 +48,30 @@ class _MyAppState extends State<MyApp> {
         "description":
             "<h2>&lt;{{ }}&gt; Variable Output</h2><p><strong>Jinja template variable</strong> for outputting data from backend.</p><pre><code>{{ example_variable }}</code></pre><p><strong>Usage:</strong> Inserts variable value into template</p><p><strong>Syntax:</strong> <code>{{ variable_name }}</code> &mdash; <strong>Double curly braces</strong></p>",
       },
+      {
+        "label": "Example Variables from backend 2",
+        "replaced_on_click": "{{ example_variable_2 }}",
+        "triggered_at": "bbb",
+        "jinja_html_widget": {},
+        "description":
+            "<h2>&lt;{{ }}&gt; Variable Output</h2><p><strong>Jinja template variable</strong> for outputting data from backend.</p><pre><code>{{ example_variable }}</code></pre><p><strong>Usage:</strong> Inserts variable value into template</p><p><strong>Syntax:</strong> <code>{{ variable_name }}</code> &mdash; <strong>Double curly braces</strong></p>",
+      },
+      {
+        "label": "Example Variables from backend 3",
+        "replaced_on_click": "{{ example_variable_3 }}",
+        "triggered_at": "ccc",
+        "jinja_html_widget": {},
+        "description":
+            "<h2>&lt;{{ }}&gt; Variable Output</h2><p><strong>Jinja template variable</strong> for outputting data from backend.</p><pre><code>{{ example_variable }}</code></pre><p><strong>Usage:</strong> Inserts variable value into template</p><p><strong>Syntax:</strong> <code>{{ variable_name }}</code> &mdash; <strong>Double curly braces</strong></p>",
+      },
+      {
+        "label": "Example Variables from backend 4",
+        "replaced_on_click": "{{ example_variable_4 }}",
+        "triggered_at": "bbb",
+        "jinja_html_widget": {},
+        "description":
+            "<h2>&lt;{{ }}&gt; Variable Output</h2><p><strong>Jinja template variable</strong> for outputting data from backend.</p><pre><code>{{ example_variable }}</code></pre><p><strong>Usage:</strong> Inserts variable value into template</p><p><strong>Syntax:</strong> <code>{{ variable_name }}</code> &mdash; <strong>Double curly braces</strong></p>",
+      },
     ];
     final suggestions = backendSuggestions
         .map((item) => SuggestionModel.fromJson(item as Map<String, dynamic>))
@@ -307,7 +331,24 @@ class _MyAppState extends State<MyApp> {
                           child: ElevatedButton.icon(
                             onPressed: () {
                               // Test custom suggestions manually
-                              _controller.showCustomSuggestions([]);
+                              _controller.registerCustomSuggestions([
+                                SuggestionModel(
+                                  label: 'Example Variables from backend',
+                                  replacedOnClick: '{{ example_variable }}',
+                                  triggeredAt: 'aaa',
+                                  jinjaHtmlWidget: {},
+                                  description:
+                                      '<h2>&lt;{{ }}&gt; Variable Output</h2><p><strong>Jinja template variable</strong> for outputting data from backend.</p><pre><code>{{ example_variable }}</code></pre><p><strong>Usage:</strong> Inserts variable value into template</p><p><strong>Syntax:</strong> <code>{{ variable_name }}</code> &mdash; <strong>Double curly braces</strong></p>',
+                                ),
+                                SuggestionModel(
+                                  label: 'Example Variables from backend',
+                                  replacedOnClick: '{{ example_variable }}',
+                                  triggeredAt: 'aaa',
+                                  jinjaHtmlWidget: {},
+                                  description:
+                                      '<h2>&lt;{{ }}&gt; Variable Output</h2><p><strong>Jinja template variable</strong> for outputting data from backend.</p><pre><code>{{ example_variable }}</code></pre><p><strong>Usage:</strong> Inserts variable value into template</p><p><strong>Syntax:</strong> <code>{{ variable_name }}</code> &mdash; <strong>Double curly braces</strong></p>',
+                                ),
+                              ]);
                               ScaffoldMessenger.of(
                                 scaffoldContext,
                               ).showSnackBar(
