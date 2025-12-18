@@ -3733,6 +3733,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   Timer? _selectionTimer, _hoverTimer;
   Offset? _pointerDownPosition;
   Offset _currentPosition = Offset.zero;
+  int? _hoveredBreakpointLine;
   bool _enableFolding, _enableGuideLines, _enableGutter, _enableGutterDivider;
   bool _isFoldToggleInProgress = false, _lineWrap;
   bool _foldRangesNeedsClear = false, _insertingPlaceholder = false;
@@ -5890,6 +5891,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
             : 0;
         if (_gutterStyle.showBreakpoints &&
             controller.breakpoints.contains(i + 1)) {
+          final isHovered = _hoveredBreakpointLine == i + 1;
           final breakpointPaint = Paint()
             ..color = _gutterStyle.breakpointColor
             ..style = PaintingStyle.fill;
@@ -5901,10 +5903,42 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
               contentTop -
               vscrollController.offset +
               lineHeight / 2;
+
+          // Draw hover highlight (semi-transparent circle) if hovering
+          if (isHovered) {
+            final hoverPaint = Paint()
+              ..color = _gutterStyle.breakpointColor.withValues(alpha: 0.3)
+              ..style = PaintingStyle.fill;
+            canvas.drawCircle(
+              Offset(breakpointCenterX, breakpointCenterY),
+              breakpointRadius + 2,
+              hoverPaint,
+            );
+          }
+
           canvas.drawCircle(
-            Offset((breakpointCenterX), breakpointCenterY),
+            Offset(breakpointCenterX, breakpointCenterY),
             breakpointRadius,
             breakpointPaint,
+          );
+        } else if (_gutterStyle.showBreakpoints &&
+            _hoveredBreakpointLine == i + 1) {
+          // Show semi-transparent breakpoint on hover even if not set
+          final breakpointRadius = 4.0;
+          final breakpointCenterX = offset.dx + breakpointColumnWidth / 2;
+          final breakpointCenterY =
+              offset.dy +
+              (innerPadding?.top ?? 0) +
+              contentTop -
+              vscrollController.offset +
+              lineHeight / 2;
+          final hoverPaint = Paint()
+            ..color = _gutterStyle.breakpointColor.withOpacity(0.5)
+            ..style = PaintingStyle.fill;
+          canvas.drawCircle(
+            Offset(breakpointCenterX, breakpointCenterY),
+            breakpointRadius,
+            hoverPaint,
           );
         }
 
@@ -7112,6 +7146,39 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     final textOffset = _getTextOffsetFromPosition(contentPosition);
 
     if (event is PointerHoverEvent) {
+      // Check for breakpoint hover
+      if (enableGutter &&
+          localPosition.dx >= 0 &&
+          localPosition.dx < _gutterWidth) {
+        final fontSize = _textStyle?.fontSize ?? 14.0;
+        final breakpointColumnWidth = (_gutterStyle.showBreakpoints)
+            ? fontSize * 1.5
+            : 0;
+        if (_gutterStyle.showBreakpoints &&
+            localPosition.dx < breakpointColumnWidth) {
+          final clickY =
+              localPosition.dy -
+              (innerPadding?.top ?? 0) +
+              vscrollController.offset;
+          final hoveredLine = _findVisibleLineByYPosition(clickY);
+          if (_hoveredBreakpointLine != hoveredLine + 1) {
+            _hoveredBreakpointLine = hoveredLine + 1;
+            markNeedsPaint();
+          }
+        } else {
+          if (_hoveredBreakpointLine != null) {
+            _hoveredBreakpointLine = null;
+            markNeedsPaint();
+          }
+        }
+      } else {
+        // Pointer is outside gutter, clear hover state
+        if (_hoveredBreakpointLine != null) {
+          _hoveredBreakpointLine = null;
+          markNeedsPaint();
+        }
+      }
+
       if (hoverNotifier.value == null) {
         _hoverTimer?.cancel();
       }
@@ -7390,6 +7457,17 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   @override
   MouseCursor get cursor {
     if (_currentPosition.dx >= 0 && _currentPosition.dx < _gutterWidth) {
+      final fontSize = _textStyle?.fontSize ?? 14.0;
+      final breakpointColumnWidth = (_gutterStyle.showBreakpoints)
+          ? fontSize * 1.5
+          : 0;
+
+      // Check if hovering over breakpoint column
+      if (_gutterStyle.showBreakpoints &&
+          _currentPosition.dx < breakpointColumnWidth) {
+        return SystemMouseCursors.click;
+      }
+
       if (_foldRanges.isEmpty && !enableFolding) {
         return MouseCursor.defer;
       }
