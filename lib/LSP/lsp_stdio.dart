@@ -118,6 +118,8 @@ class LspStdioConfig extends LspConfig {
     _process.stderr.listen((data) => debugPrint(utf8.decode(data)));
   }
 
+  int get pid => _process.pid;
+
   void _handleStdoutData(List<int> data) {
     _buffer.addAll(data);
     while (_buffer.isNotEmpty) {
