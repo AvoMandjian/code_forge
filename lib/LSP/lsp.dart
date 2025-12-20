@@ -91,19 +91,14 @@ sealed class LspConfig {
                   'properties': [
                     'documentaion',
                     'detail',
-                    'additionalTextEdits'
-                  ]
+                    'additionalTextEdits',
+                  ],
                 },
-                'snippetSupport': false
+                'snippetSupport': false,
               },
             },
-            'synchronization': {
-              'didSave': true,
-              'change' : 1,
-            },
-            'publishDiagnostics': {
-              'relatedInformation': true
-            },
+            'synchronization': {'didSave': true, 'change': 1},
+            'publishDiagnostics': {'relatedInformation': true},
             'hover': {
               'contentFormat': ['markdown'],
             },
@@ -277,7 +272,7 @@ sealed class LspConfig {
             ),
             importUri: importUriList,
             reference: item["data"]?["ref"],
-            completionItem: item
+            completionItem: item,
           ),
         );
       }
@@ -326,10 +321,12 @@ sealed class LspConfig {
   ///
   /// Returns a Future that completes with the resolved completion item. Throws an
   /// exception if the resolve request fails or the server returns an error.
-  Future<Map<String, dynamic>> resolveCompletionItem(Map<String, dynamic> item) async{
+  Future<Map<String, dynamic>> resolveCompletionItem(
+    Map<String, dynamic> item,
+  ) async {
     final response = await _sendRequest(
       method: 'completionItem/resolve',
-      params: item
+      params: item,
     );
     return response['result'] ?? item;
   }

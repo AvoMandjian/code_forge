@@ -759,7 +759,12 @@ class CodeForgeController implements DeltaTextInputClient {
 
   /// Replace a range of text with new text.
   /// Used for clipboard operations and text manipulation.
-  void replaceRange(int start, int end, String replacement, {bool preserveOldCursor = false}) {
+  void replaceRange(
+    int start,
+    int end,
+    String replacement, {
+    bool preserveOldCursor = false,
+  }) {
     if (_undoController?.isUndoRedoInProgress ?? false) return;
 
     final selectionBefore = _selection;
