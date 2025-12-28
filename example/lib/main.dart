@@ -21,6 +21,7 @@ class _MyAppState extends State<MyApp> {
   final absFilePath = p.join(Directory.current.path, "lib/example_code.dart");
   CodeForgeController? codeController;
   FindController? findController;
+  final replaceController = TextEditingController();
 
   Future<LspConfig> getLsp() async {
     final absWorkspacePath = p.join(Directory.current.path, "lib");
@@ -68,69 +69,104 @@ class _MyAppState extends State<MyApp> {
                   Container(
                     padding: const EdgeInsets.all(8.0),
                     color: Colors.grey[200],
-                    child: Row(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.search),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextField(
-                            decoration: const InputDecoration(
-                              hintText: 'Find...',
-                              border: InputBorder.none,
+                        Row(
+                          children: [
+                            const Icon(Icons.search),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextField(
+                                decoration: const InputDecoration(
+                                  hintText: 'Find...',
+                                  border: InputBorder.none,
+                                ),
+                                onChanged: (val) => findController?.find(val),
+                              ),
                             ),
-                            onChanged: (val) => findController?.find(val),
-                          ),
+                            // Verification Toggles
+                            ListenableBuilder(
+                              listenable: findController!,
+                              builder: (context, _) {
+                                return Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.abc),
+                                      color: findController!.caseSensitive
+                                          ? Colors.blue
+                                          : Colors.grey,
+                                      onPressed: () =>
+                                          findController!.caseSensitive =
+                                              !findController!.caseSensitive,
+                                      tooltip: 'Match Case',
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.text_fields),
+                                      color: findController!.matchWholeWord
+                                          ? Colors.blue
+                                          : Colors.grey,
+                                      onPressed: () =>
+                                          findController!.matchWholeWord =
+                                              !findController!.matchWholeWord,
+                                      tooltip: 'Match Whole Word',
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.code),
+                                      color: findController!.isRegex
+                                          ? Colors.blue
+                                          : Colors.grey,
+                                      onPressed: () => findController!.isRegex =
+                                          !findController!.isRegex,
+                                      tooltip: 'Regex',
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(Icons.keyboard_arrow_up),
+                              onPressed: () => findController?.previous(),
+                              tooltip: 'Previous',
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.keyboard_arrow_down),
+                              onPressed: () => findController?.next(),
+                              tooltip: 'Next',
+                            ),
+                          ],
                         ),
-                        // Verification Toggles
-                        ListenableBuilder(
-                          listenable: findController!,
-                          builder: (context, _) {
-                            return Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.abc),
-                                  color: findController!.caseSensitive
-                                      ? Colors.blue
-                                      : Colors.grey,
-                                  onPressed: () =>
-                                      findController!.caseSensitive =
-                                          !findController!.caseSensitive,
-                                  tooltip: 'Match Case',
+                        const Divider(),
+                        Row(
+                          children: [
+                            const Icon(Icons.edit_note),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextField(
+                                controller: replaceController,
+                                decoration: const InputDecoration(
+                                  hintText: 'Replace...',
+                                  border: InputBorder.none,
                                 ),
-                                IconButton(
-                                  icon: const Icon(Icons.text_fields),
-                                  color: findController!.matchWholeWord
-                                      ? Colors.blue
-                                      : Colors.grey,
-                                  onPressed: () =>
-                                      findController!.matchWholeWord =
-                                          !findController!.matchWholeWord,
-                                  tooltip: 'Match Whole Word',
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.code),
-                                  color: findController!.isRegex
-                                      ? Colors.blue
-                                      : Colors.grey,
-                                  onPressed: () => findController!.isRegex =
-                                      !findController!.isRegex,
-                                  tooltip: 'Regex',
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(Icons.keyboard_arrow_up),
-                          onPressed: () => findController?.previous(),
-                          tooltip: 'Previous',
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.keyboard_arrow_down),
-                          onPressed: () => findController?.next(),
-                          tooltip: 'Next',
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                findController?.replace(replaceController.text);
+                              },
+                              child: const Text('Replace'),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                findController?.replaceAll(
+                                  replaceController.text,
+                                );
+                              },
+                              child: const Text('All'),
+                            ),
+                          ],
                         ),
                       ],
                     ),

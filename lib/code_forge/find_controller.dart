@@ -140,6 +140,63 @@ class FindController extends ChangeNotifier {
     _clearMatches();
   }
 
+  /// Replaces the currently selected match with [replacement].
+  void replace(String replacement) {
+    if (_currentMatchIndex < 0 || _currentMatchIndex >= _matches.length) return;
+
+    final match = _matches[_currentMatchIndex];
+    _codeController.replaceRange(match.start, match.end, replacement);
+
+    // After replacement, offsets change, so we must re-search.
+    // We want to move to the 'next' match relative to where we were.
+    // Since the current match is replaced, the "next" match in the list (index+1)
+    // effectively becomes the new match at 'index' or close to it,
+    // but simplified: just re-run find.
+
+    // We strive to select the next match after finding.
+
+    // Store current index to try and maintain relative position if possible,
+    // though usually "Replace" implies "Replace and Find Next".
+    // Let's just re-find.
+    find(_lastQuery);
+
+    // find() automatically sets _currentMatchIndex to the one closest to cursor.
+    // Since replaceRange puts cursor at end of replacement, find() should select the next one.
+  }
+
+  /// Replaces all matches with [replacement].
+  void replaceAll(String replacement) {
+    if (_matches.isEmpty) return;
+
+    // We use the regex/string logic to generate the new text
+    // and replace the entire content to ensure a single undo step if possible
+    // (via replaceRange of the whole document).
+
+    final text = _codeController.text;
+    String pattern = _lastQuery;
+
+    if (!_isRegex) {
+      pattern = RegExp.escape(_lastQuery);
+    }
+
+    if (_matchWholeWord) {
+      pattern = '\\b$pattern\\b';
+    }
+
+    try {
+      final regExp = RegExp(pattern, caseSensitive: _caseSensitive);
+      final newText = text.replaceAll(regExp, replacement);
+
+      // Replace the entire document content
+      _codeController.replaceRange(0, text.length, newText);
+
+      // Clear matches as they are all gone (or changed)
+      find(_lastQuery);
+    } catch (e) {
+      debugPrint('FindController: Replace All failed. Error: $e');
+    }
+  }
+
   void _clearMatches() {
     _matches = [];
     _currentMatchIndex = -1;
