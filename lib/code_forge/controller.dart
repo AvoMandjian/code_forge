@@ -1093,9 +1093,6 @@ class CodeForgeController implements DeltaTextInputClient {
     bool matchCase = false,
     bool matchWholeWord = false,
   }) {
-    final style =
-        highlightStyle ?? const TextStyle(backgroundColor: Colors.amberAccent);
-
     searchHighlights.clear();
 
     if (word.isEmpty) {
@@ -1132,7 +1129,11 @@ class CodeForgeController implements DeltaTextInputClient {
 
       if (isMatch) {
         searchHighlights.add(
-          SearchHighlight(start: index, end: index + word.length, style: style),
+          SearchHighlight(
+            start: index,
+            end: index + word.length,
+            isCurrentMatch: true,
+          ),
         );
       }
 
@@ -1157,9 +1158,6 @@ class CodeForgeController implements DeltaTextInputClient {
   /// text, appends a `SearchHighlight` for every match and then sets
   /// `searchHighlightsChanged = true` and calls `notifyListeners()`.
   void findRegex(RegExp regex, TextStyle? highlightStyle) {
-    final style =
-        highlightStyle ?? const TextStyle(backgroundColor: Colors.amberAccent);
-
     searchHighlights.clear();
 
     final searchText = text;
@@ -1167,7 +1165,11 @@ class CodeForgeController implements DeltaTextInputClient {
 
     for (final match in matches) {
       searchHighlights.add(
-        SearchHighlight(start: match.start, end: match.end, style: style),
+        SearchHighlight(
+          start: match.start,
+          end: match.end,
+          isCurrentMatch: true,
+        ),
       );
     }
 

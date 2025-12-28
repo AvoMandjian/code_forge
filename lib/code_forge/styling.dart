@@ -194,12 +194,25 @@ class SearchHighlight {
   /// The end offset of the highlighted text
   final int end;
 
-  /// The text style to apply to the highlighted text
-  final TextStyle style;
+  /// Whether this highlight represents the currently selected match
+  final bool isCurrentMatch;
 
   const SearchHighlight({
     required this.start,
     required this.end,
-    required this.style,
+    this.isCurrentMatch = false,
+  });
+}
+
+class MatchHighlightStyle {
+  /// Style for the currently selected match.
+  final TextStyle currentMatchStyle;
+
+  /// Style for all other matches.
+  final TextStyle otherMatchStyle;
+
+  const MatchHighlightStyle({
+    required this.currentMatchStyle,
+    required this.otherMatchStyle,
   });
 }

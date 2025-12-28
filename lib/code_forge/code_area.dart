@@ -122,6 +122,9 @@ class CodeForge extends StatefulWidget {
   /// Styling options for hover documentation popup.
   final HoverDetailsStyle? hoverDetailsStyle;
 
+  /// Styling options for search match highlighting.
+  final MatchHighlightStyle? matchHighlightStyle;
+
   /// The file path for LSP features.
   ///
   /// Required when using LSP integration to identify the document.
@@ -198,6 +201,7 @@ class CodeForge extends StatefulWidget {
     this.gutterStyle,
     this.suggestionStyle,
     this.hoverDetailsStyle,
+    this.matchHighlightStyle,
   });
 
   @override
@@ -1488,6 +1492,8 @@ class _CodeForgeState extends State<CodeForge>
                                     suggestionNotifier: _suggestionNotifier,
                                     aiCompletionTextStyle:
                                         widget.aiCompletionTextStyle,
+                                    matchHighlightStyle:
+                                        widget.matchHighlightStyle,
                                     lspActionNotifier: _lspActionNotifier,
                                     lspActionOffsetNotifier:
                                         _lspActionOffsetNotifier,
@@ -2351,6 +2357,7 @@ class _CodeField extends LeafRenderObjectWidget {
   final BuildContext context;
   final TextStyle? aiCompletionTextStyle;
   final String? filePath;
+  final MatchHighlightStyle? matchHighlightStyle;
 
   const _CodeField({
     required this.controller,
@@ -2389,6 +2396,7 @@ class _CodeField extends LeafRenderObjectWidget {
     this.semanticTokensVersion = 0,
     this.innerPadding,
     this.aiCompletionTextStyle,
+    this.matchHighlightStyle,
   });
 
   @override
@@ -2407,6 +2415,7 @@ class _CodeField extends LeafRenderObjectWidget {
       readOnly: readOnly,
       caretBlinkController: caretBlinkController,
       textStyle: textStyle,
+      matchHighlightStyle: matchHighlightStyle,
       enableFolding: enableFolding,
       enableGuideLines: enableGuideLines,
       enableGutter: enableGutter,
@@ -2501,6 +2510,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   GutterStyle _gutterStyle;
   CodeSelectionStyle _selectionStyle;
   List<LspErrors> _diagnostics;
+  MatchHighlightStyle? _matchHighlightStyle;
+  final MatchHighlightStyle? matchHighlightStyle;
   int _cachedCaretOffset = -1, _cachedCaretLine = 0, _cachedCaretLineStart = 0;
   int? _dragStartOffset;
   Timer? _selectionTimer, _hoverTimer;
@@ -2606,6 +2617,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     this.languageId,
     this.lspConfig,
     this.filePath,
+    this.matchHighlightStyle,
     EdgeInsets? innerPadding,
     TextStyle? textStyle,
     TextStyle? aiCompletionTextStyle,
@@ -2622,7 +2634,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
        _lineWrap = lineWrap,
        _innerPadding = innerPadding,
        _textStyle = textStyle,
-       _diagnostics = diagnostics {
+       _diagnostics = diagnostics,
+       _matchHighlightStyle = matchHighlightStyle {
     final fontSize = _textStyle?.fontSize ?? 14.0;
     final fontFamily = _textStyle?.fontFamily;
     final color =
@@ -4914,8 +4927,16 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
       if (endLine < firstVisibleLine || startLine > lastVisibleLine) continue;
 
+      final highlightStyle = highlight.isCurrentMatch
+          ? (_matchHighlightStyle?.currentMatchStyle ??
+                const TextStyle(backgroundColor: Color(0xFF01A2FF)))
+          : (_matchHighlightStyle?.otherMatchStyle ??
+                const TextStyle(
+                  backgroundColor: Color.fromARGB(163, 72, 215, 255),
+                ));
+
       final highlightPaint = Paint()
-        ..color = highlight.style.backgroundColor ?? Colors.amberAccent
+        ..color = highlightStyle.backgroundColor ?? Colors.amberAccent
         ..style = PaintingStyle.fill;
 
       for (int lineIndex = startLine; lineIndex <= endLine; lineIndex++) {
