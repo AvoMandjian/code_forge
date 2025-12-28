@@ -547,6 +547,7 @@ class CodeForgeController implements DeltaTextInputClient {
   ///
   /// If no text is selected, does nothing.
   void cut() {
+    if (readOnly) return;
     final sel = selection;
     if (sel.start == sel.end) return;
     final selectedText = text.substring(sel.start, sel.end);
@@ -558,6 +559,7 @@ class CodeForgeController implements DeltaTextInputClient {
   ///
   /// Replaces any selected text with the pasted content.
   Future<void> paste() async {
+    if (readOnly) return;
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     if (data?.text == null || data!.text!.isEmpty) return;
     final sel = selection;
@@ -842,6 +844,8 @@ class CodeForgeController implements DeltaTextInputClient {
     String textToInsert, {
     bool replaceTypedChar = false,
   }) {
+    if (readOnly) return;
+
     _flushBuffer();
 
     final cursorPosition = selection.extentOffset;
@@ -884,6 +888,7 @@ class CodeForgeController implements DeltaTextInputClient {
 
   /// Remove the selection or last char if the selection is empty (backspace key)
   void backspace() {
+    if (readOnly) return;
     if (_undoController?.isUndoRedoInProgress ?? false) return;
 
     _flushBuffer();
