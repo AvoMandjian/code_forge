@@ -167,3 +167,7 @@ This release establishes **CodeForge** as a powerful, production-ready code edit
 ## 4.2.0
 - FEATURE: Added LSP signature help.
 - ENHANCEMENT: Improved and responsive selection tool bar for mobile.
+
+## 4.3.0
+- FEATURE: BiDi support in `Rope` data structure.
+- FEATURE: Immutable rope operations - insert and delete.

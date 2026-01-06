@@ -1,11 +1,103 @@
 import 'dart:math';
 
+/// Text direction for bidirectional text support
+enum TextDirection {
+  ltr, // Left-to-right (English, etc.)
+  rtl, // Right-to-left (Arabic, Hebrew, etc.)
+  mixed, // Contains both directions
+}
+
+/// Unicode BiDi character ranges and utilities
+class BiDi {
+  static const int _arabicStart = 0x0600;
+  static const int _arabicEnd = 0x06FF;
+  static const int _arabicSupplementStart = 0x0750;
+  static const int _arabicSupplementEnd = 0x077F;
+  static const int _arabicExtendedAStart = 0x08A0;
+  static const int _arabicExtendedAEnd = 0x08FF;
+  static const int _hebrewStart = 0x0590;
+  static const int _hebrewEnd = 0x05FF;
+  static const int _syriacStart = 0x0700;
+  static const int _syriacEnd = 0x074F;
+  static const int _thaanaStart = 0x0780;
+  static const int _thaanaEnd = 0x07BF;
+  static const int _nkoStart = 0x07C0;
+  static const int _nkoEnd = 0x07FF;
+
+  // BiDi control characters
+  static const int lrm = 0x200E; // Left-to-Right Mark
+  static const int rlm = 0x200F; // Right-to-Left Mark
+  static const int lre = 0x202A; // Left-to-Right Embedding
+  static const int rle = 0x202B; // Right-to-Left Embedding
+  static const int pdf = 0x202C; // Pop Directional Formatting
+  static const int lro = 0x202D; // Left-to-Right Override
+  static const int rlo = 0x202E; // Right-to-Left Override
+  static const int lri = 0x2066; // Left-to-Right Isolate
+  static const int rli = 0x2067; // Right-to-Left Isolate
+  static const int fsi = 0x2068; // First Strong Isolate
+  static const int pdi = 0x2069; // Pop Directional Isolate
+
+  /// Check if a code unit is an RTL character
+  static bool isRtlChar(int codeUnit) {
+    return (codeUnit >= _arabicStart && codeUnit <= _arabicEnd) ||
+        (codeUnit >= _arabicSupplementStart &&
+            codeUnit <= _arabicSupplementEnd) ||
+        (codeUnit >= _arabicExtendedAStart && codeUnit <= _arabicExtendedAEnd) ||
+        (codeUnit >= _hebrewStart && codeUnit <= _hebrewEnd) ||
+        (codeUnit >= _syriacStart && codeUnit <= _syriacEnd) ||
+        (codeUnit >= _thaanaStart && codeUnit <= _thaanaEnd) ||
+        (codeUnit >= _nkoStart && codeUnit <= _nkoEnd) ||
+        codeUnit == rlm ||
+        codeUnit == rle ||
+        codeUnit == rlo ||
+        codeUnit == rli;
+  }
+
+  /// Check if a code unit is an LTR character (strong)
+  static bool isLtrChar(int codeUnit) {
+    // Latin, Greek, Cyrillic, and other LTR scripts
+    return (codeUnit >= 0x0041 && codeUnit <= 0x005A) || // A-Z
+        (codeUnit >= 0x0061 && codeUnit <= 0x007A) || // a-z
+        (codeUnit >= 0x00C0 && codeUnit <= 0x00FF) || // Latin Extended
+        (codeUnit >= 0x0100 && codeUnit <= 0x017F) || // Latin Extended-A
+        (codeUnit >= 0x0180 && codeUnit <= 0x024F) || // Latin Extended-B
+        (codeUnit >= 0x0370 && codeUnit <= 0x03FF) || // Greek
+        (codeUnit >= 0x0400 && codeUnit <= 0x04FF) || // Cyrillic
+        codeUnit == lrm ||
+        codeUnit == lre ||
+        codeUnit == lro ||
+        codeUnit == lri;
+  }
+
+  /// Check if a code unit is neutral (numbers, punctuation, spaces)
+  static bool isNeutral(int codeUnit) {
+    return !isRtlChar(codeUnit) && !isLtrChar(codeUnit);
+  }
+}
+
+/// Represents a segment of text with a specific direction
+class BiDiSegment {
+  final int start;
+  final int end;
+  final TextDirection direction;
+
+  const BiDiSegment(this.start, this.end, this.direction);
+
+  int get length => end - start;
+
+  @override
+  String toString() => 'BiDiSegment($start-$end, $direction)';
+}
+
 class Rope {
   static const int _leafSize = 512;
   _RopeNode? _root;
   int _length = 0;
 
   List<String>? _lineCache;
+
+  TextDirection? _cachedDirection;
+  List<BiDiSegment>? _cachedBiDiSegments;
 
   Rope([String initialText = '']) {
     if (initialText.isEmpty) {
@@ -17,7 +109,234 @@ class Rope {
     }
   }
 
+  /// Private constructor for immutable operations
+  Rope._fromNode(_RopeNode? root, int length)
+      : _root = root,
+        _length = length;
+
   int get length => _length;
+
+  /// Creates a new Rope with text inserted at position (immutable)
+  Rope insertImmutable(int position, String text) {
+    if (position < 0 || position > _length) {
+      throw RangeError('Invalid position: $position for length $_length');
+    }
+    if (text.isEmpty) return Rope._fromNode(_root, _length);
+
+    final pair = _split(_root, position);
+    final mid = _buildBalanced(text, 0, text.length);
+    final newRoot = _concat(_concat(pair.left, mid), pair.right);
+    return Rope._fromNode(newRoot, _length + text.length);
+  }
+
+  /// Creates a new Rope with text deleted between start and end (immutable)
+  Rope deleteImmutable(int start, int end) {
+    if (start < 0 || end < start || end > _length) {
+      throw RangeError('Invalid range: [$start, $end) for length $_length');
+    }
+    if (start == end) return Rope._fromNode(_root, _length);
+
+    final first = _split(_root, start);
+    final second = _split(first.right, end - start);
+    final newRoot = _concat(first.left, second.right);
+    return Rope._fromNode(newRoot, _length - (end - start));
+  }
+
+  /// Creates a new Rope by concatenating another Rope (immutable)
+  Rope concatImmutable(Rope other) {
+    if (other._root == null) return Rope._fromNode(_root, _length);
+    if (_root == null) return Rope._fromNode(other._root, other._length);
+
+    final newRoot = _concat(_root, other._root);
+    return Rope._fromNode(newRoot, _length + other._length);
+  }
+
+  /// Splits this rope at position, returning two new Ropes (immutable)
+  (Rope, Rope) splitImmutable(int position) {
+    if (position < 0 || position > _length) {
+      throw RangeError('Invalid position: $position for length $_length');
+    }
+    if (position == 0) {
+      return (Rope._fromNode(null, 0), Rope._fromNode(_root, _length));
+    }
+    if (position == _length) {
+      return (Rope._fromNode(_root, _length), Rope._fromNode(null, 0));
+    }
+
+    final pair = _split(_root, position);
+    final leftLen = pair.left?.length ?? 0;
+    final rightLen = pair.right?.length ?? 0;
+    return (
+      Rope._fromNode(pair.left, leftLen),
+      Rope._fromNode(pair.right, rightLen),
+    );
+  }
+
+  /// Creates a deep copy of this Rope
+  Rope copy() => Rope._fromNode(_root, _length);
+
+  /// Returns the overall text direction of this rope
+  TextDirection get textDirection {
+    if (_cachedDirection != null) return _cachedDirection!;
+    _cachedDirection = _computeTextDirection();
+    return _cachedDirection!;
+  }
+
+  /// Returns true if this rope contains any RTL characters
+  bool get containsRtl => textDirection != TextDirection.ltr;
+
+  /// Returns true if this rope is primarily RTL
+  bool get isRtl => textDirection == TextDirection.rtl;
+
+  /// Returns true if this rope is primarily LTR
+  bool get isLtr => textDirection == TextDirection.ltr;
+
+  /// Returns true if this rope contains both RTL and LTR characters
+  bool get isMixed => textDirection == TextDirection.mixed;
+
+  /// Get BiDi segments for the entire rope
+  List<BiDiSegment> get bidiSegments {
+    if (_cachedBiDiSegments != null) return _cachedBiDiSegments!;
+    _cachedBiDiSegments = _computeBiDiSegments();
+    return _cachedBiDiSegments!;
+  }
+
+  /// Get BiDi segments for a specific line
+  List<BiDiSegment> getBiDiSegmentsForLine(int lineIndex) {
+    final lineStart = getLineStartOffset(lineIndex);
+    final lineEnd = findLineEnd(lineStart);
+    return getBiDiSegmentsInRange(lineStart, lineEnd);
+  }
+
+  /// Get BiDi segments within a character range
+  List<BiDiSegment> getBiDiSegmentsInRange(int start, int end) {
+    if (start >= end || _root == null) return [];
+
+    final text = substring(start, end);
+    final segments = <BiDiSegment>[];
+
+    if (text.isEmpty) return segments;
+
+    TextDirection? currentDir;
+    int segmentStart = 0;
+
+    for (int i = 0; i < text.length; i++) {
+      final codeUnit = text.codeUnitAt(i);
+      TextDirection charDir;
+
+      if (BiDi.isRtlChar(codeUnit)) {
+        charDir = TextDirection.rtl;
+      } else if (BiDi.isLtrChar(codeUnit)) {
+        charDir = TextDirection.ltr;
+      } else {
+        continue;
+      }
+
+      if (currentDir == null) {
+        currentDir = charDir;
+        segmentStart = i;
+      } else if (charDir != currentDir) {
+        segments.add(BiDiSegment(
+          start + segmentStart,
+          start + i,
+          currentDir,
+        ));
+        currentDir = charDir;
+        segmentStart = i;
+      }
+    }
+
+    if (currentDir != null) {
+      segments.add(BiDiSegment(
+        start + segmentStart,
+        start + text.length,
+        currentDir,
+      ));
+    }
+
+    return segments;
+  }
+
+  /// Get only RTL segments (useful for rendering)
+  List<(int start, int end)> getRtlSegments() {
+    return bidiSegments
+        .where((s) => s.direction == TextDirection.rtl)
+        .map((s) => (s.start, s.end))
+        .toList();
+  }
+
+  /// Wrap text with appropriate BiDi control characters for rendering
+  String toStringWithBiDiControls() {
+    if (_root == null) return '';
+    final text = getText();
+
+    if (!containsRtl) return text;
+
+    if (isRtl) {
+      return String.fromCharCode(BiDi.rle) + text + String.fromCharCode(BiDi.pdf);
+    } else {
+      return String.fromCharCode(BiDi.lre) + text + String.fromCharCode(BiDi.pdf);
+    }
+  }
+
+  /// Returns the primary direction based on character count
+  /// For mixed text, returns the direction with more characters
+  TextDirection get primaryDirection {
+    if (_root == null) return TextDirection.ltr;
+
+    int rtlCount = 0;
+    int ltrCount = 0;
+
+    for (final chunk in _root!.chunks()) {
+      for (int i = 0; i < chunk.length; i++) {
+        final codeUnit = chunk.codeUnitAt(i);
+        if (BiDi.isRtlChar(codeUnit)) {
+          rtlCount++;
+        } else if (BiDi.isLtrChar(codeUnit)) {
+          ltrCount++;
+        }
+      }
+    }
+
+    if (rtlCount == 0 && ltrCount == 0) return TextDirection.ltr;
+    return rtlCount > ltrCount ? TextDirection.rtl : TextDirection.ltr;
+  }
+
+  TextDirection _computeTextDirection() {
+    if (_root == null) return TextDirection.ltr;
+
+    bool hasRtl = false;
+    bool hasLtr = false;
+
+    for (final chunk in _root!.chunks()) {
+      for (int i = 0; i < chunk.length; i++) {
+        final codeUnit = chunk.codeUnitAt(i);
+        if (BiDi.isRtlChar(codeUnit)) {
+          hasRtl = true;
+        } else if (BiDi.isLtrChar(codeUnit)) {
+          hasLtr = true;
+        }
+
+        if (hasRtl && hasLtr) {
+          return TextDirection.mixed;
+        }
+      }
+    }
+
+    if (!hasRtl && !hasLtr) return TextDirection.ltr;
+    if (!hasRtl) return TextDirection.ltr;
+    return TextDirection.rtl;
+  }
+
+  List<BiDiSegment> _computeBiDiSegments() {
+    if (_root == null) return [];
+    return getBiDiSegmentsInRange(0, _length);
+  }
+
+  void _invalidateBiDiCache() {
+    _cachedDirection = null;
+    _cachedBiDiSegments = null;
+  }
 
   _RopeNode? _buildBalanced(String s, int start, int end) {
     final len = end - start;
@@ -62,6 +381,8 @@ class Rope {
     return _root!.charAt(position);
   }
 
+  /// Mutable insert - modifies this rope in place
+  /// For immutable version, use [insertImmutable]
   void insert(int position, String text) {
     if (position < 0 || position > _length) {
       throw RangeError('Invalid position: $position for length $_length');
@@ -69,6 +390,7 @@ class Rope {
     if (text.isEmpty) return;
 
     _lineCache = null;
+    _invalidateBiDiCache();
 
     if (text.length == 1 && _root != null) {
       final inserted = _tryInsertInLeaf(_root!, position, text);
@@ -112,6 +434,8 @@ class Rope {
     return null;
   }
 
+  /// Mutable delete - modifies this rope in place
+  /// For immutable version, use [deleteImmutable]
   void delete(int start, int end) {
     if (start < 0 || end < start || end > _length) {
       throw RangeError('Invalid range: [$start, $end) for length $_length');
@@ -119,6 +443,7 @@ class Rope {
     if (start == end) return;
 
     _lineCache = null;
+    _invalidateBiDiCache();
 
     if (end - start == 1 && _root != null) {
       final deleted = _tryDeleteInLeaf(_root!, start);
