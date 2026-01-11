@@ -176,9 +176,10 @@ This release establishes **CodeForge** as a powerful, production-ready code edit
 - FEATURE: Added git diff support:
 <p align="left">
   <img src="https://raw.githubusercontent.com/heckmon/code_forge/refs/heads/main/gifs/git_diff.png" alt="Git diff" heihght="400" width="400"/>
-
 </p>
 
 - ENHANCEMENT: Removed built-in AI completion and APi calls, user can use `controller.setGhostText()`.
-
 - ENHANCEMENT: Enhanced large text handling.
+
+## 5.0.1
+- Updated README
