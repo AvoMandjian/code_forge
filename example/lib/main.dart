@@ -49,6 +49,7 @@ class _MyAppState extends State<MyApp> {
               addedRanges: [(1, 5), (10, 25)],
               removedRanges: [(30, 37)],
             );
+            codeController?.scrollToLine(100);
           },
         ),
         body: SafeArea(

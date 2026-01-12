@@ -183,3 +183,7 @@ This release establishes **CodeForge** as a powerful, production-ready code edit
 
 ## 5.0.1
 - Updated README
+
+## 5.1.0
+- FEATURE: Scoll to the desired line using the `controller.scrollToLine(int line)` API.
+- ENHANCEMENT: Removed unused http package.

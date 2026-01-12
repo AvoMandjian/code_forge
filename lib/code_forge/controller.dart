@@ -49,6 +49,7 @@ class CodeForgeController implements DeltaTextInputClient {
   UndoRedoController? _undoController;
   void Function(int lineNumber)? _toggleFoldCallback;
   VoidCallback? _foldAllCallback, _unfoldAllCallback;
+  void Function(int line)? _scrollToLineCallback;
   bool _lspReady = false, _isTyping = false, _isDisposed = false;
   bool _usesCclsSemanticHighlight = false;
   List<dynamic> _suggestions = [];
@@ -1648,6 +1649,40 @@ class CodeForgeController implements DeltaTextInputClient {
       throw StateError('Folding is not enabled or editor is not initialized');
     }
     _unfoldAllCallback!();
+  }
+
+  /// Sets the scroll callback - called by the render object.
+  void setScrollCallback(void Function(int line)? scrollToLine) {
+    _scrollToLineCallback = scrollToLine;
+  }
+
+  /// Scrolls the editor view to make the specified line visible.
+  ///
+  /// [line] is zero-indexed (0 for the first line). The editor will scroll
+  /// vertically to bring the specified line into view, centering it if possible.
+  ///
+  /// If the line is within a folded region, the fold will be expanded first
+  /// to make the line visible.
+  ///
+  /// Throws [StateError] if the editor has not been initialized.
+  /// Throws [RangeError] if [line] is out of bounds.
+  ///
+  /// Example:
+  /// ```dart
+  /// // Scroll to line 50 (1-indexed line 51)
+  /// controller.scrollToLine(50);
+  ///
+  /// // Scroll to the first line
+  /// controller.scrollToLine(0);
+  /// ```
+  void scrollToLine(int line) {
+    if (_scrollToLineCallback == null) {
+      throw StateError('Editor is not initialized');
+    }
+    if (line < 0 || line >= lineCount) {
+      throw RangeError.range(line, 0, lineCount - 1, 'line');
+    }
+    _scrollToLineCallback!(line);
   }
 
   /// Returns the identifier prefix immediately preceding the given offset.

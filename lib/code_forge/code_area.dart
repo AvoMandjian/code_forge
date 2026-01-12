@@ -221,12 +221,12 @@ class CodeForge extends StatefulWidget {
   State<CodeForge> createState() => _CodeForgeState();
 }
 
-class _CodeForgeState extends State<CodeForge>
-    with SingleTickerProviderStateMixin {
+class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
   late final ScrollController _hscrollController, _vscrollController;
   late final CodeForgeController _controller;
   late final FocusNode _focusNode;
   late final AnimationController _caretBlinkController;
+  late final AnimationController _lineHighlightController;
   late final Map<String, TextStyle> _editorTheme;
   late final Mode _language;
   late final CodeSelectionStyle _selectionStyle;
@@ -359,6 +359,11 @@ class _CodeForgeState extends State<CodeForge>
       vsync: this,
       duration: const Duration(milliseconds: 500),
     )..repeat(reverse: true);
+
+    _lineHighlightController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
 
     _semanticTokensListener = () {
       final tokens = _controller.semanticTokens.value;
@@ -576,6 +581,7 @@ class _CodeForgeState extends State<CodeForge>
     _connection?.close();
     _lspResponsesSubscription?.cancel();
     _caretBlinkController.dispose();
+    _lineHighlightController.dispose();
     _hoverNotifier.dispose();
     _aiNotifier.dispose();
     _aiOffsetNotifier.dispose();
@@ -1738,6 +1744,8 @@ class _CodeForgeState extends State<CodeForge>
                                             readOnly: widget.readOnly,
                                             caretBlinkController:
                                                 _caretBlinkController,
+                                            lineHighlightController:
+                                                _lineHighlightController,
                                             textStyle: widget.textStyle,
                                             enableFolding: widget.enableFolding,
                                             enableGuideLines:
@@ -2966,6 +2974,7 @@ class _CodeField extends LeafRenderObjectWidget {
   final FocusNode focusNode;
   final bool readOnly, isMobile, lineWrap;
   final AnimationController caretBlinkController;
+  final AnimationController lineHighlightController;
   final TextStyle? textStyle;
   final bool enableFolding, enableGuideLines, enableGutter, enableGutterDivider;
   final GutterStyle gutterStyle;
@@ -2992,6 +3001,7 @@ class _CodeField extends LeafRenderObjectWidget {
     required this.focusNode,
     required this.readOnly,
     required this.caretBlinkController,
+    required this.lineHighlightController,
     required this.enableFolding,
     required this.enableGuideLines,
     required this.enableGutter,
@@ -3039,6 +3049,7 @@ class _CodeField extends LeafRenderObjectWidget {
       focusNode: focusNode,
       readOnly: readOnly,
       caretBlinkController: caretBlinkController,
+      lineHighlightController: lineHighlightController,
       textStyle: textStyle,
       matchHighlightStyle: matchHighlightStyle,
       enableFolding: enableFolding,
@@ -3103,6 +3114,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   final ScrollController vscrollController, hscrollController;
   final FocusNode focusNode;
   final AnimationController caretBlinkController;
+  final AnimationController lineHighlightController;
   final bool isMobile;
   final ValueNotifier<bool> selectionActiveNotifier, isHoveringPopup;
   final ValueNotifier<Offset> contextMenuOffsetNotifier, offsetNotifier;
@@ -3166,6 +3178,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   int _lastAppliedSemanticVersion = -1, _lastDocumentVersion = -1;
   int? _ghostTextAnchorLine;
   int _ghostTextLineCount = 0;
+  int? _highlightedLine;
+  Animation<double>? _lineHighlightAnimation;
 
   void updateSemanticTokens(List<LspSemanticToken> tokens, int version) {
     if (version < _lastAppliedSemanticVersion) return;
@@ -3224,6 +3238,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     required this.hscrollController,
     required this.focusNode,
     required this.caretBlinkController,
+    required this.lineHighlightController,
     required this.isMobile,
     required this.selectionActiveNotifier,
     required this.contextMenuOffsetNotifier,
@@ -3359,6 +3374,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     caretBlinkController.addListener(markNeedsPaint);
     controller.addListener(_onControllerChange);
 
+    _lineHighlightAnimation = Tween<double>(begin: 0.55, end: 0.0).animate(
+      CurvedAnimation(parent: lineHighlightController, curve: Curves.easeOut),
+    )..addListener(markNeedsPaint);
+
     if (enableFolding) {
       controller.setFoldCallbacks(
         toggleFold: _toggleFoldAtLine,
@@ -3366,6 +3385,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         unfoldAll: _unfoldAllRanges,
       );
     }
+
+    controller.setScrollCallback(_scrollToLine);
 
     hoverNotifier.addListener(() {
       if (hoverNotifier.value == null) {
@@ -3990,6 +4011,38 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     });
   }
 
+  void _scrollToLine(int line) {
+    if (line < 0 || line >= controller.lineCount) return;
+
+    for (final fold in _foldRanges) {
+      if (fold.isFolded && line > fold.startIndex && line <= fold.endIndex) {
+        _unfoldWithChildren(fold);
+        controller.foldings = List.from(_foldRanges);
+        markNeedsLayout();
+        break;
+      }
+    }
+
+    final hasActiveFolds = _foldRanges.any((f) => f.isFolded);
+    final targetY = _getLineYOffset(line, hasActiveFolds);
+    final viewportHeight = vscrollController.position.viewportDimension;
+    final maxScroll = vscrollController.position.maxScrollExtent;
+    double scrollTarget = targetY - (viewportHeight / 2) + (_lineHeight / 2);
+
+    scrollTarget = scrollTarget.clamp(0.0, maxScroll);
+
+    vscrollController
+        .animateTo(
+          scrollTarget,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        )
+        .then((_) {
+          _highlightedLine = line;
+          lineHighlightController.forward(from: 0.0);
+        });
+  }
+
   void _foldWithChildren(FoldRange parentFold) {
     parentFold.clearOriginallyFoldedChildren();
 
@@ -4536,6 +4589,15 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     );
 
     _drawLineDecorations(
+      canvas,
+      offset,
+      firstVisibleLine,
+      lastVisibleLine,
+      firstVisibleLineY,
+      hasActiveFolds,
+    );
+
+    _drawLineHighlight(
       canvas,
       offset,
       firstVisibleLine,
@@ -6480,6 +6542,55 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     }
   }
 
+  void _drawLineHighlight(
+    Canvas canvas,
+    Offset offset,
+    int firstVisibleLine,
+    int lastVisibleLine,
+    double firstVisibleLineY,
+    bool hasActiveFolds,
+  ) {
+    if (_highlightedLine == null || _lineHighlightAnimation == null) return;
+
+    final highlightLine = _highlightedLine!;
+
+    if (highlightLine < firstVisibleLine || highlightLine > lastVisibleLine) {
+      return;
+    }
+
+    if (hasActiveFolds && _isLineFolded(highlightLine)) return;
+
+    final opacity = _lineHighlightAnimation!.value;
+    if (opacity <= 0.0) {
+      _highlightedLine = null;
+      return;
+    }
+
+    final lineY = _getLineYOffset(highlightLine, hasActiveFolds);
+    final lineHeight = lineWrap
+        ? _getWrappedLineHeight(highlightLine)
+        : _lineHeight;
+
+    final screenY =
+        offset.dy + (innerPadding?.top ?? 0) + lineY - vscrollController.offset;
+    final screenX =
+        offset.dx +
+        _gutterWidth +
+        (innerPadding?.left ?? 0) -
+        (lineWrap ? 0 : hscrollController.offset);
+
+    final highlightColor =
+        (textStyle?.color ?? editorTheme['root']?.color ?? Colors.yellow)
+            .withValues(alpha: opacity);
+
+    final paint = Paint()
+      ..color = highlightColor
+      ..style = PaintingStyle.fill;
+
+    final width = size.width - _gutterWidth - (innerPadding?.horizontal ?? 0);
+    canvas.drawRect(Rect.fromLTWH(screenX, screenY, width, lineHeight), paint);
+  }
+
   void _drawGutterDecorations(
     Canvas canvas,
     Offset offset,
@@ -6833,6 +6944,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   @override
   void dispose() {
     controller.removeListener(_onControllerChange);
+    controller.setScrollCallback(null);
     _syntaxHighlighter.dispose();
     super.dispose();
   }
