@@ -14,7 +14,7 @@ dependencies:
     # path: /Users/avo/Documents/Workplace/Projects/forked_projects/code_forge
     git:
       url: https://github.com/AvoMandjian/code_forge.git
-      ref: DP_V1
+      ref: DP_V2
   cupertino_icons: ^1.0.8
   path: ^1.9.1
 

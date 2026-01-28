@@ -533,7 +533,7 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: DP_V1
+      ref: DP_V2
       resolved-ref: d25a0bcd8516f45ca772554291c1ca3cbf0019bc
       url: "https://github.com/AvoMandjian/code_forge.git"
     source: git
@@ -774,7 +774,7 @@ packages:
     dependency: transitive
     description:
       path: device_preview
-      ref: DP_V1
+      ref: DP_V2
       resolved-ref: ee17b587c4a100852905b06b487874b5e9d8e7bf
       url: "https://github.com/AvoMandjian/flutter_device_preview.git"
     source: git
@@ -1993,7 +1993,7 @@ packages:
     dependency: transitive
     description:
       path: "."
-      ref: DP_V1
+      ref: DP_V2
       resolved-ref: "0b1cbe572e6d189003c16ada845727a88f6831e8"
       url: "https://github.com/AvoMandjian/json_editor_flutter.git"
     source: git
@@ -2820,7 +2820,7 @@ packages:
     dependency: transitive
     description:
       path: "packages/re-highlight"
-      ref: DP_V1
+      ref: DP_V2
       resolved-ref: d25a0bcd8516f45ca772554291c1ca3cbf0019bc
       url: "https://github.com/AvoMandjian/code_forge.git"
     source: git
