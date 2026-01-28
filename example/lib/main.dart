@@ -44,7 +44,13 @@ class _MyAppState extends State<MyApp> {
         "label": "Example Variables from backend",
         "replaced_on_click": "{{ example_variable }}",
         "triggered_at": "aaa",
-        "jinja_html_widget": {},
+        "jinja_html_widget": {
+          'widget_id': 'html_widget',
+          'widget_type': 'html_widget',
+          'html':
+              """<h2>&lt;{{ }}&gt; Variable Output</h2><p><strong>Jinja template variable</strong> for outputting data from backend.</p><pre><code>{{ example_variable }}</code></pre><p><strong>Usage:</strong> Inserts variable value into template</p><p><strong>Syntax:</strong> <code>{{ variable_name }}</code> &mdash; <strong>Double curly braces</strong></p>""",
+          'loading': false,
+        },
         "description":
             "<h2>&lt;{{ }}&gt; Variable Output</h2><p><strong>Jinja template variable</strong> for outputting data from backend.</p><pre><code>{{ example_variable }}</code></pre><p><strong>Usage:</strong> Inserts variable value into template</p><p><strong>Syntax:</strong> <code>{{ variable_name }}</code> &mdash; <strong>Double curly braces</strong></p>",
       },
@@ -52,7 +58,13 @@ class _MyAppState extends State<MyApp> {
         "label": "Example Variables from backend 2",
         "replaced_on_click": "{{ example_variable_2 }}",
         "triggered_at": "bbb",
-        "jinja_html_widget": {},
+        "jinja_html_widget": {
+          'widget_id': 'html_widget',
+          'widget_type': 'html_widget',
+          'html':
+              """<h2>&lt;{{ }}&gt; Variable Output</h2><p><strong>Jinja template variable</strong> for outputting data from backend.</p><pre><code>{{ example_variable }}</code></pre><p><strong>Usage:</strong> Inserts variable value into template</p><p><strong>Syntax:</strong> <code>{{ variable_name }}</code> &mdash; <strong>Double curly braces</strong></p>""",
+          'loading': false,
+        },
         "description":
             "<h2>&lt;{{ }}&gt; Variable Output</h2><p><strong>Jinja template variable</strong> for outputting data from backend.</p><pre><code>{{ example_variable }}</code></pre><p><strong>Usage:</strong> Inserts variable value into template</p><p><strong>Syntax:</strong> <code>{{ variable_name }}</code> &mdash; <strong>Double curly braces</strong></p>",
       },
@@ -60,7 +72,13 @@ class _MyAppState extends State<MyApp> {
         "label": "Example Variables from backend 3",
         "replaced_on_click": "{{ example_variable_3 }}",
         "triggered_at": "ccc",
-        "jinja_html_widget": {},
+        "jinja_html_widget": {
+          'widget_id': 'html_widget',
+          'widget_type': 'html_widget',
+          'html':
+              """<h2>&lt;{{ }}&gt; Variable Output</h2><p><strong>Jinja template variable</strong> for outputting data from backend.</p><pre><code>{{ example_variable }}</code></pre><p><strong>Usage:</strong> Inserts variable value into template</p><p><strong>Syntax:</strong> <code>{{ variable_name }}</code> &mdash; <strong>Double curly braces</strong></p>""",
+          'loading': false,
+        },
         "description":
             "<h2>&lt;{{ }}&gt; Variable Output</h2><p><strong>Jinja template variable</strong> for outputting data from backend.</p><pre><code>{{ example_variable }}</code></pre><p><strong>Usage:</strong> Inserts variable value into template</p><p><strong>Syntax:</strong> <code>{{ variable_name }}</code> &mdash; <strong>Double curly braces</strong></p>",
       },
@@ -68,13 +86,21 @@ class _MyAppState extends State<MyApp> {
         "label": "Example Variables from backend 4",
         "replaced_on_click": "{{ example_variable_4 }}",
         "triggered_at": "bbb",
-        "jinja_html_widget": {},
+        "jinja_html_widget": {
+          'widget_id': 'html_widget',
+          'widget_type': 'html_widget',
+          'html':
+              """<h2>&lt;{{ }}&gt; Variable Output</h2><p><strong>Jinja template variable</strong> for outputting data from backend.</p><pre><code>{{ example_variable }}</code></pre><p><strong>Usage:</strong> Inserts variable value into template</p><p><strong>Syntax:</strong> <code>{{ variable_name }}</code> &mdash; <strong>Double curly braces</strong></p>""",
+          'loading': false,
+        },
         "description":
             "<h2>&lt;{{ }}&gt; Variable Output</h2><p><strong>Jinja template variable</strong> for outputting data from backend.</p><pre><code>{{ example_variable }}</code></pre><p><strong>Usage:</strong> Inserts variable value into template</p><p><strong>Syntax:</strong> <code>{{ variable_name }}</code> &mdash; <strong>Double curly braces</strong></p>",
       },
     ];
     final suggestions = backendSuggestions
-        .map((item) => SuggestionModel.fromJson(item as Map<String, dynamic>))
+        .map(
+          (item) => SuggestionModel.fromJson(Map<String, dynamic>.from(item)),
+        )
         .toList();
     _controller.registerCustomSuggestions(suggestions);
   }

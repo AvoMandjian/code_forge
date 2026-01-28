@@ -208,6 +208,20 @@ List<SuggestionModel> getJinjaSuggestions() {
           '{% namespace ns %}\n  {% set var = value %}\n{% endnamespace %}',
       triggeredAt: '{%',
     ),
+    SuggestionModelJinja(
+      label: 'Trans',
+      description:
+          '<h2><code>{% trans %}</code> Translation Block</h2>\n\n<p><strong>Translate content</strong> for internationalization.</p>\n\n<pre><code>{% trans %}Hello World{% endtrans %}\n{% trans count=items|length %}\n  {{ count }} item\n{% plural %}\n  {{ count }} items\n{% endtrans %}</code></pre>\n\n<p><strong>Use cases:</strong> Multi-language support, pluralization</p>',
+      replacedOnClick: '{% trans %}\n  \n{% endtrans %}',
+      triggeredAt: '{%',
+    ),
+    SuggestionModelJinja(
+      label: 'Debug',
+      description:
+          '<h2><code>{% debug %}</code> Debug Statement</h2>\n\n<p><strong>Output current context</strong> variables for debugging.</p>\n\n<pre><code>{% debug %}</code></pre>\n\n<p><strong>Use cases:</strong> Inspecting available variables, troubleshooting templates</p>',
+      replacedOnClick: '{% debug %}',
+      triggeredAt: '{%',
+    ),
 
     /// -------------------------------------------------------------------------
     /// Statements
@@ -690,6 +704,55 @@ List<SuggestionModel> getJinjaSuggestions() {
       description:
           '<h2><code>{{ date | date_format }}</code> Filter\n\n<strong>Format date<strong> with specified format string.\n\n<pre><code>\n{{ date | date_format("%Y-%m-%d") }}\n</code></pre>\n\n<strong>Use cases:<strong> Date formatting, time display, custom date formats',
       replacedOnClick: '| date_format("%Y-%m-%d")',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Sort',
+      description:
+          '<h2><code>{{ list | sort }}</code> Filter</h2>\n\n<p><strong>Sort a list</strong>.</p>\n\n<pre><code>{{ [3, 1, 2] | sort }}</code></pre>\n\n<p><strong>Use cases:</strong> Ordering lists, organizing data</p>',
+      replacedOnClick: '| sort',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Unique',
+      description:
+          '<h2><code>{{ list | unique }}</code> Filter</h2>\n\n<p><strong>Filter unique items</strong> from a list.</p>\n\n<pre><code>{{ [1, 1, 2] | unique }}</code></pre>\n\n<p><strong>Use cases:</strong> Removing duplicates, finding distinct values</p>',
+      replacedOnClick: '| unique',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Reject Attr',
+      description:
+          '<h2><code>{{ list | rejectattr }}</code> Filter</h2>\n\n<p><strong>Reject items</strong> matching attribute condition.</p>\n\n<pre><code>{{ users | rejectattr("is_active") }}</code></pre>\n\n<p><strong>Use cases:</strong> Filtering lists by attribute, excluding items</p>',
+      replacedOnClick: '| rejectattr("attribute")',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Select',
+      description:
+          '<h2><code>{{ list | select }}</code> Filter</h2>\n\n<p><strong>Select items</strong> matching a test.</p>\n\n<pre><code>{{ numbers | select("even") }}</code></pre>\n\n<p><strong>Use cases:</strong> Filtering with tests, selecting specific items</p>',
+      replacedOnClick: '| select("test")',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Reject',
+      description:
+          '<h2><code>{{ list | reject }}</code> Filter</h2>\n\n<p><strong>Reject items</strong> matching a test.</p>\n\n<pre><code>{{ numbers | reject("odd") }}</code></pre>\n\n<p><strong>Use cases:</strong> Filtering with tests, excluding items</p>',
+      replacedOnClick: '| reject("test")',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Group By',
+      description:
+          '<h2><code>{{ list | groupby }}</code> Filter</h2>\n\n<p><strong>Group a sequence</strong> by an attribute.</p>\n\n<pre><code>{% for group in users | groupby("city") %}\n  {{ group.grouper }}: {{ group.list | join(", ") }}\n{% endfor %}</code></pre>\n\n<p><strong>Use cases:</strong> Categorizing data, grouped lists</p>',
+      replacedOnClick: '| groupby("attribute")',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Safe',
+      description:
+          '<h2><code>{{ value | safe }}</code> Filter</h2>\n\n<p><strong>Mark value as safe</strong> (do not escape).</p>\n\n<pre><code>{{ html_content | safe }}</code></pre>\n\n<p><strong>Use cases:</strong> Rendering trusted HTML, bypassing auto-escaping</p>',
+      replacedOnClick: '| safe',
       triggeredAt: '|',
     ),
   ];

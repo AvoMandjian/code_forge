@@ -65,7 +65,9 @@ class SuggestionModel {
       replacedOnClick: map['replaced_on_click'] ?? '',
       triggeredAt: map['triggered_at'] ?? '',
       description: map['description'] as String?,
-      jinjaHtmlWidget: JinjaHtmlModel.fromJson(map['jinja_html_widget'] ?? {}),
+      jinjaHtmlWidget: JinjaHtmlModel.fromJson(
+        Map<String, dynamic>.from(map['jinja_html_widget'] ?? {}),
+      ),
     );
   }
 

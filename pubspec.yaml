@@ -30,7 +30,18 @@ dev_dependencies:
   flutter_lints: ^6.0.0
 
 dependency_overrides:
+  google_fonts: ^6.3.3
+  flutter_lints: ^6.0.0
   intl: 0.20.2
+  flutter_quill:
+    git:
+      url: https://github.com/AvoMandjian/flutter-quill.git
+      ref: DP
+  flutter_quill_extensions:
+    git:
+      url: https://github.com/AvoMandjian/flutter-quill.git
+      path: flutter_quill_extensions
+      ref: DP
 
 flutter:
   fonts:
