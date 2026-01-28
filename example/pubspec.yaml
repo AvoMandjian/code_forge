@@ -1,6 +1,6 @@
 name: example
 description: "A new Flutter project."
-publish_to: 'none'
+publish_to: "none"
 
 version: 1.0.0+1
 
@@ -10,18 +10,31 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  code_forge: { path: ../ }
+  code_forge:
+    # path: /Users/avo/Documents/Workplace/Projects/forked_projects/code_forge
+    git:
+      url: https://github.com/AvoMandjian/code_forge.git
+      ref: DP_V1
   cupertino_icons: ^1.0.8
-  re_highlight: ^0.0.3
-  google_fonts: ^6.3.3
   path: ^1.9.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
+dependency_overrides:
+  google_fonts: ^6.3.3
   flutter_lints: ^6.0.0
+  intl: 0.20.2
+  flutter_quill:
+    git:
+      url: https://github.com/AvoMandjian/flutter-quill.git
+      ref: DP
+  flutter_quill_extensions:
+    git:
+      url: https://github.com/AvoMandjian/flutter-quill.git
+      path: flutter_quill_extensions
+      ref: DP
 
 flutter:
-
   uses-material-design: true

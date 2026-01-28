@@ -1,0 +1,34 @@
+{
+  "topic": "Flutter Code Editor (Akvelon)",
+  "folder": "flutter-code-editor-research",
+  "created_at": "2025-01-27T12:00:00Z",
+  "research_depth": "comprehensive",
+  "sources": {
+    "perplexity": false,
+    "exa_web": true,
+    "exa_code": false,
+    "context7": false,
+    "github_wiki": false,
+    "memory_banks": true,
+    "repository_analysis": true
+  },
+  "files_generated": [
+    "README.md",
+    "00-research-summary.md",
+    "01-overview/introduction.md",
+    "01-overview/key-concepts.md",
+    "02-technical-details/architecture.md",
+    "02-technical-details/api-reference.md",
+    "03-best-practices/implementation.md",
+    "04-examples/code-examples.md",
+    "05-resources/references.md"
+  ],
+  "total_sources": 3,
+  "key_findings": [
+    "Built on TextEditingController (String-based)",
+    "Supports Read-Only Named Sections",
+    "Works on Web"
+  ],
+  "errors": []
+}
+
