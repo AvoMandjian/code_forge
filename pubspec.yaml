@@ -1,10 +1,10 @@
 name: code_forge
 description: "A sophisticated code editor package with AI completion, LSP support, syntax highlighting, and advanced editing capabilities."
-version: 5.2.0
+version: 1.1.0
 publish_to: none
 
 environment:
-  sdk: ^3.10.7
+  sdk: ^3.10.3
   flutter: ">=1.17.0"
 
 dependencies:
@@ -16,12 +16,11 @@ dependencies:
     sdk: flutter
   http: ^1.6.0
   flutter_html: ^3.0.0
-  markdown_widget: ^2.3.2+8
   meta: ^1.17.0
   re_highlight:
     git:
       url: https://github.com/AvoMandjian/code_forge.git
-      ref: DP_V1
+      ref: DP_V3
       path: packages/re-highlight
   web_socket_channel: ^3.0.3
 

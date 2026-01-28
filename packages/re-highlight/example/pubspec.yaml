@@ -14,7 +14,7 @@ dependencies:
   re_highlight:
     git:
       url: https://github.com/AvoMandjian/code_forge.git
-      ref: DP_V1
+      ref: DP_V3
       path: packages/re-highlight
 
 # For information on the generic Dart part of this file, see the
