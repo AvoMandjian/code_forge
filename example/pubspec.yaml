@@ -16,14 +16,16 @@ dependencies:
       url: https://github.com/AvoMandjian/code_forge.git
       ref: DP_V1
   cupertino_icons: ^1.0.8
-  google_fonts: ^6.3.3
   path: ^1.9.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
+dependency_overrides:
+  google_fonts: ^6.3.3
   flutter_lints: ^6.0.0
+  intl: 0.20.2
 
 flutter:
   uses-material-design: true

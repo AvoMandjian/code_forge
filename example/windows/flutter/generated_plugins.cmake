@@ -3,9 +3,29 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  audioplayers_windows
+  battery_plus
+  cloud_firestore
+  connectivity_plus
+  desktop_drop
+  file_selector_windows
+  firebase_core
+  firebase_storage
+  flutter_inappwebview_windows
+  flutter_webrtc
+  local_auth_windows
+  permission_handler_windows
+  rive_common
+  screen_retriever_windows
+  share_plus
+  speech_to_text_windows
+  url_launcher_windows
+  webview_windows
+  window_manager
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
+  pdfrx
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

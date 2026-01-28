@@ -336,7 +336,6 @@ class _MyAppState extends State<MyApp> {
                                   label: 'Example Variables from backend',
                                   replacedOnClick: '{{ example_variable }}',
                                   triggeredAt: 'aaa',
-                                  jinjaHtmlWidget: {},
                                   description:
                                       '<h2>&lt;{{ }}&gt; Variable Output</h2><p><strong>Jinja template variable</strong> for outputting data from backend.</p><pre><code>{{ example_variable }}</code></pre><p><strong>Usage:</strong> Inserts variable value into template</p><p><strong>Syntax:</strong> <code>{{ variable_name }}</code> &mdash; <strong>Double curly braces</strong></p>',
                                 ),
@@ -344,7 +343,6 @@ class _MyAppState extends State<MyApp> {
                                   label: 'Example Variables from backend',
                                   replacedOnClick: '{{ example_variable }}',
                                   triggeredAt: 'aaa',
-                                  jinjaHtmlWidget: {},
                                   description:
                                       '<h2>&lt;{{ }}&gt; Variable Output</h2><p><strong>Jinja template variable</strong> for outputting data from backend.</p><pre><code>{{ example_variable }}</code></pre><p><strong>Usage:</strong> Inserts variable value into template</p><p><strong>Syntax:</strong> <code>{{ variable_name }}</code> &mdash; <strong>Double curly braces</strong></p>',
                                 ),
