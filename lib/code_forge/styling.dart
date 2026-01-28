@@ -213,10 +213,14 @@ class SearchHighlight {
   /// Whether this highlight represents the currently selected match
   final bool isCurrentMatch;
 
+  /// The text style to apply to the highlighted text
+  final TextStyle style;
+
   const SearchHighlight({
     required this.start,
     required this.end,
     this.isCurrentMatch = false,
+    required this.style,
   });
 }
 

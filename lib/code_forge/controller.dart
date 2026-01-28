@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:code_forge/AI_completion/ai.dart';
 import 'package:code_forge/code_forge/suggestion_model.dart';
 import 'package:code_forge/code_forge/suggestions/initialize_language_specific_suggestions.dart';
 import 'package:flutter/material.dart';
@@ -310,6 +311,10 @@ class CodeForgeController implements DeltaTextInputClient {
   /// Currently opened file.
   String? get openedFile => _openedFile;
 
+  /// Callback for manually triggering AI completion.
+  /// Set this to enable custom AI completion triggers.
+  VoidCallback? manualAiCompletion;
+
   VoidCallback? userCodeAction;
 
   /// Callback for save file operations.
@@ -497,278 +502,6 @@ class CodeForgeController implements DeltaTextInputClient {
 
   /// Whether the search highlights have changed and need repaint.
   bool searchHighlightsChanged = false;
-
-  /// Line decorations for highlighting code ranges (git diff, bookmarks, etc.)
-  final List<LineDecoration> _lineDecorations = [];
-
-  /// Gutter decorations for showing indicators in the gutter (git status, breakpoints, etc.)
-  final List<GutterDecoration> _gutterDecorations = [];
-
-  /// Ghost text for AI suggestions or inline completions
-  GhostText? _ghostText;
-
-  /// Whether decorations have changed and need repaint
-  bool decorationsChanged = false;
-
-  /// Returns an unmodifiable view of line decorations
-  List<LineDecoration> get lineDecorations =>
-      List.unmodifiable(_lineDecorations);
-
-  /// Returns an unmodifiable view of gutter decorations
-  List<GutterDecoration> get gutterDecorations =>
-      List.unmodifiable(_gutterDecorations);
-
-  /// Returns the current ghost text, if any
-  GhostText? get ghostText => _ghostText;
-
-  /// Adds a line decoration to the editor.
-  ///
-  /// Line decorations can highlight code ranges with background colors,
-  /// borders, or underlines. Useful for git diff, code coverage, etc.
-  ///
-  /// Example - Git diff added lines:
-  /// ```dart
-  /// controller.addLineDecoration(LineDecoration(
-  ///   id: 'git-add-1',
-  ///   startLine: 10,
-  ///   endLine: 15,
-  ///   type: LineDecorationType.background,
-  ///   color: Colors.green.withOpacity(0.2),
-  /// ));
-  /// ```
-  void addLineDecoration(LineDecoration decoration) {
-    _lineDecorations.removeWhere((d) => d.id == decoration.id);
-    _lineDecorations.add(decoration);
-    _lineDecorations.sort((a, b) => a.priority.compareTo(b.priority));
-    decorationsChanged = true;
-    notifyListeners();
-  }
-
-  /// Adds multiple line decorations at once.
-  ///
-  /// More efficient than calling [addLineDecoration] multiple times.
-  void addLineDecorations(List<LineDecoration> decorations) {
-    for (final decoration in decorations) {
-      _lineDecorations.removeWhere((d) => d.id == decoration.id);
-      _lineDecorations.add(decoration);
-    }
-    _lineDecorations.sort((a, b) => a.priority.compareTo(b.priority));
-    decorationsChanged = true;
-    notifyListeners();
-  }
-
-  /// Removes a line decoration by its ID.
-  void removeLineDecoration(String id) {
-    _lineDecorations.removeWhere((d) => d.id == id);
-    decorationsChanged = true;
-    notifyListeners();
-  }
-
-  /// Removes all line decorations.
-  void clearLineDecorations() {
-    _lineDecorations.clear();
-    decorationsChanged = true;
-    notifyListeners();
-  }
-
-  /// Adds a gutter decoration to the editor.
-  ///
-  /// Gutter decorations appear in the line number area, useful for
-  /// git diff indicators, breakpoints, bookmarks, etc.
-  ///
-  /// Example - Git diff indicator:
-  /// ```dart
-  /// controller.addGutterDecoration(GutterDecoration(
-  ///   id: 'git-add-gutter-1',
-  ///   startLine: 10,
-  ///   endLine: 15,
-  ///   type: GutterDecorationType.colorBar,
-  ///   color: Colors.green,
-  /// ));
-  /// ```
-  void addGutterDecoration(GutterDecoration decoration) {
-    _gutterDecorations.removeWhere((d) => d.id == decoration.id);
-    _gutterDecorations.add(decoration);
-    _gutterDecorations.sort((a, b) => a.priority.compareTo(b.priority));
-    decorationsChanged = true;
-    notifyListeners();
-  }
-
-  /// Adds multiple gutter decorations at once.
-  void addGutterDecorations(List<GutterDecoration> decorations) {
-    for (final decoration in decorations) {
-      _gutterDecorations.removeWhere((d) => d.id == decoration.id);
-      _gutterDecorations.add(decoration);
-    }
-    _gutterDecorations.sort((a, b) => a.priority.compareTo(b.priority));
-    decorationsChanged = true;
-    notifyListeners();
-  }
-
-  /// Removes a gutter decoration by its ID.
-  void removeGutterDecoration(String id) {
-    _gutterDecorations.removeWhere((d) => d.id == id);
-    decorationsChanged = true;
-    notifyListeners();
-  }
-
-  /// Removes all gutter decorations.
-  void clearGutterDecorations() {
-    _gutterDecorations.clear();
-    decorationsChanged = true;
-    notifyListeners();
-  }
-
-  /// Sets the ghost text (inline suggestion) at a specific position.
-  ///
-  /// Ghost text appears as semi-transparent text, typically used for
-  /// AI code completion suggestions. Only one ghost text can be active.
-  ///
-  /// Example:
-  /// ```dart
-  /// controller.setGhostText(GhostText(
-  ///   line: 10,
-  ///   column: 15,
-  ///   text: 'print("Hello, World!");',
-  ///   style: TextStyle(
-  ///     color: Colors.grey.withOpacity(0.5),
-  ///     fontStyle: FontStyle.italic,
-  ///   ),
-  /// ));
-  /// ```
-  ///
-  /// Pass null to clear the ghost text.
-  void setGhostText(GhostText? ghostText) {
-    _ghostText = ghostText;
-    decorationsChanged = true;
-    notifyListeners();
-  }
-
-  /// Clears the ghost text.
-  void clearGhostText() {
-    _ghostText = null;
-    decorationsChanged = true;
-    notifyListeners();
-  }
-
-  /// Convenience method to set git diff decorations for multiple line ranges.
-  ///
-  /// [addedRanges] - List of (startLine, endLine) for added lines (green)
-  /// [removedRanges] - List of (startLine, endLine) for removed lines (red)
-  /// [modifiedRanges] - List of (startLine, endLine) for modified lines (blue)
-  void setGitDiffDecorations({
-    List<(int startLine, int endLine)>? addedRanges,
-    List<(int startLine, int endLine)>? removedRanges,
-    List<(int startLine, int endLine)>? modifiedRanges,
-    Color addedColor = const Color(0xFF4CAF50),
-    Color removedColor = const Color(0xFFE53935),
-    Color modifiedColor = const Color(0xFF2196F3),
-  }) {
-    _lineDecorations.removeWhere((d) => d.id.startsWith('git-'));
-    _gutterDecorations.removeWhere((d) => d.id.startsWith('git-'));
-
-    int idx = 0;
-
-    if (addedRanges != null) {
-      for (final range in addedRanges) {
-        _lineDecorations.add(
-          LineDecoration(
-            id: 'git-add-line-$idx',
-            startLine: range.$1,
-            endLine: range.$2,
-            type: LineDecorationType.background,
-            color: addedColor.withValues(alpha: 0.15),
-          ),
-        );
-        _gutterDecorations.add(
-          GutterDecoration(
-            id: 'git-add-gutter-$idx',
-            startLine: range.$1,
-            endLine: range.$2,
-            type: GutterDecorationType.colorBar,
-            color: addedColor,
-          ),
-        );
-        idx++;
-      }
-    }
-
-    if (removedRanges != null) {
-      for (final range in removedRanges) {
-        _lineDecorations.add(
-          LineDecoration(
-            id: 'git-remove-line-$idx',
-            startLine: range.$1,
-            endLine: range.$2,
-            type: LineDecorationType.background,
-            color: removedColor.withValues(alpha: 0.15),
-          ),
-        );
-        _gutterDecorations.add(
-          GutterDecoration(
-            id: 'git-remove-gutter-$idx',
-            startLine: range.$1,
-            endLine: range.$2,
-            type: GutterDecorationType.colorBar,
-            color: removedColor,
-          ),
-        );
-        idx++;
-      }
-    }
-
-    if (modifiedRanges != null) {
-      for (final range in modifiedRanges) {
-        _lineDecorations.add(
-          LineDecoration(
-            id: 'git-modify-line-$idx',
-            startLine: range.$1,
-            endLine: range.$2,
-            type: LineDecorationType.background,
-            color: modifiedColor.withValues(alpha: 0.15),
-          ),
-        );
-        _gutterDecorations.add(
-          GutterDecoration(
-            id: 'git-modify-gutter-$idx',
-            startLine: range.$1,
-            endLine: range.$2,
-            type: GutterDecorationType.colorBar,
-            color: modifiedColor,
-          ),
-        );
-        idx++;
-      }
-    }
-
-    decorationsChanged = true;
-    notifyListeners();
-  }
-
-  /// Clears all git diff decorations.
-  void clearGitDiffDecorations() {
-    _lineDecorations.removeWhere((d) => d.id.startsWith('git-'));
-    _gutterDecorations.removeWhere((d) => d.id.startsWith('git-'));
-    decorationsChanged = true;
-    notifyListeners();
-  }
-
-  // ============== End Decoration System ==============
-
-  /// Registered custom suggestions that can be triggered automatically.
-  ///
-  /// These suggestions are checked when the user types trigger patterns
-  /// (defined in [SuggestionModel.triggeredAt]). Suggestions are automatically
-  /// shown when their trigger pattern is detected.
-  List<SuggestionModel> handleRegisteredCustomSuggestions = [];
-
-  JinjaHtmlModel? customSuggestionJinjaFlutterHtml;
-
-  /// Gets the list of registered custom suggestions.
-  ///
-  /// Returns a copy of the registered suggestions list.
-  List<SuggestionModel> get registeredCustomSuggestions =>
-      List.unmodifiable(handleRegisteredCustomSuggestions);
 
   /// Line decorations for highlighting code ranges (git diff, bookmarks, etc.)
   final List<LineDecoration> _lineDecorations = [];
@@ -2243,6 +1976,7 @@ class CodeForgeController implements DeltaTextInputClient {
             start: index,
             end: index + word.length,
             isCurrentMatch: true,
+            style: style,
           ),
         );
       }
@@ -2279,6 +2013,7 @@ class CodeForgeController implements DeltaTextInputClient {
           start: match.start,
           end: match.end,
           isCurrentMatch: true,
+          style: style,
         ),
       );
     }
