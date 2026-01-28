@@ -5,20 +5,19 @@ part of 'lsp.dart';
 /// Documenation available [here](https://github.com/heckmon/flutter_code_crafter/blob/main/docs/LSPClient.md).
 ///
 ///Example:
-/// create a [LspSocketConfig] object and pass it to the [CodeCrafter] widget.
+/// create a [LspSocketConfig] object and pass it to the [CodeForge] widget.
 ///
 ///```dart
 ///final lspConfig = LspSocketConfig(
-///    filePath: '/home/athul/Projects/lsp/example.py',
 ///    workspacePath: "/home/athul/Projects/lsp",
 ///    languageId: "python",
 ///    serverUrl: "ws://localhost:5656"
 ///),
 ///```
-///Then pass the `lspConfig` instance to the `CodeCrafter` widget:
+///Then pass the `lspConfig` instance to the `CodeForge` widget:
 ///
 ///```dart
-///CodeCrafter(
+///CodeForge(
 ///    controller: controller,
 ///    theme: anOldHopeTheme,
 ///    lspConfig: lspConfig, // Pass the LSP config here
@@ -30,7 +29,6 @@ class LspSocketConfig extends LspConfig {
   final WebSocketChannel _channel;
 
   LspSocketConfig({
-    required super.filePath,
     required super.workspacePath,
     required super.languageId,
     required this.serverUrl,

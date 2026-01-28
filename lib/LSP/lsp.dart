@@ -10,9 +10,6 @@ part 'lsp_socket.dart';
 part 'lsp_stdio.dart';
 
 sealed class LspConfig {
-  /// The file path of the document to be processed by the LSP.
-  final String filePath;
-
   /// The language ID of the language.
   ///
   /// languageId depends on the server you are using.
@@ -35,13 +32,10 @@ sealed class LspConfig {
       StreamController.broadcast();
   int _nextId = 1;
   final _openDocuments = <String, int>{};
-
-  /// The semantic token types legend from the server.
-  /// This is populated during initialization and used to decode token type indices.
   List<String>? _serverTokenTypes;
-
-  /// The semantic token modifiers legend from the server.
   List<String>? _serverTokenModifiers;
+
+  bool isInitialized = false;
 
   /// Stream of responses from the LSP server.
   /// Use this to listen for notifications like diagnostics.
@@ -56,12 +50,24 @@ sealed class LspConfig {
   List<String>? get serverTokenModifiers => _serverTokenModifiers;
 
   LspConfig({
-    required this.filePath,
     required this.workspacePath,
     required this.languageId,
     this.disableWarning = false,
     this.disableError = false,
   });
+
+  @override
+  bool operator ==(Object other) {
+    return (other is LspConfig &&
+        languageId == other.languageId &&
+        workspacePath == other.workspacePath &&
+        disableError == other.disableError &&
+        disableWarning == other.disableWarning);
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(languageId, workspacePath, disableError, disableWarning);
 
   void dispose();
 
@@ -77,7 +83,7 @@ sealed class LspConfig {
 
   /// This method is used to initialize the LSP server.
   ///
-  /// This method is used internally by the [CodeCrafter] widget and calling it directly is not recommended.
+  /// This method is used internally by the [CodeForge] widget and calling it directly is not recommended.
   /// It may crash the LSP server if called multiple times.
   Future<void> initialize() async {
     final workspaceUri = Uri.directory(workspacePath).toString();
@@ -89,12 +95,35 @@ sealed class LspConfig {
         'workspaceFolders': [
           {'uri': workspaceUri, 'name': 'workspace'},
         ],
+        'initializationOptions': {
+          'highlight': {'enabled': true},
+        },
         'capabilities': {
+          'workspace': {'applyEdit': true},
           'textDocument': {
             'completion': {
-              'completionItem': {'snippetSupport': false},
+              'completionItem': {
+                'resolveSupport': {
+                  'properties': [
+                    'documentaion',
+                    'detail',
+                    'additionalTextEdits',
+                  ],
+                },
+                'snippetSupport': false,
+              },
             },
-            'synchronization': {'didSave': true},
+            'signatureHelp': {
+              'dynamicRegistration': false,
+              'signatureInformation': {
+                'documentationFormat': ['markdown', 'plaintext'],
+                'parameterInformation': {'labelOffsetSupport': true},
+                'activeParameterSupport': true,
+              },
+              'contextSupport': true,
+            },
+            'synchronization': {'didSave': true, 'change': 1},
+            'publishDiagnostics': {'relatedInformation': true},
             'hover': {
               'contentFormat': ['markdown'],
             },
@@ -103,10 +132,7 @@ sealed class LspConfig {
               'tokenTypes': sematicMap['tokenTypes'],
               'tokenModifiers': sematicMap['tokenModifiers'],
               'formats': ['relative'],
-              'requests': {
-                'full': {'delta': false},
-                'range': true,
-              },
+              'requests': {'full': true, 'range': true},
               'multilineTokenSupport': true,
               'overlappingTokenSupport': false,
               'augmentsSyntaxTokens': true,
@@ -117,6 +143,7 @@ sealed class LspConfig {
     );
 
     if (response['error'] != null) {
+      isInitialized = false;
       throw Exception('Initialization failed: ${response['error']}');
     }
 
@@ -133,9 +160,10 @@ sealed class LspConfig {
     }
 
     await _sendNotification(method: 'initialized', params: {});
+    isInitialized = true;
   }
 
-  Map<String, dynamic> _commonParams(int line, int character) {
+  Map<String, dynamic> _commonParams(String filePath, int line, int character) {
     return {
       'textDocument': {'uri': Uri.file(filePath).toString()},
       'position': {'line': line, 'character': character},
@@ -144,14 +172,14 @@ sealed class LspConfig {
 
   /// Opens the document in the LSP server.
   ///
-  /// This method is used internally by the [CodeCrafter] widget and calling it directly is not recommended.
+  /// This method is used internally by the [CodeForge] widget and calling it directly is not recommended.
   ///
   /// If [initialContent] is provided, it will be used as the document content.
   /// Otherwise, the content will be read from [filePath].
-  Future<void> openDocument({String? initialContent}) async {
+  Future<void> openDocument(String filePath) async {
     final version = (_openDocuments[filePath] ?? 0) + 1;
     _openDocuments[filePath] = version;
-    final String text = initialContent ?? await File(filePath).readAsString();
+    final String text = await File(filePath).readAsString();
     await _sendNotification(
       method: 'textDocument/didOpen',
       params: {
@@ -170,7 +198,7 @@ sealed class LspConfig {
   ///
   /// Sends a 'didChange' notification to the LSP server with the new [content].
   /// If the document is not open, this method does nothing.
-  Future<void> updateDocument(String content) async {
+  Future<void> updateDocument(String filePath, String content) async {
     if (!_openDocuments.containsKey(filePath)) {
       return; // Apply language-specific overrides
     }
@@ -195,7 +223,7 @@ sealed class LspConfig {
   /// Saves the document in the LSP server.
   ///
   /// Sends a 'didSave' notification to the LSP server with the current [content].
-  Future<void> saveDocument(String content) async {
+  Future<void> saveDocument(String filePath, String content) async {
     await _sendNotification(
       method: 'textDocument/didSave',
       params: {
@@ -207,8 +235,8 @@ sealed class LspConfig {
 
   /// Updates the document in the LSP server if there is any change.
   /// ///
-  /// This method is used internally by the [CodeCrafter] widget and calling it directly is not recommended.
-  Future<void> closeDocument() async {
+  /// This method is used internally by the [CodeForge] widget and calling it directly is not recommended.
+  Future<void> closeDocument(String filePath) async {
     if (!_openDocuments.containsKey(filePath)) return;
 
     await _sendNotification(
@@ -236,21 +264,32 @@ sealed class LspConfig {
 
   /// This method is used to get completions at a specific position in the document.
   ///
-  /// This method is used internally by the [CodeCrafter], calling this with appropriate parameters will returns a [List] of [LspCompletion].
-  Future<List<LspCompletion>> getCompletions(int line, int character) async {
+  /// This method is used internally by the [CodeForge], calling this with appropriate parameters will returns a [List] of [LspCompletion].
+  Future<List<LspCompletion>> getCompletions(
+    String filePath,
+    int line,
+    int character,
+  ) async {
     List<LspCompletion> completion = [];
     final response = await _sendRequest(
       method: 'textDocument/completion',
-      params: _commonParams(line, character),
+      params: _commonParams(filePath, line, character),
     );
     try {
       final result = response['result'];
       if (result == null) return completion;
 
-      final items = result['items'];
+      final dynamic items;
+
+      if (result is List) {
+        items = result;
+      } else {
+        items = result['items'];
+      }
+
       if (items == null || items is! List) return completion;
 
-      for (var item in items) {
+      for (Map<String, dynamic> item in items) {
         final importUris = item['data']?['importUris'];
         final List<String>? importUriList = importUris != null
             ? (importUris as List).map((e) => e.toString()).toList()
@@ -265,6 +304,7 @@ sealed class LspConfig {
             ),
             importUri: importUriList,
             reference: item["data"]?["ref"],
+            completionItem: item,
           ),
         );
       }
@@ -276,12 +316,12 @@ sealed class LspConfig {
 
   /// This method is used to get details at a specific position in the document.
   ///
-  /// This method is used internally by the [CodeCrafter], calling this with appropriate parameters will returns a [String].
+  /// This method is used internally by the [CodeForge], calling this with appropriate parameters will returns a [String].
   /// If the LSP server does not support hover or the location provided is invalid, it will return an empty string.
-  Future<String> getHover(int line, int character) async {
+  Future<String> getHover(String filePath, int line, int character) async {
     final response = await _sendRequest(
       method: 'textDocument/hover',
-      params: _commonParams(line, character),
+      params: _commonParams(filePath, line, character),
     );
     final contents = response['result']?['contents'];
     if (contents == null || contents.isEmpty) return '';
@@ -301,23 +341,454 @@ sealed class LspConfig {
     return '';
   }
 
+  /// Resolves and retrieves additional details for the given LSP completion item.
+  ///
+  /// Sends a `completionItem/resolve` request to the language server (when
+  /// supported) and merges any returned fields (for example `documentation`,
+  /// `detail`, and `additionalTextEdits`) into the provided completion item.
+  ///
+  /// The resolved item is returned so callers can use the enriched information
+  /// (for example to display rich documentation, apply additional text edits,
+  /// or show a more descriptive detail string).
+  ///
+  /// Returns a Future that completes with the resolved completion item. Throws an
+  /// exception if the resolve request fails or the server returns an error.
+  Future<Map<String, dynamic>> resolveCompletionItem(
+    Map<String, dynamic> item,
+  ) async {
+    final response = await _sendRequest(
+      method: 'completionItem/resolve',
+      params: item,
+    );
+    return response['result'] ?? item;
+  }
+
+  /// Requests signature help information for the given position in a document.
+  ///
+  /// This method sends a 'textDocument/signatureHelp' request to the language server
+  /// with the specified file path, line, character position, and trigger context.
+  /// It processes the response to extract signature details, including the label,
+  /// documentation, parameters, and active indices.
+  ///
+  /// - [filePath]: The path to the file for which signature help is requested.
+  /// - [line]: The zero-based line number in the document.
+  /// - [character]: The zero-based character position in the line.
+  /// - [triggerKind]: The kind of trigger that initiated the signature help request
+  ///   (e.g., invoked, trigger character, or content change).
+  /// - [triggerCharacter]: An optional character that triggered the request, if applicable.
+  ///
+  /// Returns a [Future<LspSignatureHelps>] containing the signature help information,
+  /// including the active signature and parameter indices, label, documentation, and parameters.
+  /// If no signatures are available, default empty values are used.
+  Future<LspSignatureHelps> getSignatureHelp(
+    String filePath,
+    int line,
+    int character,
+    int triggerKind, {
+    String? triggerCharacter,
+    bool isRetrigger = false,
+  }) async {
+    final commonParams = _commonParams(filePath, line, character);
+    commonParams.addAll({
+      'context': {
+        'triggerKind': triggerKind,
+        if (triggerCharacter != null) 'triggerCharacter': triggerCharacter,
+        'isRetrigger': isRetrigger,
+      },
+    });
+    final response = await _sendRequest(
+      method: 'textDocument/signatureHelp',
+      params: commonParams,
+    );
+
+    final result = response['result'];
+
+    if (result == null) {
+      return LspSignatureHelps(
+        activeParameter: -1,
+        activeSignature: -1,
+        documentation: "",
+        label: "",
+        parameters: [],
+      );
+    }
+
+    final signatures = result['signatures'];
+    late final String label, doc;
+    late final List<Map<String, dynamic>> parameters;
+    if (signatures is List) {
+      if (signatures.isNotEmpty) {
+        label = (signatures[0]['label']) ?? "";
+        final rawParameters = signatures[0]['parameters'];
+        if (rawParameters is List) {
+          parameters = rawParameters.map((param) {
+            if (param is Map<String, dynamic>) {
+              return param;
+            } else if (param is String) {
+              return {'label': param};
+            } else {
+              return {'label': param['label'] ?? param.toString()};
+            }
+          }).toList();
+        } else {
+          parameters = [];
+        }
+
+        final docField = signatures[0]['documentation'];
+        if (docField is String) {
+          doc = docField;
+        } else if (docField is Map) {
+          doc = docField['value'] ?? "";
+        } else {
+          doc = "";
+        }
+      } else {
+        label = "";
+        doc = "";
+        parameters = [];
+      }
+    } else {
+      label = "";
+      doc = "";
+      parameters = [];
+    }
+    return LspSignatureHelps(
+      activeParameter: (result['activeParameter'] ?? -1) as int,
+      activeSignature: (result['activeSignature'] ?? -1) as int,
+      documentation: doc,
+      label: label,
+      parameters: parameters,
+    );
+  }
+
   /// Gets the definition location for a symbol at the specified position.
   ///
   /// Returns a map with location information, or an empty map if not found.
-  Future<Map<String, dynamic>> getDefinition(int line, int character) async {
+  Future<Map<String, dynamic>> getDefinition(
+    String filePath,
+    int line,
+    int character,
+  ) async {
     final response = await _sendRequest(
       method: 'textDocument/definition',
-      params: _commonParams(line, character),
+      params: _commonParams(filePath, line, character),
     );
     if (response['result'] == null) return {};
     return response['result']?[0] ?? '';
   }
 
+  /// Gets the declaration for a symbol at the specified position.
+  ///
+  /// Returns a map with location information, or an empty map if not found.
+  Future<Map<String, dynamic>> getDeclaration(
+    String filePath,
+    int line,
+    int character,
+  ) async {
+    final response = await _sendRequest(
+      method: 'textDocument/declaration',
+      params: _commonParams(filePath, line, character),
+    );
+    if (response['result'] == null) return {};
+    return response['result']?[0] ?? '';
+  }
+
+  /// Jumps to the location where the data type of a symbol is defined.
+  ///
+  /// Returns a map with location information, or an empty map if not found.
+  Future<Map<String, dynamic>> getTypeDefinition(
+    String filePath,
+    int line,
+    int character,
+  ) async {
+    final response = await _sendRequest(
+      method: 'textDocument/typeDefinition',
+      params: _commonParams(filePath, line, character),
+    );
+    if (response['result'] == null) return {};
+    return response['result']?[0] ?? '';
+  }
+
+  /// Gets the implementation locations for a symbol at the specified position.
+  ///
+  /// Useful for jumping from an interface or abstract method to concrete implementations.
+  /// Returns the first location if available, otherwise an empty map.
+  Future<Map<String, dynamic>> getImplementation(
+    String filePath,
+    int line,
+    int character,
+  ) async {
+    final response = await _sendRequest(
+      method: 'textDocument/implementation',
+      params: _commonParams(filePath, line, character),
+    );
+
+    final result = response['result'];
+    if (result == null || result.isEmpty) return {};
+    return result[0];
+  }
+
+  /// Retrieves all symbols defined in the current document.
+  ///
+  /// This is used for outline views, breadcrumbs, and file structure panels.
+  /// Returns either a hierarchical or flat symbol list depending on server support.
+  Future<List<dynamic>> getDocumentSymbols(String filePath) async {
+    final response = await _sendRequest(
+      method: 'textDocument/documentSymbol',
+      params: {
+        'textDocument': {'uri': Uri.file(filePath).toString()},
+      },
+    );
+
+    final result = response['result'];
+    if (result is! List) return [];
+    return result;
+  }
+
+  /// Searches for symbols across the entire workspace.
+  ///
+  /// Used for global symbol search (e.g., Ctrl+T).
+  Future<List<dynamic>> getWorkspaceSymbols(String query) async {
+    final response = await _sendRequest(
+      method: 'workspace/symbol',
+      params: {'query': query},
+    );
+
+    final result = response['result'];
+    if (result is! List) return [];
+    return result;
+  }
+
+  /// Formats the entire document according to server rules.
+  ///
+  /// Returns a list of text edits to apply to the document.
+  Future<List<dynamic>> formatDocument(String filePath) async {
+    final response = await _sendRequest(
+      method: 'textDocument/formatting',
+      params: {
+        'textDocument': {'uri': Uri.file(filePath).toString()},
+        'options': {'tabSize': 2, 'insertSpaces': true},
+      },
+    );
+
+    final result = response['result'];
+    if (result is! List) return [];
+    return result;
+  }
+
+  /// Formats a specific range in the document.
+  ///
+  /// Useful for formatting selections.
+  Future<List<dynamic>> formatRange({
+    required String filePath,
+    required int startLine,
+    required int startCharacter,
+    required int endLine,
+    required int endCharacter,
+  }) async {
+    final response = await _sendRequest(
+      method: 'textDocument/rangeFormatting',
+      params: {
+        'textDocument': {'uri': Uri.file(filePath).toString()},
+        'range': {
+          'start': {'line': startLine, 'character': startCharacter},
+          'end': {'line': endLine, 'character': endCharacter},
+        },
+        'options': {'tabSize': 2, 'insertSpaces': true},
+      },
+    );
+
+    final result = response['result'];
+    if (result is! List) return [];
+    return result;
+  }
+
+  /// Renames a symbol at the given position across the workspace.
+  ///
+  /// Returns a workspace edit containing all required text changes.
+  Future<Map<String, dynamic>> renameSymbol(
+    String filePath,
+    int line,
+    int character,
+    String newName,
+  ) async {
+    final response = await _sendRequest(
+      method: 'textDocument/rename',
+      params: {..._commonParams(filePath, line, character), 'newName': newName},
+    );
+
+    return response['result'] ?? {};
+  }
+
+  /// Checks whether a symbol can be renamed at the given position.
+  ///
+  /// Returns range and placeholder information, or null if rename is invalid.
+  Future<Map<String, dynamic>?> prepareRename(
+    String filePath,
+    int line,
+    int character,
+  ) async {
+    final response = await _sendRequest(
+      method: 'textDocument/prepareRename',
+      params: _commonParams(filePath, line, character),
+    );
+
+    return response['result'];
+  }
+
+  /// Retrieves available code actions at a given range.
+  ///
+  /// Includes quick fixes, refactors, and source actions.
+  Future<List<dynamic>> getCodeActions({
+    required String filePath,
+    required int startLine,
+    required int startCharacter,
+    required int endLine,
+    required int endCharacter,
+    List<Map<String, dynamic>> diagnostics = const [],
+  }) async {
+    final response = await _sendRequest(
+      method: 'textDocument/codeAction',
+      params: {
+        'textDocument': {'uri': Uri.file(filePath).toString()},
+        'range': {
+          'start': {'line': startLine, 'character': startCharacter},
+          'end': {'line': endLine, 'character': endCharacter},
+        },
+        'context': {
+          'diagnostics': diagnostics,
+          if (Platform.isAndroid && filePath.endsWith(".java"))
+            'only': [
+              'quickfix',
+              'refactor.extract',
+              'refactor.inline',
+              'refactor.rewrite',
+            ],
+        },
+      },
+    );
+
+    final result = response['result'];
+    if (result is! List) return [];
+    return result;
+  }
+
+  /// Execute a workspace command on the server
+  /// Wrapper around the 'workspace/executeCommand' request.
+  Future<void> executeCommand(String command, List<dynamic>? arguments) async {
+    await _sendRequest(
+      method: 'workspace/executeCommand',
+      params: {'command': command, 'arguments': arguments ?? []},
+    );
+  }
+
+  /// Retrieves document links such as import paths and URLs.
+  ///
+  /// These links can be clicked to open files or external resources.
+  Future<List<dynamic>> getDocumentLinks(String filePath) async {
+    final response = await _sendRequest(
+      method: 'textDocument/documentLink',
+      params: {
+        'textDocument': {'uri': Uri.file(filePath).toString()},
+      },
+    );
+
+    final result = response['result'];
+    if (result is! List) return [];
+    return result;
+  }
+
+  /// Prepares a call hierarchy item at the given position.
+  ///
+  /// This is required before requesting incoming or outgoing calls.
+  Future<Map<String, dynamic>?> prepareCallHierarchy(
+    String filePath,
+    int line,
+    int character,
+  ) async {
+    final response = await _sendRequest(
+      method: 'textDocument/prepareCallHierarchy',
+      params: _commonParams(filePath, line, character),
+    );
+
+    final result = response['result'];
+    if (result is! List || result.isEmpty) return null;
+    return result.first;
+  }
+
+  /// Retrieves incoming calls for a call hierarchy item.
+  Future<List<dynamic>> getIncomingCalls(Map<String, dynamic> item) async {
+    final response = await _sendRequest(
+      method: 'callHierarchy/incomingCalls',
+      params: {'item': item},
+    );
+
+    final result = response['result'];
+    if (result is! List) return [];
+    return result;
+  }
+
+  /// Retrieves outgoing calls for a call hierarchy item.
+  Future<List<dynamic>> getOutgoingCalls(Map<String, dynamic> item) async {
+    final response = await _sendRequest(
+      method: 'callHierarchy/outgoingCalls',
+      params: {'item': item},
+    );
+
+    final result = response['result'];
+    if (result is! List) return [];
+    return result;
+  }
+
+  /// Prepares a type hierarchy item at the given position.
+  Future<Map<String, dynamic>?> prepareTypeHierarchy(
+    String filePath,
+    int line,
+    int character,
+  ) async {
+    final response = await _sendRequest(
+      method: 'textDocument/prepareTypeHierarchy',
+      params: _commonParams(filePath, line, character),
+    );
+
+    final result = response['result'];
+    if (result is! List || result.isEmpty) return null;
+    return result.first;
+  }
+
+  /// Retrieves supertypes (base classes / interfaces).
+  Future<List<dynamic>> getSupertypes(Map<String, dynamic> item) async {
+    final response = await _sendRequest(
+      method: 'typeHierarchy/supertypes',
+      params: {'item': item},
+    );
+
+    final result = response['result'];
+    if (result is! List) return [];
+    return result;
+  }
+
+  /// Retrieves subtypes (derived classes / implementations).
+  Future<List<dynamic>> getSubtypes(Map<String, dynamic> item) async {
+    final response = await _sendRequest(
+      method: 'typeHierarchy/subtypes',
+      params: {'item': item},
+    );
+
+    final result = response['result'];
+    if (result is! List) return [];
+    return result;
+  }
+
   /// Gets all references to a symbol at the specified position.
   ///
   /// Returns a list of reference locations, or an empty list if none found.
-  Future<List<dynamic>> getReferences(int line, int character) async {
-    final params = _commonParams(line, character);
+  Future<List<dynamic>> getReferences(
+    String filePath,
+    int line,
+    int character,
+  ) async {
+    final params = _commonParams(filePath, line, character);
     params['context'] = {'includeDeclaration': true};
     final response = await _sendRequest(
       method: 'textDocument/references',
@@ -330,7 +801,7 @@ sealed class LspConfig {
   /// Gets all semantic tokens for the document.
   ///
   /// Returns a list of [LspSemanticToken] objects representing syntax tokens for highlighting.
-  Future<List<LspSemanticToken>> getSemanticTokensFull() async {
+  Future<List<LspSemanticToken>> getSemanticTokensFull(String filePath) async {
     final response = await _sendRequest(
       method: 'textDocument/semanticTokens/full',
       params: {
@@ -517,7 +988,7 @@ class CustomIcons {
 }
 
 /// Represents a completion item in the LSP (Language Server Protocol).
-/// This class is used internally by the [CodeCrafter] widget to display completion suggestions.
+/// This class is used internally by the [CodeForge] widget to display completion suggestions.
 class LspCompletion {
   /// The label of the completion item, which is displayed in the completion suggestions.
   final String label;
@@ -535,9 +1006,13 @@ class LspCompletion {
   /// [importUri] provides the URI needed to import the file where the referenced item is defined.
   final List<String>? importUri;
 
+  /// The raw completion details returned by the LSP server.
+  Map<String, dynamic> completionItem;
+
   LspCompletion({
     required this.label,
     required this.itemType,
+    required this.completionItem,
     this.reference,
     this.importUri,
   }) : icon = Icon(
@@ -546,19 +1021,14 @@ class LspCompletion {
          size: 18,
        );
 
-  Map<String, dynamic> toJson() => {
-    "label": label,
-    "itemType": itemType,
-    "reference": reference,
-    "importUri": importUri,
-  };
+  Map<String, dynamic> toJson() => completionItem;
 
   @override
   String toString() => toJson().toString();
 }
 
 /// Represents an error in the LSP (Language Server Protocol).
-/// This class is used internally by the [CodeCrafter] widget to display errors in the editor.
+/// This class is used internally by the [CodeForge] widget to display errors in the editor.
 class LspErrors {
   /// The severity of the error, which can be one of the following:
   /// - 1: Error
@@ -588,6 +1058,20 @@ class LspErrors {
 
   @override
   String toString() => toJson().toString();
+}
+
+class LspSignatureHelps {
+  final int activeParameter, activeSignature;
+  final String documentation, label;
+  final List<Map<String, dynamic>> parameters;
+
+  LspSignatureHelps({
+    required this.activeParameter,
+    required this.activeSignature,
+    required this.documentation,
+    required this.label,
+    required this.parameters,
+  });
 }
 
 class LspSemanticToken {
@@ -671,7 +1155,7 @@ const Map<String, List<String>> semanticToHljs = {
   'type': ['built_in', 'type'],
   'namespace': ['built_in', 'type'],
   'interface': ['built_in', 'type'],
-  'struct': ['attr', 'attribute'],
+  'struct': ['built_in', 'type'],
   'enum': ['built_in', 'type'],
   'function': ['section', 'function', 'bullet', 'selector-tag', 'selector-id'],
   'method': ['section', 'function', 'bullet', 'selector-tag', 'selector-id'],
@@ -679,6 +1163,7 @@ const Map<String, List<String>> semanticToHljs = {
   'variable': ['attr', 'attribute'],
   'parameter': ['attr', 'attribute'],
   'property': ['attr', 'attribute'],
+  'field': ['attr', 'attribute'],
   'typeParameter': ['attr', 'attribute'],
   'enumMember': ['attr', 'attribute'],
   'operator': ['keyword'],
@@ -690,6 +1175,7 @@ const Map<String, List<String>> semanticToHljs = {
   'regexp': ['regexp'],
   'macro': ['meta', 'meta-keyword'],
   'event': ['attr', 'attribute'],
+  'constant': ['number', 'literal'],
 };
 
 /// Pyright-specific overrides for semantic token mappings.

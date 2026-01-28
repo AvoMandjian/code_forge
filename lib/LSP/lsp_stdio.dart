@@ -14,7 +14,6 @@ part of 'lsp.dart';
 ///      final config = await LspStdioConfig.start(
 ///        executable: '/home/athul/.nvm/versions/node/v20.19.2/bin/pyright-langserver',
 ///        args: ['--stdio']
-///        filePath: '/home/athul/Projects/lsp/example.py',
 ///        workspacePath: '/home/athul/Projects/lsp',
 ///        languageId: 'python',
 ///      );
@@ -26,7 +25,7 @@ part of 'lsp.dart';
 ///    }
 ///  }
 ///  ```
-///  Then use a `FutureBuilder` to initialize the LSP configuration and pass it to the `CodeCrafter` widget:
+///  Then use a `FutureBuilder` to initialize the LSP configuration and pass it to the `CodeForge` widget:
 ///```dart
 ///  @override
 ///  Widget build(BuildContext context) {
@@ -39,7 +38,7 @@ part of 'lsp.dart';
 ///              if(snapshot.connectionState == ConnectionState.waiting) {
 ///                return Center(child: CircularProgressIndicator());
 ///              }
-///              return CodeCrafter(
+///              return CodeForge(
 ///                wrapLines: true,
 ///                editorTheme: anOldHopeTheme,
 ///                controller: controller,
@@ -75,7 +74,6 @@ class LspStdioConfig extends LspConfig {
 
   LspStdioConfig._({
     required this.executable,
-    required super.filePath,
     required super.workspacePath,
     required super.languageId,
     this.args,
@@ -86,7 +84,6 @@ class LspStdioConfig extends LspConfig {
 
   static Future<LspStdioConfig> start({
     required String executable,
-    required String filePath,
     required String workspacePath,
     required String languageId,
     List<String>? args,
@@ -96,7 +93,6 @@ class LspStdioConfig extends LspConfig {
   }) async {
     final config = LspStdioConfig._(
       executable: executable,
-      filePath: filePath,
       languageId: languageId,
       workspacePath: workspacePath,
       args: args,
@@ -117,6 +113,10 @@ class LspStdioConfig extends LspConfig {
     _process.stdout.listen(_handleStdoutData);
     _process.stderr.listen((data) => debugPrint(utf8.decode(data)));
   }
+
+  int get pid => _process.pid;
+  Future<int> get exitCode => _process.exitCode;
+  Process get process => _process;
 
   void _handleStdoutData(List<int> data) {
     _buffer.addAll(data);

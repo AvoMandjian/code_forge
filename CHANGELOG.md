@@ -102,11 +102,91 @@ This release establishes **CodeForge** as a powerful, production-ready code edit
 
 ## 1.0.1
 
-    * Updated README.md
+- Updated README.md
 
 ## 1.0.2
-    * Updated README.md
+- Updated README.md
 
 ## 1.1.0
-   * Fixed keyboard would not appear in Android.
-   * Added more public API methods in the controller, such as copy, paste, selectAll, cut, arrow key navigations, etc
+- Fixed keyboard would not appear in Android.
+- Added more public API methods in the controller, such as copy, paste, selectAll, cut, arrow key navigations, etc
+
+## 1.2.0
+- FEATURE: Added LSP Code Actions.
+- FEATURE: Enhanced AI Completion for large files.
+- FEATURE: Added more public method APIs in the controller and the LspConfig class.
+- FIX: Completion bug in the first line.
+
+## 1.2.1
+- suggestion/code actions persist on screen.
+
+## 1.3.0
+- FIX: Editor width had been determined by the width of the longest line, fixed it by using the viewport width.
+- FIX: Changed filePath based LSP initialization to workspace based approach to manage multiple files from a single server instance.
+- FIX: Tapping the end of the longest line won't focus the editor.
+
+## 1.3.1
+- Updated README
+
+## 1.4.0
+- FEATURE: Added LSP `completionItem/resolve` to show documentation for completion items.
+- FEATURE: Added LSP auto import.
+- FEATURE: Theme based dynamic color for suggestion popup.
+
+## 1.5.0
+- FIX: Backspace, delete, undo-redo, etc works on read-only mode.
+
+## 2.0.0
+- REFACTOR: Moved the LSP configuration and logic from the `CodeForge` to the `CodeForgeController`.
+- FIX: Code action persists on mobile.
+
+## 2.1.0
+- FEATURE: Added more public APIs in the `CodeForgeController`.
+
+## 2.2.0
+- FIX: Asynchronous highlighting.
+- FIX: Delayed LSP diagnostic lints.
+
+## 3.0.0
+- FEATURE: Find and highlight multiple words with the new `FindWordController` API. Seperate styling is available for both focused **word** and unfocued **words**.
+- FEATURE: *Double click to select a word* is now available in desktop also.
+- FIX: Code reslove for focused suggestion persists on the screen.
+- FIX: Removed cut, paste and other writing operations from read only mode.
+- FIX: Line wrap wasn't responsive on resizing the screen.
+- FIX: Suggestions persists on cursor movement.
+
+## 4.0.0
+- ENHANCEMENT: Enhanced `FindWordController` for efficient word searching.
+- FEATURE: Added new `finderBuilder` API to implement the find-replace serach bar.
+- FEATURE: Added keyboard shortcuts Ctrl + F and Ctrl + H to show the find-replace search bar.
+- FIX: Scroll doesn't work after selecting a word.
+
+## 4.1.0
+- FEATURE: Added semantic highlight support for the custom protocol used by the `ccls` language server.
+
+## 4.2.0
+- FEATURE: Added LSP signature help.
+- ENHANCEMENT: Improved and responsive selection tool bar for mobile.
+
+## 4.3.0
+- FEATURE: BiDi support in `Rope` data structure.
+- FEATURE: Immutable rope operations - insert and delete.
+
+## 5.0.0
+- FEATURE: Added git diff support:
+<p align="left">
+  <img src="https://raw.githubusercontent.com/heckmon/code_forge/refs/heads/main/gifs/git_diff.png" alt="Git diff" heihght="400" width="400"/>
+</p>
+
+- ENHANCEMENT: Removed built-in AI completion and APi calls, user can use `controller.setGhostText()`.
+- ENHANCEMENT: Enhanced large text handling.
+
+## 5.0.1
+- Updated README
+
+## 5.1.0
+- FEATURE: Scoll to the desired line using the `controller.scrollToLine(int line)` API.
+- ENHANCEMENT: Removed unused http package.
+
+## 5.2.0
+- ENHANCEMENT: Greatly enhanced large text handling.

@@ -8,7 +8,6 @@
   <em>Bring VS Code-level editing experience to your Flutter apps</em>
 </p>
 
-
 <p align="center">
   A complete and better alternative for <a href=https://pub.dev/packages/re_editor>re_editor</a>, <a href=https://pub.dev/packages/flutter_code_crafter>flutter_code_crafter</a>, <a href=https://pub.dev/packages/flutter_code_editor>flutter_code_editor</a>, <a href =https://pub.dev/packages/code_text_field>code_text_field</a>, etc
 </p>
@@ -28,7 +27,6 @@
   </a>
 </p>
 
-
 ---
 
 <p align="center">
@@ -38,6 +36,10 @@
 > [!NOTE]
 >
 > CodeForge does **not** support Flutter web, as it relies on `dart:io` for core functionality. Web support may be considered in the future if dependencies allow.
+
+> [!WARNING]
+>
+> The current version contains a critical bug causing the app to crash when handling large text. This issue was inadvertently introduced in version 5.1.0 and will be addressed in the upcoming major release, 6.0.0, scheduled for February 1-2.
 
 ## ✨ Why CodeForge?
 
@@ -69,15 +71,15 @@
     <h3>🤖 AI Code Completion</h3>
     <p>Intelligent code suggestions powered by AI models like Gemini. Auto, manual, or mixed completion modes with smart debouncing.</p>
     <div style="text-align:center;">
-      <img src="https://raw.githubusercontent.com/heckmon/code_forge/refs/heads/main/gifs/cf_ai.gif" alt="AI Completion" style="width:100%;height:auto;max-width:480px;" />
+      <img src="https://raw.githubusercontent.com/heckmon/code_forge/refs/heads/main/gifs/cf_ai.gif" alt="AI Completion" height="555" width="555" />
     </div>
   </div>
 
   <div style="flex: 0 1 50%; min-width:300px;">
     <h3>🔌 LSP Integration</h3>
-    <p>Full Language Server Protocol support with real-time diagnostics, hover documentation, and semantic highlighting.</p>
+    <p>Full Language Server Protocol support with real-time diagnostics, hover documentation, Code Actions and semantic highlighting.</p>
     <div style="text-align:center;">
-      <img src="https://raw.githubusercontent.com/heckmon/code_forge/refs/heads/main/gifs/cf_lsp.gif" alt="LSP Integration" style="width:100%;height:auto;max-width:480px;" />
+      <img src="https://raw.githubusercontent.com/heckmon/code_forge/refs/heads/dev/gifs/cf_lsp_new.gif" alt="LSP Integration" height="555" width="555" />
     </div>
   </div>
 
@@ -85,7 +87,7 @@
     <h3>📁 Smart Code Folding</h3>
     <p>Collapse and expand code blocks with visual indicators. Navigate large files with ease.</p>
     <div style="text-align:center;">
-      <img src="https://raw.githubusercontent.com/heckmon/code_forge/refs/heads/main/gifs/cf_fold.gif" alt="Code Folding" style="width:100%;height:auto;max-width:480px;" />
+      <img src="https://raw.githubusercontent.com/heckmon/code_forge/refs/heads/main/gifs/cf_fold.gif" alt="Code Folding" height="555" width="555" />
     </div>
   </div>
 
@@ -93,7 +95,15 @@
     <h3>🎨 Syntax Highlighting</h3>
     <p>Beautiful syntax highlighting for 180+ languages with customizable themes and semantic token support.</p>
     <div style="text-align:center;">
-      <img src="https://raw.githubusercontent.com/heckmon/code_forge/refs/heads/main/gifs/cf_themes.gif" alt="Syntax Highlighting" style="width:100%;height:auto;max-width:480px;" />
+      <img src="https://raw.githubusercontent.com/heckmon/code_forge/refs/heads/main/gifs/cf_themes.gif" alt="Syntax Highlighting" height="555" width="555" />
+    </div>
+  </div>
+  
+  <div style="flex: 0 1 50%; min-width:300px;">
+    <h3>🔍 Search and replace</h3>
+    <p>Search and replace words like in VSCode.</p>
+    <div style="text-align:center;">
+      <img src="https://raw.githubusercontent.com/heckmon/code_forge/refs/heads/main/gifs/findNreplace.gif" alt="Syntax Highlighting" height="555" width="555" />
     </div>
   </div>
 </div>
@@ -142,7 +152,7 @@ Add CodeForge to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  code_forge: ^1.1.0
+  code_forge: ^5.2.0
 ```
 
 Then run:
@@ -237,24 +247,26 @@ cd /Downloads/lsp-ws-proxy_linux # Navigate to the directory where lsp-ws-proxy 
 ```
 
 #### Example:
-create a `LspSocketConfig` object and pass it to the `CodeForge` widget.
+create a `LspSocketConfig` object and pass it to the `CodeForgeController` widget.
 
 ```dart
 final lspConfig = LspSocketConfig(
-    filePath: '/home/athul/Projects/lsp/example.py',
     workspacePath: "/home/athul/Projects/lsp",
     languageId: "python",
     serverUrl: "ws://localhost:5656"
 ),
 ```
-Then pass the `lspConfig` instance to the `CodeForge` widget:
+Then pass the `lspConfig` instance to the `CodeForgeController` widget:
 
 ```dart
+final _controller = CodeForgeController(
+  lspConfig: lspConfig // Pass the LspConfig here.
+)
+
 CodeForge(
-    controller: controller,
+    controller: _controller, // Pass the controller here.
     theme: anOldHopeTheme,
-    filePath: "/home/athul/Projects/lsp/example.py" // Pass the same filePath used in LspConfig
-    lspConfig: lspConfig, // Pass the LSP config here
+    filePath: "/home/athul/Projects/lsp/example.py"
 ),
 ```
 </details>
@@ -283,7 +295,6 @@ Future<LspConfig?> _initLsp() async {
       final config = await LspStdioConfig.start(
         executable: '/home/athul/.nvm/versions/node/v20.19.2/bin/basedpyright-langserver',
         args: ['--stdio'],
-        filePath: '/home/athul/Projects/lsp/example.py',
         workspacePath: '/home/athul/Projects/lsp',
         languageId: 'python',
       );
@@ -295,7 +306,7 @@ Future<LspConfig?> _initLsp() async {
     }
   }
   ```
-  Then use a `FutureBuilder` to initialize the LSP configuration and pass it to the `CodeForge` widget:
+  Then use a `FutureBuilder` to initialize the LSP configuration and pass it to the `CodeForgeController` widget:
 ```dart
   @override
   Widget build(BuildContext context) {
@@ -303,17 +314,18 @@ Future<LspConfig?> _initLsp() async {
       home: Scaffold(
         body: SafeArea(
           child: FutureBuilder(
-            future: _initLsp(), // Call the async method to get the LSP config
+            future: _initLsp(), // Call the async method to get the LSP config.
             builder: (context, snapshot) {
               if(snapshot.connectionState == ConnectionState.waiting) {
                 return Center(child: CircularProgressIndicator());
               }
               return CodeForge(
                 editorTheme: anOldHopeTheme,
-                controller: controller,
+                controller: CodeForgeController(
+                  lspConfig: snapshot.data // Pass the config here.
+                ),
                 filePath: '/home/athul/Projects/lsp/example.py',
                 textStyle: TextStyle(fontSize: 15, fontFamily: 'monospace'),
-                lspConfig: snapshot.data, // Pass the LSP config here
               );
             }
           ),
@@ -333,7 +345,6 @@ Future<LspConfig> setupDartLsp() async {
   return await LspStdioConfig.start(
     executable: 'dart',
     args: ['language-server', '--protocol=lsp'],
-    filePath: '/path/to/your/file.dart',
     workspacePath: '/path/to/your/project',
     languageId: 'dart',
   );
@@ -354,224 +365,14 @@ Future<LspConfig> setupDartLsp() async {
               return CodeForge(
                 language: langDart,
                 textStyle: GoogleFonts.jetBrainsMono(),
-                lspConfig: snapshot.data,
-                filePath: '/path/to/your/file.dart', // Mandatory field and should be same as the [filePath] given in the [LspConfig]
-              );
+                controller: CodeForgeController(
+                  lspConfig: snapshot.data
+                ),
+                filePath: '/path/to/your/file.dart', // Mandatory field
+              )
             },
           ),
         ),
-      ),
-    );
-  }
-```
-
-<p align="center">
-  <img src="placeholder_lsp_features.gif" alt="LSP Features Demo" width="700"/>
-</p>
-</details>
-
-
----
-<details>
-<summary><h2>🤖 AI Completion</h2></summary>
-
-Supercharge your editor with AI-powered code completion.
-
-### `AiCompletion` class
-#### required parameters:
-- `model`: An instance of the `Models` class, which can be one of the [built-in AI models](#built-in-ai-models) or a [custom model](#custom-ai-model).
-#### optional parameters:
-- `enableCompletion`: A boolean value to enable or disable AI code completion. Defaults to `true`.
-- `completionType`: The type of AI code completion. Defaults to `CompletionType.auto`.
-- `debounceTime`: The debounce time in milliseconds for AI code completion. Defaults to `1000`.
-
-create an instance of the `AiCompletion` class with any of the [built-in AI models](#built-in-ai-models) or [custom model](#custom-ai-model) and pass it to the `CodeForge` widget.
-Example of using Gemini AI completion:
-
-```dart
-import 'package:flutter/material.dart';
-import 'package:code_crafter/code_crafter.dart';
-
-final aiCompletion = AiCompletion(
-    model: Gemini(
-        apiKey: "Your API Key",
-    )
-)
-```
-
-Then pass the `aiCompletion` instance to the `CodeForge` widget:
-
-```dart
-CodeForge(
-    controller: controller,
-    theme: anOldHopeTheme,
-    aiCompletion: aiCompletion, // Pass the AI completion instance here
-),
-```
-
-## Styling AI Completion Text
-pass the `aiCompletionTextStyle` parameter to the `CodeForge` widget to style the AI completion text. This is a `TextStyle` object that will be applied to the AI completion text. Recommended to leave it null as default style, which is similar to VSCode completion style.
-
-```dart
-CodeForge(
-    controller: controller,
-    theme: anOldHopeTheme,
-    aiCompletion: aiCompletion,
-    aiCompletionTextStyle: TextStyle(
-        color: Colors.grey, // Change the color of the AI completion text
-        fontStyle: FontStyle.italic, // Make the AI completion text italic
-    ),
-),
-```
-
-## Completion on Callback
-If you want to trigger AI code completion manually, you can use the `getManualAiCompletion()` callback in the `CodeForgeController`. This callback will be called when the AI code completion is triggered.<br>
-In this example, a `FloatingActionButton` is used to trigger the AI code completion manually:
-
-```dart
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        floatingActionButton: FloatingActionButton(onPressed: ()=> controller.getManualAiSuggestion()),
-        body: SafeArea(
-          child: CodeForge(
-            editorTheme: anOldHopeTheme,
-            controller: controller,
-            textStyle: GoogleFonts.notoSansMono(
-              fontSize: 15,
-            ),
-            aiCompletion: AiCompletion(
-              completionType: CompletionType.manual,
-              model: Gemini(
-                apiKey: apiKey,
-              )
-            ),
-          ),
-        )
-      ),
-    );
-  }
-```
-
-## Built-in AI Models
-
-### 1. `Gemini()`
-#### required parameter:
-- `apiKey`: Your Gemini API key.
-#### optional parameters:
-- `model` : The model to use for completion. Defaults to `gemini-2.0-flash`.
-- `temperature` : The temperature to use for completion. Defaults to `null`.
-- `maxOutPutTokens` : The maximum number of tokens to generate. Defaults to `null`.
-- `TopP` : The top P value to use for completion. Defaults to `null`.
-- `TopK` : The top K value to use for completion. Defaults to `null`.
-- `stopSequences` : The stop sequences to use for completion. Defaults to `null`.
-
-### 2. `OpenAI()`
-#### required parameters:
-- `apiKey` : Your OpenAI API key.
-- `model` : The model to use for completion.
-
-### 3. `Claude()`
-#### required parameters:
-- `apiKey` : Your Claude API key.
-- `model` : The model to use for completion.
-
-### 4. `Grok()`
-#### required parameters:
-- `apiKey` : Your OpenAI API key.
-- `model` : The model to use for completion.
-
-### 5. `DeepSeek()`
-#### required parameters:
-- `apiKey` : Your OpenAI API key.
-- `model` : The model to use for completion.
-
-### 6. `Gorq()`
-#### required parameters:
-- `apiKey` : Your OpenAI API key.
-- `model` : The model to use for completion.
-
-### 7. `TogetherAi()`
-#### required parameters:
-- `apiKey` : Your OpenAI API key.
-- `model` : The model to use for completion.
-
-### 8. `Sonar()`
-#### required parameters:
-- `apiKey` : Your OpenAI API key.
-- `model` : The model to use for completion.
-
-### 9. `OpenRouter()`
-#### required parameters:
-- `apiKey` : Your OpenAI API key.
-- `model` : The model to use for completion.
-
-### 10. `FireWorks()`
-#### required parameters:
-- `apiKey` : Your OpenAI API key.
-- `model` : The model to use for completion.
-
-## Custom AI Model
-
-If want to use a custom AI model that running on your own server or a third party service not listed above, you can create an instance of the `CustomModel` class and pass it to the `AiCompletion` class. 
-
-#### required parameters
-- `url` : The URL of the AI model endpoint.
-- `customHeaders` : The custom headers to use for the request.
-`String` content.
-- `requestBuilder` : The request builds the request and return the response. This is a function that takes two `String` parameters code and instruction as input and returns a `Map<String, dynamic>`.
-- `customParser` : A function that parse the json response and returns `String` content.
-
-#### Example of using a custom AI model using TogetherAI:
-
-```dart
-late final Models model;
-
-  @override
-  void initState() {
-    model = CustomModel(
-      url: "https://api.together.xyz/v1/chat/completions",
-      customHeaders: {
-        "Authorization": "Bearer ${your_api_key}",
-        "Content-Type": "application/json"
-      },
-      requestBuilder: (code, instruction){
-        return {
-          "model": "deepseek-ai/DeepSeek-V3",
-          "messages": [
-            {
-              "role": "system",
-              "content": instruction
-            },
-            {
-              "role": "user",
-              "content": code
-            }
-          ]
-        };
-      },
-      customParser: (response) => response['choices'][0]['message']['content']
-    );
-    controller = CodeCrafterController();
-    controller.language = python;
-    super.initState();
-  }
-```
-Then pass the `model` instance to the `AiCompletion` class:
-
-```dart
- @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        body: CodeForge(
-          editorTheme: anOldHopeTheme,
-          controller: controller,
-          aiCompletion: AiCompletion(
-            model: model // Pass the custom model here
-          ),
-        )
       ),
     );
   }
@@ -634,6 +435,16 @@ CodeForge(
     backgroundColor: Color(0xFF252526),
     textStyle: TextStyle(color: Colors.white),
   ),
+
+  // Highlight matching text using [controller.findWord()] and [controller.findRegex()]
+  matchHighlightStyle: const MatchHighlightStyle(
+    currentMatchStyle: TextStyle(
+      backgroundColor: Color(0xFFFFA726),
+    ),
+    otherMatchStyle: TextStyle(
+      backgroundColor: Color(0x55FFFF00),
+    ),
+  ),
 )
 ```
 
@@ -682,6 +493,7 @@ CodeForge(
 | `gutterStyle` | `GutterStyle?` | Gutter styling |
 | `suggestionStyle` | `SuggestionStyle?` | Suggestion popup styling |
 | `hoverDetailsStyle` | `HoverDetailsStyle?` | Hover popup styling |
+| `matchHighlightStyle` | `MatchHighlightStyle?` | Highlight the matching words <br> in the controller.findWord() API |
 
 ### CodeForgeController
 
@@ -709,6 +521,19 @@ controller.toggleFold(lineNumber);
 controller.searchHighlights = [
   SearchHighlight(start: 0, end: 5, color: Colors.yellow),
 ];
+
+// Scoll to a line
+controller.scollToLine(int line);
+
+// Editor decorations
+controller.setGitDiffDecorations(
+  addedRanges: [(int startLine, int endLine), (int startline, int endLine), ... etc],
+  removedRanges: [same pattern as above],
+  modifiedRanges: [same pattern as above],
+  addedColor: const Color(0xFF4CAF50),
+  removedColor: const Color(0xFFE53935),
+  modifiedColor: const Color(0xFF2196F3),
+)
 ```
 
 ### GutterStyle
@@ -741,6 +566,42 @@ CodeSelectionStyle({
 })
 ```
 
+### SuggestionStyle
+```dart
+SuggestionStyle(
+  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+  backgroundColor: Colors.grey[900]!,
+  focusColor: Colors.blue.withOpacity(0.3),
+  hoverColor: Colors.blue.withOpacity(0.1),
+  splashColor: Colors.blue.withOpacity(0.2),
+  textStyle: TextStyle(color: Colors.white),
+)
+```
+
+### HoverDetailsStyle
+```dart
+HoverDetailsStyle(
+  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+  backgroundColor: Colors.grey[850]!,
+  focusColor: Colors.blue.withOpacity(0.3),
+  hoverColor: Colors.blue.withOpacity(0.1),
+  splashColor: Colors.blue.withOpacity(0.2),
+  textStyle: TextStyle(color: Colors.white),
+)
+```
+
+### MatchHighlightStyle
+```dart
+matchHighlightStyle: const MatchHighlightStyle(
+  currentMatchStyle: TextStyle(
+    backgroundColor: Color(0xFFFFA726),
+  ),
+  otherMatchStyle: TextStyle(
+    backgroundColor: Color(0x55FFFF00),
+  ),
+),
+```
+
 </details>
 
 ---
@@ -749,51 +610,47 @@ CodeSelectionStyle({
 CodeForge supports a variety of keyboard shortcuts for efficient editing:
 
 ### Editing
-- **Ctrl+C** — Copy selected text
-- **Ctrl+X** — Cut selected text
-- **Ctrl+V** — Paste text
-- **Ctrl+A** — Select all text
-- **Ctrl+D** — Duplicate current line
-- **Ctrl+Z** — Undo last action
-- **Ctrl+Y** — Redo last action
-- **Ctrl+Backspace** — Delete word backward
-- **Ctrl+Delete** — Delete word forward
+- **Ctrl+C** — Copy selected text.
+- **Ctrl+X** — Cut selected text.
+- **Ctrl+V** — Paste text.
+- **Ctrl+A** — Select all text.
+- **Ctrl+D** — Duplicate current line.
+- **Ctrl+Z** — Undo last action.
+- **Ctrl+Y** — Redo last action.
+- **Ctrl+Backspace** — Delete word backward.
+- **Ctrl+Delete** — Delete word forward.
 
 ### Navigation
-- **Ctrl+Arrow Left** — Move cursor to previous word
-- **Ctrl+Arrow Right** — Move cursor to next word
-- **Ctrl+Shift+Arrow Left** — Select to previous word
-- **Ctrl+Shift+Arrow Right** — Select to next word
-- **Ctrl+Shift+Arrow Up** — Move current line up
-- **Ctrl+Shift+Arrow Down** — Move current line down
+- **Ctrl+Arrow Left** — Move cursor to previous word.
+- **Ctrl+Arrow Right** — Move cursor to next word.
+- **Ctrl+Shift+Arrow Left** — Select to previous word.
+- **Ctrl+Shift+Arrow Right** — Select to next word.
+- **Ctrl+Shift+Arrow Up** — Move current line up.
+- **Ctrl+Shift+Arrow Down** — Move current line down.
 
 ### Indentation
-- **Tab** — Indent current line or accept AI completion/suggestion
-- **Shift+Tab** — Unindent current line
+- **Tab** — Indent current line or accept AI completion/suggestion.
+- **Shift+Tab** — Unindent current line.
 
 ### Suggestions & AI Completion
-- **Arrow Up/Down** — Navigate through suggestions
-- **Enter/Tab** — Accept current suggestion
-- **Escape** — Close suggestions or hover details
+- **Ctrl+.** — Show available LSP code actions.
+- **Ctrl + Shift + Space** — Show available LSP signature help.
+- **Arrow Up/Down** — Navigate through suggestions.
+- **Enter/Tab** — Accept current suggestion.
+- **Escape** — Close suggestions or hover details.
 
 ### Selection
-- **Shift+Arrow Keys** — Extend selection
-- **Shift+Home** — Select to line start
-- **Shift+End** — Select to line end
+- **Shift+Arrow Keys** — Extend selection.
+- **Shift+Home** — Select to line start.
+- **Shift+End** — Select to line end.
+
+## Search
+- **Ctrl + F** — Show search bar.
+- **Ctrl + H** — Show replace bar.
 
 </details>
 
 ---
-
-<details>
-<summary><h2>🚀 Upcoming Features</h2></summary>
-  <ul>
-    <li><h3>LSP Code Actions</h3></li>
-    <li><h3>LSP Inlay Completion</h3></li>
-    <li><h3>More Keyboard shortcuts</h3></li>
-    <li><h3>More Customisation Options</h3></li>
-  </ul>
-</details>
 
 ## 🤝 Contributing
 
@@ -809,7 +666,7 @@ Contributions are welcome! Whether it's bug fixes, new features, or documentatio
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](https://github.com/code_forge/blob/main/LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](https://github.com/heckmon/code_forge/blob/main/LICENSE) file for details.
 
 ---
 

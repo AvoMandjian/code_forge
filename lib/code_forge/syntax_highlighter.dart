@@ -6,164 +6,6 @@ import 'package:re_highlight/re_highlight.dart';
 
 import '../LSP/lsp.dart';
 
-/// Creates Jinja patterns that can be embedded in any language
-List<Mode> _createJinjaPatterns() {
-  return [
-    // Jinja comments: {# ... #}
-    Mode(
-      scope: 'comment',
-      begin: r'\{#',
-      end: r'#\}',
-      contains: <Mode>[
-        Mode(
-          scope: 'doctag',
-          begin: r'[ ]*(?=(TODO|FIXME|NOTE|BUG|OPTIMIZE|HACK|XXX):)',
-          end: r'(TODO|FIXME|NOTE|BUG|OPTIMIZE|HACK|XXX):',
-          excludeBegin: true,
-          relevance: 0,
-        ),
-      ],
-    ),
-    // Jinja template tags: {% ... %}
-    Mode(
-      beginScope: <int, String>{1: 'template-tag', 3: 'name'},
-      relevance: 2,
-      endScope: 'template-tag',
-      begin: [
-        r'\{%',
-        r'\s*',
-        r'(?:and|as|call|endcall|endfilter|endfor|endif|endmacro|endraw|endset|endwith|filter|for|from|if|import|include|macro|raw|set|with)',
-      ],
-      end: r'%\}',
-      keywords: 'in',
-      contains: <Mode>[
-        Mode(
-          scope: 'string',
-          variants: <Mode>[
-            Mode(begin: "'", end: "'"),
-            Mode(begin: '"', end: '"'),
-          ],
-        ),
-        Mode(scope: 'number', match: r'\d+'),
-        Mode(
-          match: r'\|(?=[A-Za-z_]+:?)',
-          beginScope: 'punctuation',
-          relevance: 0,
-        ),
-      ],
-    ),
-    // Generic Jinja tags: {% any_tag %}
-    Mode(
-      beginScope: <int, String>{1: 'template-tag', 3: 'name'},
-      relevance: 1,
-      endScope: 'template-tag',
-      begin: [r'\{%', r'\s*', r'(?:[a-z_]+)'],
-      end: r'%\}',
-      keywords: 'in',
-      contains: <Mode>[
-        Mode(
-          scope: 'string',
-          variants: <Mode>[
-            Mode(begin: "'", end: "'"),
-            Mode(begin: '"', end: '"'),
-          ],
-        ),
-        Mode(scope: 'number', match: r'\d+'),
-        Mode(
-          match: r'\|(?=[A-Za-z_]+:?)',
-          beginScope: 'punctuation',
-          relevance: 0,
-        ),
-      ],
-    ),
-    // Jinja template variables: {{ ... }}
-    Mode(
-      className: 'template-variable',
-      begin: r'\{\{',
-      end: r'\}\}',
-      contains: <Mode>[
-        Mode(self: true),
-        Mode(
-          scope: 'string',
-          variants: <Mode>[
-            Mode(begin: "'", end: "'"),
-            Mode(begin: '"', end: '"'),
-          ],
-        ),
-        Mode(scope: 'number', match: r'\d+'),
-        Mode(
-          match: r'\|(?=[A-Za-z_]+:?)',
-          beginScope: 'punctuation',
-          relevance: 0,
-        ),
-      ],
-    ),
-  ];
-}
-
-/// Wraps a language mode to include Jinja syntax highlighting
-Mode addJinjaSupport(Mode language) {
-  // If language already has Jinja support or is Jinja itself, return as-is
-  if (language.name == 'Jinja') {
-    return language;
-  }
-
-  // Create a copy of the language with Jinja patterns added
-  final jinjaPatterns = _createJinjaPatterns();
-  final existingContains = language.contains != null
-      ? List<Mode>.from(
-          language.contains is List
-              ? (language.contains as List).cast<Mode>()
-              : [language.contains as Mode],
-        )
-      : <Mode>[];
-
-  // Add Jinja patterns at the beginning so they take precedence
-  final newContains = [...jinjaPatterns, ...existingContains];
-
-  return Mode(
-    ref: language.ref,
-    refs: language.refs,
-    name: language.name,
-    unicodeRegex: language.unicodeRegex,
-    caseInsensitive: language.caseInsensitive,
-    self: language.self,
-    disableAutodetect: language.disableAutodetect,
-    aliases: language.aliases,
-    classNameAliases: language.classNameAliases,
-    supersetOf: language.supersetOf,
-    begin: language.begin,
-    match: language.match,
-    end: language.end,
-    className: language.className,
-    scope: language.scope,
-    beginScope: language.beginScope,
-    endScope: language.endScope,
-    contains: newContains,
-    endsParent: language.endsParent,
-    endsWithParent: language.endsWithParent,
-    endSameAsBegin: language.endSameAsBegin,
-    skip: language.skip,
-    excludeBegin: language.excludeBegin,
-    excludeEnd: language.excludeEnd,
-    returnBegin: language.returnBegin,
-    returnEnd: language.returnEnd,
-    beforeBegin: language.beforeBegin,
-    beforeMatch: language.beforeMatch,
-    parent: language.parent,
-    starts: language.starts,
-    lexemes: language.lexemes,
-    keywords: language.keywords,
-    beginKeywords: language.beginKeywords,
-    relevance: language.relevance,
-    illegal: language.illegal,
-    variants: language.variants,
-    subLanguage: language.subLanguage,
-    isCompiled: language.isCompiled,
-    label: language.label,
-  );
-}
-
 class SemanticWordSpan {
   final int startChar;
   final int endChar;
@@ -210,25 +52,17 @@ class SyntaxHighlighter {
   int _version = 0;
   int _documentVersion = 0;
   static const int isolateThreshold = 500;
-  VoidCallback? onHighlightComplete;
   int get documentVersion => _documentVersion;
-  late final Mode _languageWithJinja;
 
   SyntaxHighlighter({
     required this.language,
     required this.editorTheme,
     this.baseTextStyle,
     this.languageId,
-    this.onHighlightComplete,
-    bool enableJinjaInAllLanguages = true,
   }) {
     _langId = language.hashCode.toString();
     _highlight = Highlight();
-    // Add Jinja support to all languages unless explicitly disabled
-    _languageWithJinja = enableJinjaInAllLanguages
-        ? addJinjaSupport(language)
-        : language;
-    _highlight.registerLanguage(_langId, _languageWithJinja);
+    _highlight.registerLanguage(_langId, language);
     _semanticMapping = getSemanticMapping(languageId ?? '');
   }
 
@@ -264,8 +98,8 @@ class SyntaxHighlighter {
       }
     }
 
-    for (final lineSpans in _lineSemanticSpans.values) {
-      lineSpans.sort((a, b) => a.startChar.compareTo(b.startChar));
+    for (final spans in _lineSemanticSpans.values) {
+      spans.sort((a, b) => a.startChar.compareTo(b.startChar));
     }
 
     _isEditing = false;
@@ -273,7 +107,6 @@ class SyntaxHighlighter {
     _mergedCache.clear();
     _grammarCache.clear();
     _version++;
-    onHighlightComplete?.call();
   }
 
   void applyDocumentEdit(
@@ -471,7 +304,6 @@ class SyntaxHighlighter {
 
     final expectedLength = endPos - startPos;
     if (addedLength < expectedLength) {
-      // Clamp indices to avoid range errors
       final subStart = (startPos + addedLength).clamp(0, lineText.length);
       final subEnd = endPos.clamp(0, lineText.length);
       if (subEnd > subStart) {
@@ -653,7 +485,6 @@ class SyntaxHighlighter {
         final span = _highlightLine(entry.value);
         _grammarCache[entry.key] = HighlightedLine(entry.value, span, _version);
       }
-      onHighlightComplete?.call();
       return;
     }
 
@@ -662,7 +493,7 @@ class SyntaxHighlighter {
       _BackgroundHighlightData(
         langId: _langId,
         lines: linesToProcess,
-        languageMode: _languageWithJinja,
+        languageMode: language,
         theme: editorTheme,
         baseStyle: baseTextStyle,
       ),
@@ -677,8 +508,6 @@ class SyntaxHighlighter {
         _version,
       );
     }
-
-    onHighlightComplete?.call();
   }
 
   TextSpan? _spanDataToTextSpan(_SpanData? data) {
