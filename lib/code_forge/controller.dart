@@ -1,12 +1,12 @@
 import 'dart:async';
-import 'dart:io';
-
-import '../code_forge.dart';
-import 'rope.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:universal_io/io.dart';
+
+import '../code_forge.dart';
+import 'rope.dart';
 
 /// Controller for the [CodeForge] code editor widget.
 ///

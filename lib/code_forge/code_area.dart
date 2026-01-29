@@ -1,7 +1,16 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
+
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:markdown_widget/markdown_widget.dart';
+import 'package:re_highlight/languages/dart.dart';
+import 'package:re_highlight/re_highlight.dart';
+import 'package:re_highlight/styles/vs2015.dart';
+import 'package:universal_io/io.dart';
 
 import '../LSP/lsp.dart';
 import 'controller.dart';
@@ -10,15 +19,6 @@ import 'scroll.dart';
 import 'styling.dart';
 import 'syntax_highlighter.dart';
 import 'undo_redo.dart';
-
-import 'package:re_highlight/re_highlight.dart';
-import 'package:re_highlight/styles/vs2015.dart';
-import 'package:re_highlight/languages/dart.dart';
-import 'package:markdown_widget/markdown_widget.dart';
-import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 
 /// A highly customizable code editor widget for Flutter.
 ///
