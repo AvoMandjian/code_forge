@@ -4703,6 +4703,22 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   final Map<String, int?> _jinjaEndTagCache = {};
   final Map<String, int?> _htmlEndTagCache = {};
   final Map<String, int?> _bracketMatchCache = {};
+  final Map<String, ui.Paragraph> _lineNumberParagraphCache = {};
+
+  // Caching for expensive calculations
+  (int?, int?)? _cachedBracketPair; // Cached result of getBracketPairAtCursor()
+  int? _cachedBracketPairCursorOffset; // Cursor offset when cached
+  final Map<int, List<({int startChar, int endChar, Color color})>>
+  _diagnosticsPositionsCache = {};
+  List<LspErrors>? _cachedSortedDiagnostics; // Cached sorted diagnostics
+  int _lastDiagnosticsLength =
+      -1; // Track diagnostics length for cache invalidation
+  final Map<int, List<({int startChar, int endChar, bool isCurrent})>>
+  _searchHighlightPositionsCache = {};
+  List<dynamic>? _cachedSearchHighlights; // Cached search highlights
+  int _lastSearchHighlightsLength =
+      -1; // Track highlights length for cache invalidation
+
   final List<FoldRange> foldRanges = [];
   final MatchHighlightStyle? matchHighlightStyle0;
   final MatchHighlightStyle? matchHighlightStyle;
@@ -4765,6 +4781,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   int ghostTextLineCount = 0;
   int? highlightedLine;
   Animation<double>? lineHighlightAnimation;
+  // Unified scroll-stop detection for all expensive operations
+  int _lastScrollFirstVisibleLine = -1;
+  int _scrollStopFrameCount =
+      3; // Initialize to threshold for immediate drawing
 
   void updateSemanticTokens(List<LspSemanticToken> tokens, int version) {
     if (version < lastAppliedSemanticVersion) return;
@@ -4785,6 +4805,15 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       _htmlEndTagCache.clear();
       _bracketMatchCache.clear();
       _lineOffsetCache.clear();
+      // Clear new caches
+      _cachedBracketPair = null;
+      _cachedBracketPairCursorOffset = null;
+      _diagnosticsPositionsCache.clear();
+      _cachedSortedDiagnostics = null;
+      _lastDiagnosticsLength = -1;
+      _searchHighlightPositionsCache.clear();
+      _cachedSearchHighlights = null;
+      _lastSearchHighlightsLength = -1;
     }
   }
 
@@ -6708,21 +6737,45 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       '[PERF] findVisibleLines: ${findVisibleSw.elapsedMicroseconds}μs (first: $firstVisibleLine, last: $lastVisibleLine)',
     );
 
-    var sw = Stopwatch()..start();
-    _drawSearchHighlights(
-      canvas,
-      offset,
-      firstVisibleLine,
-      lastVisibleLine,
-      firstVisibleLineY,
-      hasActiveFolds,
-    );
-    sw.stop();
-    if (sw.elapsedMicroseconds > 1000) {
-      print('[PERF] _drawSearchHighlights: ${sw.elapsedMicroseconds}μs');
+    // Unified scroll-stop detection for all expensive operations
+    final hasScrolled =
+        _lastScrollFirstVisibleLine != -1 &&
+        _lastScrollFirstVisibleLine != firstVisibleLine;
+
+    if (hasScrolled) {
+      // Scrolling detected - reset counter
+      _scrollStopFrameCount = 0;
+    } else {
+      // No scrolling - increment counter
+      _scrollStopFrameCount++;
     }
 
-    sw = Stopwatch()..start();
+    // Always update for next frame comparison
+    _lastScrollFirstVisibleLine = firstVisibleLine;
+
+    // Only draw expensive operations when scrolling has stopped
+    const scrollStopThreshold = 3; // frames
+    final shouldDrawExpensiveOperations =
+        _scrollStopFrameCount >= scrollStopThreshold;
+
+    // Draw search highlights only when scrolling has stopped
+    if (shouldDrawExpensiveOperations) {
+      var sw = Stopwatch()..start();
+      _drawSearchHighlights(
+        canvas,
+        offset,
+        firstVisibleLine,
+        lastVisibleLine,
+        firstVisibleLineY,
+        hasActiveFolds,
+      );
+      sw.stop();
+      if (sw.elapsedMicroseconds > 1000) {
+        print('[PERF] _drawSearchHighlights: ${sw.elapsedMicroseconds}μs');
+      }
+    }
+
+    var sw = Stopwatch()..start();
     _drawLineDecorations(
       canvas,
       offset,
@@ -6778,7 +6831,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       print('[PERF] _drawSelection: ${sw.elapsedMicroseconds}μs');
     }
 
-    if (_enableGuideLines && (lastVisibleLine - firstVisibleLine) < 200) {
+    // Draw indent guides only when scrolling has stopped
+    if (shouldDrawExpensiveOperations &&
+        _enableGuideLines &&
+        (lastVisibleLine - firstVisibleLine) < 200) {
       sw = Stopwatch()..start();
       _drawIndentGuides(
         canvas,
@@ -6795,8 +6851,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       }
     }
 
-    // Draw rulers (vertical lines at specific column positions)
-    if (_rulers != null && _rulers!.isNotEmpty) {
+    // Draw rulers (vertical lines at specific column positions) only when scrolling has stopped
+    if (shouldDrawExpensiveOperations &&
+        _rulers != null &&
+        _rulers!.isNotEmpty) {
       sw = Stopwatch()..start();
       _drawRulers(
         canvas,
@@ -6930,18 +6988,21 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       '[PERF] mainLoop: ${mainLoopSw.elapsedMicroseconds}μs (lines: ${lastVisibleLine - firstVisibleLine + 1}, builds: $paragraphBuildCount, cacheHits: $paragraphCacheHits)',
     );
 
-    sw = Stopwatch()..start();
-    _drawDiagnostics(
-      canvas,
-      offset,
-      firstVisibleLine,
-      lastVisibleLine,
-      firstVisibleLineY,
-      hasActiveFolds,
-    );
-    sw.stop();
-    if (sw.elapsedMicroseconds > 1000) {
-      print('[PERF] _drawDiagnostics: ${sw.elapsedMicroseconds}μs');
+    // Draw diagnostics only when scrolling has stopped
+    if (shouldDrawExpensiveOperations) {
+      sw = Stopwatch()..start();
+      _drawDiagnostics(
+        canvas,
+        offset,
+        firstVisibleLine,
+        lastVisibleLine,
+        firstVisibleLineY,
+        hasActiveFolds,
+      );
+      sw.stop();
+      if (sw.elapsedMicroseconds > 1000) {
+        print('[PERF] _drawDiagnostics: ${sw.elapsedMicroseconds}μs');
+      }
     }
 
     if (controller.ghostText != null) {
@@ -6991,7 +7052,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       }
     }
 
-    if (focusNode.hasFocus) {
+    // Draw bracket highlight only when scrolling has stopped
+    if (shouldDrawExpensiveOperations && focusNode.hasFocus) {
       sw = Stopwatch()..start();
       _drawBracketHighlight(
         canvas,
@@ -7315,6 +7377,11 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
     actionBulbRects.clear();
 
+    // Pre-compute folded parent ranges for faster lookup
+    final foldedParentRanges = hasActiveFolds
+        ? foldRanges.where((f) => f.isFolded).toList()
+        : <FoldRange>[];
+
     double currentY = firstVisibleLineY;
     for (int i = firstVisibleLine; i < lineCount; i++) {
       if (hasActiveFolds && isLineFolded(i)) continue;
@@ -7416,10 +7483,29 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
           );
         }
 
-        final lineNumPara = _buildLineNumberParagraph(
-          (i + 1).toString(),
-          lineNumberStyle,
-        );
+        // Use cached line number paragraphs to avoid rebuilding them every frame
+        final lineNumberText = (i + 1).toString();
+        final cacheKey =
+            '${lineNumberText}_${lineNumberStyle.color?.value}_${lineNumberStyle.fontSize}';
+        ui.Paragraph lineNumPara;
+        if (_lineNumberParagraphCache.containsKey(cacheKey)) {
+          lineNumPara = _lineNumberParagraphCache[cacheKey]!;
+        } else {
+          lineNumPara = _buildLineNumberParagraph(
+            lineNumberText,
+            lineNumberStyle,
+          );
+          _lineNumberParagraphCache[cacheKey] = lineNumPara;
+          // Limit cache size to prevent memory growth
+          if (_lineNumberParagraphCache.length > 200) {
+            final keysToRemove = _lineNumberParagraphCache.keys
+                .take(50)
+                .toList();
+            for (final key in keysToRemove) {
+              _lineNumberParagraphCache.remove(key);
+            }
+          }
+        }
         final numWidth = lineNumPara.longestLine;
 
         // Adjust line number position to account for breakpoint column
@@ -7440,68 +7526,81 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
               ),
         );
 
+        // Optimize LSP action checking - only check if actions exist and are for visible lines
         if (lspActionNotifier.value != null && lspConfig != null) {
           final actions = lspActionNotifier.value!.cast<Map<String, dynamic>>();
-          if (actions.any((item) {
-            try {
-              return (item['arguments'][0]['range']['start']['line'] as int) ==
-                  i;
-            } on NoSuchMethodError {
+          // Early exit if no actions
+          if (actions.isEmpty) {
+            // Skip action bulb drawing
+          } else {
+            // Only check actions for current line (avoid expensive any() with try-catch)
+            bool hasActionForLine = false;
+            for (final item in actions) {
               try {
-                final fileUri = Uri.file(filePath!).toString();
-                return (item['edit']['changes'][fileUri][0]['range']['start']['line']
-                        as int) ==
-                    i;
+                if ((item['arguments'][0]['range']['start']['line'] as int) ==
+                    i) {
+                  hasActionForLine = true;
+                  break;
+                }
               } catch (e) {
-                return false;
+                try {
+                  final fileUri = Uri.file(filePath!).toString();
+                  if ((item['edit']['changes'][fileUri][0]['range']['start']['line']
+                          as int) ==
+                      i) {
+                    hasActionForLine = true;
+                    break;
+                  }
+                } catch (e2) {
+                  // Skip invalid action items
+                  continue;
+                }
               }
-            } catch (e) {
-              return false;
             }
-          })) {
-            final icon = Icons.lightbulb_outline;
-            final actionBulbPainter = TextPainter(
-              text: TextSpan(
-                text: String.fromCharCode(icon.codePoint),
-                style: TextStyle(
-                  fontSize: _textStyle?.fontSize ?? 14,
-                  color: Colors.yellowAccent,
-                  fontFamily: icon.fontFamily,
-                  package: icon.fontPackage,
+
+            if (hasActionForLine) {
+              final icon = Icons.lightbulb_outline;
+              final actionBulbPainter = TextPainter(
+                text: TextSpan(
+                  text: String.fromCharCode(icon.codePoint),
+                  style: TextStyle(
+                    fontSize: _textStyle?.fontSize ?? 14,
+                    color: Colors.yellowAccent,
+                    fontFamily: icon.fontFamily,
+                    package: icon.fontPackage,
+                  ),
                 ),
-              ),
-              textDirection: TextDirection.ltr,
-            );
-            actionBulbPainter.layout();
+                textDirection: TextDirection.ltr,
+              );
+              actionBulbPainter.layout();
 
-            final bulbX = offset.dx + 4;
-            final bulbY =
-                offset.dy +
-                (_innerPadding?.top ?? 0) +
-                contentTop +
-                visualYOffset -
-                vscrollController.offset +
-                (lineHeight0 - actionBulbPainter.height) / 2;
+              final bulbX = offset.dx + 4;
+              final bulbY =
+                  offset.dy +
+                  (_innerPadding?.top ?? 0) +
+                  contentTop +
+                  visualYOffset -
+                  vscrollController.offset +
+                  (lineHeight0 - actionBulbPainter.height) / 2;
 
-            actionBulbRects[i] = Rect.fromLTWH(
-              bulbX,
-              bulbY,
-              actionBulbPainter.width,
-              actionBulbPainter.height,
-            );
+              actionBulbRects[i] = Rect.fromLTWH(
+                bulbX,
+                bulbY,
+                actionBulbPainter.width,
+                actionBulbPainter.height,
+              );
 
-            actionBulbPainter.paint(canvas, Offset(bulbX, bulbY));
+              actionBulbPainter.paint(canvas, Offset(bulbX, bulbY));
+            }
           }
         }
 
         if (_enableFolding) {
           final foldRange = getFoldRangeAtLine(i);
           if (foldRange != null) {
-            final isInsideFoldedParent = foldRanges.any(
-              (parent) =>
-                  parent.isFolded &&
-                  parent.startIndex < i &&
-                  parent.endIndex >= i,
+            // Use pre-computed folded parent ranges for faster lookup
+            final isInsideFoldedParent = foldedParentRanges.any(
+              (parent) => parent.startIndex < i && parent.endIndex >= i,
             );
 
             if (!isInsideFoldedParent) {
@@ -7750,7 +7849,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       // Limit the check to a reasonable number of lines ahead
       // This prevents checking hundreds of lines for very long blocks
       bool wouldPassThroughText = false;
-      final maxCheckLines = 100; // Limit check to 100 lines ahead
+      final maxCheckLines = 50; // Limit check to 50 lines ahead
       final checkEnd = (i + maxCheckLines).clamp(i + 1, endLine - 1);
       for (
         int checkLine = i + 1;
@@ -7790,7 +7889,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
     // Reduced scan back limit - only scan a small buffer above visible area
     // This dramatically reduces the number of lines processed
-    final scanBackLimit = 50; // Reduced from 500 to 50
+    // Further reduced for better performance during scrolling
+    final scanBackLimit = 10; // Reduced from 50 to 10 for faster processing
     final scanStart = (firstVisibleLine - scanBackLimit).clamp(
       0,
       firstVisibleLine,
@@ -7943,7 +8043,15 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     bool hasActiveFolds,
     Color textColor,
   ) {
-    final (bracket1, bracket2) = getBracketPairAtCursor();
+    // Check cache first
+    final currentCursorOffset = controller.selection.extentOffset;
+    if (_cachedBracketPair == null ||
+        _cachedBracketPairCursorOffset != currentCursorOffset) {
+      _cachedBracketPair = getBracketPairAtCursor();
+      _cachedBracketPairCursorOffset = currentCursorOffset;
+    }
+
+    final (bracket1, bracket2) = _cachedBracketPair!;
     if (bracket1 == null || bracket2 == null) return;
 
     final line1 = controller.getLineAtOffset(bracket1);
@@ -8047,8 +8155,15 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   ) {
     if (_diagnostics.isEmpty) return;
 
-    final sortedDiagnostics = List<LspErrors>.from(_diagnostics)
-      ..sort((a, b) => (b.severity).compareTo(a.severity));
+    // Cache sorted diagnostics - only recalculate when diagnostics change
+    if (_cachedSortedDiagnostics == null ||
+        _lastDiagnosticsLength != _diagnostics.length) {
+      _cachedSortedDiagnostics = List<LspErrors>.from(_diagnostics)
+        ..sort((a, b) => (b.severity).compareTo(a.severity));
+      _lastDiagnosticsLength = _diagnostics.length;
+    }
+
+    final sortedDiagnostics = _cachedSortedDiagnostics!;
 
     for (final diagnostic in sortedDiagnostics) {
       final range = diagnostic.range;
@@ -8192,8 +8307,17 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     double firstVisibleLineY,
     bool hasActiveFolds,
   ) {
-    final highlights = controller.searchHighlights;
-    if (highlights.isEmpty) return;
+    // Cache search highlights - only recalculate when highlights change
+    final currentHighlights = controller.searchHighlights;
+    if (currentHighlights.isEmpty) return;
+
+    if (_cachedSearchHighlights == null ||
+        _lastSearchHighlightsLength != currentHighlights.length) {
+      _cachedSearchHighlights = List.from(currentHighlights);
+      _lastSearchHighlightsLength = currentHighlights.length;
+    }
+
+    final highlights = _cachedSearchHighlights!;
 
     for (final highlight in highlights) {
       final start = highlight.start;
