@@ -4786,6 +4786,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   int _scrollStopFrameCount =
       3; // Initialize to threshold for immediate drawing
 
+  // Bulk edit detection for optimizing large pastes
+  Timer? _bulkEditDebounceTimer;
+  static const int BULK_EDIT_THRESHOLD = 1000; // characters
+
   void updateSemanticTokens(List<LspSemanticToken> tokens, int version) {
     if (version < lastAppliedSemanticVersion) return;
     lastAppliedSemanticVersion = version;
@@ -5334,15 +5338,43 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       final removedLength = max(insertedText.length - delta, 0);
       final oldEnd = dirtyRange.start + removedLength;
 
-      syntaxHighlighter.applyDocumentEdit(
-        dirtyRange.start,
-        oldEnd,
-        insertedText,
-        newText,
-      );
+      // Detect bulk edits (large pastes)
+      final isBulkEdit = insertedText.length > BULK_EDIT_THRESHOLD;
 
-      paragraphCache.clear();
-      lineTextCache.clear();
+      if (isBulkEdit) {
+        // For bulk edits, defer expensive operations
+        _bulkEditDebounceTimer?.cancel();
+        _bulkEditDebounceTimer = Timer(const Duration(milliseconds: 100), () {
+          // Process bulk edit after debounce
+          final currentText = controller.text;
+          syntaxHighlighter.applyDocumentEdit(
+            dirtyRange.start,
+            oldEnd,
+            insertedText,
+            currentText,
+          );
+          paragraphCache.clear();
+          lineTextCache.clear();
+          markNeedsPaint();
+        });
+
+        // Only clear caches for affected lines, not everything
+        final affectedLine = controller.dirtyLine;
+        if (affectedLine != null) {
+          paragraphCache.remove(affectedLine);
+          lineTextCache.remove(affectedLine);
+        }
+      } else {
+        // Normal edit - process immediately
+        syntaxHighlighter.applyDocumentEdit(
+          dirtyRange.start,
+          oldEnd,
+          insertedText,
+          newText,
+        );
+        paragraphCache.clear();
+        lineTextCache.clear();
+      }
     }
 
     final newLineCount = controller.lineCount;
@@ -6453,7 +6485,6 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       final contentWidth = max(computedWidth, minWidth);
       size = constraints.constrain(Size(contentWidth, contentHeight));
       sw.stop();
-      print('[PERF] performLayout (deferred): ${sw.elapsedMicroseconds}μs');
       return;
     }
 
@@ -6564,9 +6595,6 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
     size = constraints.constrain(Size(contentWidth, contentHeight));
     sw.stop();
-    print(
-      '[PERF] performLayout: ${sw.elapsedMicroseconds}μs (lines: $lineCount, wrap: $_lineWrap, folds: ${foldRanges.where((f) => f.isFolded).length})',
-    );
   }
 
   double _getLineHeight(int lineIndex) {
@@ -6615,11 +6643,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     }
     _lineOffsetCache[cacheKey] = y;
     sw.stop();
-    if (sw.elapsedMicroseconds > 100) {
-      print(
-        '[PERF] getLineYOffset($targetLine): ${sw.elapsedMicroseconds}μs (cache miss)',
-      );
-    }
+    if (sw.elapsedMicroseconds > 100) {}
     return y;
   }
 
@@ -6733,9 +6757,6 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       }
     }
     findVisibleSw.stop();
-    print(
-      '[PERF] findVisibleLines: ${findVisibleSw.elapsedMicroseconds}μs (first: $firstVisibleLine, last: $lastVisibleLine)',
-    );
 
     // Unified scroll-stop detection for all expensive operations
     final hasScrolled =
@@ -6754,7 +6775,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     _lastScrollFirstVisibleLine = firstVisibleLine;
 
     // Only draw expensive operations when scrolling has stopped
-    const scrollStopThreshold = 3; // frames
+    const scrollStopThreshold = 30; // frames
     final shouldDrawExpensiveOperations =
         _scrollStopFrameCount >= scrollStopThreshold;
 
@@ -6770,9 +6791,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         hasActiveFolds,
       );
       sw.stop();
-      if (sw.elapsedMicroseconds > 1000) {
-        print('[PERF] _drawSearchHighlights: ${sw.elapsedMicroseconds}μs');
-      }
+      if (sw.elapsedMicroseconds > 1000) {}
     }
 
     var sw = Stopwatch()..start();
@@ -6785,9 +6804,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       hasActiveFolds,
     );
     sw.stop();
-    if (sw.elapsedMicroseconds > 1000) {
-      print('[PERF] _drawLineDecorations: ${sw.elapsedMicroseconds}μs');
-    }
+    if (sw.elapsedMicroseconds > 1000) {}
 
     sw = Stopwatch()..start();
     _drawLineHighlight(
@@ -6799,9 +6816,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       hasActiveFolds,
     );
     sw.stop();
-    if (sw.elapsedMicroseconds > 1000) {
-      print('[PERF] _drawLineHighlight: ${sw.elapsedMicroseconds}μs');
-    }
+    if (sw.elapsedMicroseconds > 1000) {}
 
     sw = Stopwatch()..start();
     _drawFoldedLineHighlights(
@@ -6813,9 +6828,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       hasActiveFolds,
     );
     sw.stop();
-    if (sw.elapsedMicroseconds > 1000) {
-      print('[PERF] _drawFoldedLineHighlights: ${sw.elapsedMicroseconds}μs');
-    }
+    if (sw.elapsedMicroseconds > 1000) {}
 
     sw = Stopwatch()..start();
     _drawSelection(
@@ -6827,9 +6840,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       hasActiveFolds,
     );
     sw.stop();
-    if (sw.elapsedMicroseconds > 1000) {
-      print('[PERF] _drawSelection: ${sw.elapsedMicroseconds}μs');
-    }
+    if (sw.elapsedMicroseconds > 1000) {}
 
     // Draw indent guides only when scrolling has stopped
     if (shouldDrawExpensiveOperations &&
@@ -6846,9 +6857,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         textColor,
       );
       sw.stop();
-      if (sw.elapsedMicroseconds > 1000) {
-        print('[PERF] _drawIndentGuides: ${sw.elapsedMicroseconds}μs');
-      }
+      if (sw.elapsedMicroseconds > 1000) {}
     }
 
     // Draw rulers (vertical lines at specific column positions) only when scrolling has stopped
@@ -6866,9 +6875,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         textColor,
       );
       sw.stop();
-      if (sw.elapsedMicroseconds > 1000) {
-        print('[PERF] _drawRulers: ${sw.elapsedMicroseconds}μs');
-      }
+      if (sw.elapsedMicroseconds > 1000) {}
     }
 
     double currentY = firstVisibleLineY;
@@ -6984,9 +6991,6 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       currentY += lineHeight;
     }
     mainLoopSw.stop();
-    print(
-      '[PERF] mainLoop: ${mainLoopSw.elapsedMicroseconds}μs (lines: ${lastVisibleLine - firstVisibleLine + 1}, builds: $paragraphBuildCount, cacheHits: $paragraphCacheHits)',
-    );
 
     // Draw diagnostics only when scrolling has stopped
     if (shouldDrawExpensiveOperations) {
@@ -7000,9 +7004,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         hasActiveFolds,
       );
       sw.stop();
-      if (sw.elapsedMicroseconds > 1000) {
-        print('[PERF] _drawDiagnostics: ${sw.elapsedMicroseconds}μs');
-      }
+      if (sw.elapsedMicroseconds > 1000) {}
     }
 
     if (controller.ghostText != null) {
@@ -7016,9 +7018,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         hasActiveFolds,
       );
       sw.stop();
-      if (sw.elapsedMicroseconds > 1000) {
-        print('[PERF] _drawGhostText: ${sw.elapsedMicroseconds}μs');
-      }
+      if (sw.elapsedMicroseconds > 1000) {}
     } else if (aiResponse != null && aiResponse!.isNotEmpty) {
       sw = Stopwatch()..start();
       _drawAiGhostText(
@@ -7030,9 +7030,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         hasActiveFolds,
       );
       sw.stop();
-      if (sw.elapsedMicroseconds > 1000) {
-        print('[PERF] _drawAiGhostText: ${sw.elapsedMicroseconds}μs');
-      }
+      if (sw.elapsedMicroseconds > 1000) {}
     }
 
     if (_enableGutter) {
@@ -7047,9 +7045,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         _textStyle,
       );
       sw.stop();
-      if (sw.elapsedMicroseconds > 1000) {
-        print('[PERF] _drawGutter: ${sw.elapsedMicroseconds}μs');
-      }
+      if (sw.elapsedMicroseconds > 1000) {}
     }
 
     // Draw bracket highlight only when scrolling has stopped
@@ -7067,9 +7063,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         textColor,
       );
       sw.stop();
-      if (sw.elapsedMicroseconds > 1000) {
-        print('[PERF] _drawBracketHighlight: ${sw.elapsedMicroseconds}μs');
-      }
+      if (sw.elapsedMicroseconds > 1000) {}
     }
 
     if (focusNode.hasFocus && caretBlinkController.value > 0.5) {
@@ -7251,9 +7245,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     }
 
     paintSw.stop();
-    print(
-      '[PERF] paint: ${paintSw.elapsedMicroseconds}μs (lines: $lineCount, visible: ${lastVisibleLine - firstVisibleLine + 1}, wrap: $_lineWrap, folds: ${foldRanges.where((f) => f.isFolded).length})',
-    );
+
     canvas.restore();
   }
 
