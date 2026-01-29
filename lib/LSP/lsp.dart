@@ -979,10 +979,17 @@ class CustomIcons {
       'Interface': 'assets/icons/interface.ttf',
       'Field': 'assets/icons/field.ttf',
     };
+
     for (final entry in fonts.entries) {
-      final loader = FontLoader(entry.key);
-      loader.addFont(rootBundle.load('packages/code_forge/${entry.value}'));
-      await loader.load();
+      try {
+        final loader = FontLoader(entry.key);
+        loader.addFont(rootBundle.load('packages/code_forge/${entry.value}'));
+        await loader.load();
+      } catch (e) {
+        debugPrint(
+          'Warning: Failed to load font "${entry.key}" from "packages/code_forge/${entry.value}": $e',
+        );
+      }
     }
   }
 }

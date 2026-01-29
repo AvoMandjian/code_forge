@@ -373,10 +373,10 @@ packages:
     dependency: transitive
     description:
       name: camera_android_camerax
-      sha256: bc7a96998258adddd0b653dd693b0874537707d58b0489708f2a646e4f124246
+      sha256: dba476d6c316671ae943f20ad7d02b3d363eed0dbfd25465bb92d42e35faacd8
       url: "https://pub.dev"
     source: hosted
-    version: "0.6.27"
+    version: "0.6.28"
   camera_avfoundation:
     dependency: transitive
     description:
@@ -532,11 +532,9 @@ packages:
   code_forge:
     dependency: "direct overridden"
     description:
-      path: "."
-      ref: DP_V3
-      resolved-ref: "9c28240ba35cd0a30daf0ae3bd6db3c69d40e912"
-      url: "https://github.com/AvoMandjian/code_forge.git"
-    source: git
+      path: ".."
+      relative: true
+    source: path
     version: "1.1.0"
   collection:
     dependency: transitive
@@ -1863,10 +1861,10 @@ packages:
     dependency: transitive
     description:
       name: image_picker_ios
-      sha256: "956c16a42c0c708f914021666ffcd8265dde36e673c9fa68c81f7d085d9774ad"
+      sha256: "46547f6d2812f31ade2c8088ec8cd51010cd6b72c17cf191901167b27776486e"
       url: "https://pub.dev"
     source: hosted
-    version: "0.8.13+3"
+    version: "0.8.13+5"
   image_picker_linux:
     dependency: transitive
     description:
@@ -1961,7 +1959,7 @@ packages:
     description:
       path: "."
       ref: dev
-      resolved-ref: "6b98f5e1d305162da3be03a4c3330d79efceb525"
+      resolved-ref: bfe4f47bec34f78781a8bf5f7c30cd0891948822
       url: "git@git.jinja.app:jinja.app/jinja_app_widgets_catalog.git"
     source: git
     version: "0.0.1"
@@ -2356,10 +2354,10 @@ packages:
     dependency: transitive
     description:
       name: objective_c
-      sha256: "7fd0c4d8ac8980011753b9bdaed2bf15111365924cdeeeaeb596214ea2b03537"
+      sha256: "983c7fa1501f6dcc0cb7af4e42072e9993cb28d73604d25ebf4dab08165d997e"
       url: "https://pub.dev"
     source: hosted
-    version: "9.2.4"
+    version: "9.2.5"
   octo_image:
     dependency: transitive
     description:
@@ -2819,11 +2817,9 @@ packages:
   re_highlight:
     dependency: transitive
     description:
-      path: "packages/re-highlight"
-      ref: DP_V3
-      resolved-ref: "9c28240ba35cd0a30daf0ae3bd6db3c69d40e912"
-      url: "https://github.com/AvoMandjian/code_forge.git"
-    source: git
+      path: "../packages/re-highlight"
+      relative: true
+    source: path
     version: "0.0.3"
   reactive_forms:
     dependency: transitive

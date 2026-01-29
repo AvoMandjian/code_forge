@@ -3353,6 +3353,7 @@ class CodeForgeController implements DeltaTextInputClient {
   }
 
   FoldRange? _getFoldRangeAtCurrentLine(int lineIndex) {
+    if (foldings.isEmpty) return null;
     try {
       return foldings.firstWhere((f) => f.startIndex == lineIndex);
     } catch (_) {

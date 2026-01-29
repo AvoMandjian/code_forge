@@ -265,8 +265,7 @@ class CodeForge extends StatefulWidget {
   State<CodeForge> createState() => _CodeForgeState();
 }
 
-class _CodeForgeState extends State<CodeForge>
-    with SingleTickerProviderStateMixin {
+class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
   static const _semanticTokenDebounce = Duration(milliseconds: 500);
   late final ScrollController _hscrollController, _vscrollController;
   late final CodeForgeController _controller;
@@ -4700,6 +4699,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   final Map<int, Rect> actionBulbRects = {};
   final Map<int, ui.Paragraph> paragraphCache = {};
   final Map<int, double> lineHeightCache = {};
+  final Map<String, double> _lineOffsetCache = {};
+  final Map<String, int?> _jinjaEndTagCache = {};
+  final Map<String, int?> _htmlEndTagCache = {};
+  final Map<String, int?> _bracketMatchCache = {};
   final List<FoldRange> foldRanges = [];
   final MatchHighlightStyle? matchHighlightStyle0;
   final MatchHighlightStyle? matchHighlightStyle;
@@ -4709,6 +4712,15 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   late final double gutterPadding;
   late final Paint caretPainter;
   late final Paint bracketHighlightPainter;
+  late final Paint _bgPaint;
+  late final Paint _decorationPaint;
+  late final Paint _rulerPaint;
+  late final Paint _selectionPaint;
+  late final Paint _guidePaint;
+  double _avgLineHeight = 14.0;
+
+  @override
+  bool get isRepaintBoundary => true;
   late final ui.ParagraphStyle paragraphStyle;
   late final ui.TextStyle uiTextStyle;
   late SyntaxHighlighter syntaxHighlighter;
@@ -4769,6 +4781,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       lineTextCache.clear();
       lineWidthCache.clear();
       lineHeightCache.clear();
+      _jinjaEndTagCache.clear();
+      _htmlEndTagCache.clear();
+      _bracketMatchCache.clear();
+      _lineOffsetCache.clear();
     }
   }
 
@@ -4904,6 +4920,17 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       ..color = color
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
+
+    _bgPaint = Paint()..style = PaintingStyle.fill;
+    _decorationPaint = Paint()..style = PaintingStyle.fill;
+    _rulerPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    _selectionPaint = Paint()..style = PaintingStyle.fill;
+    _guidePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
 
     paragraphStyle = ui.ParagraphStyle(
       fontFamily: fontFamily,
@@ -5630,17 +5657,19 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       foldRanges.removeWhere((f) => !f.isFolded);
       foldRangesNeedsClear = false;
     }
-
-    try {
-      return foldRanges.firstWhere((f) => f.startIndex == lineIndex);
-    } catch (_) {
-      final fold = computeFoldRangeForLine(lineIndex);
-      if (fold != null) {
-        foldRanges.add(fold);
-        foldRanges.sort((a, b) => a.startIndex.compareTo(b.startIndex));
+    if (foldRanges.isNotEmpty) {
+      try {
+        return foldRanges.firstWhere((f) => f.startIndex == lineIndex);
+      } catch (_) {
+        final fold = computeFoldRangeForLine(lineIndex);
+        if (fold != null) {
+          foldRanges.add(fold);
+          foldRanges.sort((a, b) => a.startIndex.compareTo(b.startIndex));
+        }
+        return fold;
       }
-      return fold;
     }
+    return null;
   }
 
   void toggleFold(FoldRange fold) {
@@ -6141,16 +6170,33 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     final lineCount = controller.lineCount;
     if (lineCount == 0) return 0;
 
-    final hasActiveFolds = foldRanges.any((f) => f.isFolded);
+    final activeFolds = foldRanges.where((f) => f.isFolded).toList()
+      ..sort((a, b) => a.startIndex.compareTo(b.startIndex));
+    final hasActiveFolds = activeFolds.isNotEmpty;
 
     if (!_lineWrap && !hasActiveFolds) {
       return (y / lineHeight0).floor().clamp(0, lineCount - 1);
     }
 
     double currentY = 0;
+    int foldIdx = 0;
+
     for (int i = 0; i < lineCount; i++) {
-      if (hasActiveFolds && isLineFolded(i)) continue;
-      final lineHeight = _lineWrap ? getWrappedLineHeight(i) : lineHeight0;
+      if (hasActiveFolds) {
+        while (foldIdx < activeFolds.length &&
+            activeFolds[foldIdx].endIndex < i) {
+          foldIdx++;
+        }
+        if (foldIdx < activeFolds.length) {
+          final fold = activeFolds[foldIdx];
+          if (i > fold.startIndex && i <= fold.endIndex) {
+            i = fold.endIndex;
+            continue;
+          }
+        }
+      }
+
+      final lineHeight = _getLineHeight(i);
       if (currentY + lineHeight > y) {
         return i;
       }
@@ -6355,6 +6401,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
   @override
   void performLayout() {
+    final sw = Stopwatch()..start();
     final lineCount = controller.lineCount;
 
     if (lineCount != cachedLineCount) {
@@ -6376,6 +6423,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       final minWidth = _lineWrap ? 0.0 : MediaQuery.of(context).size.width;
       final contentWidth = max(computedWidth, minWidth);
       size = constraints.constrain(Size(contentWidth, contentHeight));
+      sw.stop();
+      print('[PERF] performLayout (deferred): ${sw.elapsedMicroseconds}μs');
       return;
     }
 
@@ -6422,6 +6471,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         final avgHeight = cachedCount > 0
             ? cachedHeight / cachedCount
             : lineHeight0;
+        _avgLineHeight = avgHeight;
         visibleHeight = cachedHeight + (uncachedCount * avgHeight);
       }
     } else {
@@ -6484,6 +6534,17 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     final contentWidth = max(computedWidth, minWidth);
 
     size = constraints.constrain(Size(contentWidth, contentHeight));
+    sw.stop();
+    print(
+      '[PERF] performLayout: ${sw.elapsedMicroseconds}μs (lines: $lineCount, wrap: $_lineWrap, folds: ${foldRanges.where((f) => f.isFolded).length})',
+    );
+  }
+
+  double _getLineHeight(int lineIndex) {
+    if (_lineWrap) {
+      return lineHeightCache[lineIndex] ?? _avgLineHeight;
+    }
+    return lineHeight0;
   }
 
   double getWrappedLineHeight(int lineIndex) {
@@ -6512,16 +6573,30 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       return targetLine * lineHeight0;
     }
 
+    final cacheKey = '${targetLine}_$hasActiveFolds';
+    if (_lineOffsetCache.containsKey(cacheKey)) {
+      return _lineOffsetCache[cacheKey]!;
+    }
+
+    final sw = Stopwatch()..start();
     double y = 0;
     for (int i = 0; i < targetLine; i++) {
       if (hasActiveFolds && isLineFolded(i)) continue;
-      y += _lineWrap ? getWrappedLineHeight(i) : lineHeight0;
+      y += _getLineHeight(i);
+    }
+    _lineOffsetCache[cacheKey] = y;
+    sw.stop();
+    if (sw.elapsedMicroseconds > 100) {
+      print(
+        '[PERF] getLineYOffset($targetLine): ${sw.elapsedMicroseconds}μs (cache miss)',
+      );
     }
     return y;
   }
 
   @override
   void paint(PaintingContext context, Offset offset) {
+    final paintSw = Stopwatch()..start();
     checkDocumentVersionAndClearCache();
 
     final canvas = context.canvas;
@@ -6537,11 +6612,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
     canvas.save();
 
-    canvas.drawPaint(
-      Paint()
-        ..color = bgColor
-        ..style = PaintingStyle.fill,
-    );
+    _bgPaint.color = bgColor;
+    canvas.drawPaint(_bgPaint);
 
     final hasActiveFolds = foldRanges.any((f) => f.isFolded);
 
@@ -6549,6 +6621,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     int lastVisibleLine;
     double firstVisibleLineY;
 
+    final findVisibleSw = Stopwatch()..start();
     if (!_lineWrap && !hasActiveFolds) {
       firstVisibleLine = (viewTop / lineHeight0).floor().clamp(
         0,
@@ -6565,9 +6638,27 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       lastVisibleLine = lineCount - 1;
       firstVisibleLineY = 0;
 
+      final activeFolds = foldRanges.where((f) => f.isFolded).toList()
+        ..sort((a, b) => a.startIndex.compareTo(b.startIndex));
+      final hasActiveFoldsList = activeFolds.isNotEmpty;
+      int foldIdx = 0;
+
       for (int i = 0; i < lineCount; i++) {
-        if (hasActiveFolds && isLineFolded(i)) continue;
-        final lineHeight = _lineWrap ? getWrappedLineHeight(i) : lineHeight0;
+        if (hasActiveFoldsList) {
+          while (foldIdx < activeFolds.length &&
+              activeFolds[foldIdx].endIndex < i) {
+            foldIdx++;
+          }
+          if (foldIdx < activeFolds.length) {
+            final fold = activeFolds[foldIdx];
+            if (i > fold.startIndex && i <= fold.endIndex) {
+              i = fold.endIndex;
+              continue;
+            }
+          }
+        }
+
+        final lineHeight = _getLineHeight(i);
         if (currentY + lineHeight > viewTop) {
           firstVisibleLine = i;
           firstVisibleLineY = currentY;
@@ -6577,9 +6668,34 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       }
 
       currentY = firstVisibleLineY;
+      // Reset foldIdx for the second loop or continue?
+      // We can continue from firstVisibleLine.
+      // Need to reset/adjust foldIdx to firstVisibleLine.
+      foldIdx = 0;
+      if (hasActiveFoldsList) {
+        // Fast forward foldIdx
+        while (foldIdx < activeFolds.length &&
+            activeFolds[foldIdx].endIndex < firstVisibleLine) {
+          foldIdx++;
+        }
+      }
+
       for (int i = firstVisibleLine; i < lineCount; i++) {
-        if (hasActiveFolds && isLineFolded(i)) continue;
-        final lineHeight = _lineWrap ? getWrappedLineHeight(i) : lineHeight0;
+        if (hasActiveFoldsList) {
+          while (foldIdx < activeFolds.length &&
+              activeFolds[foldIdx].endIndex < i) {
+            foldIdx++;
+          }
+          if (foldIdx < activeFolds.length) {
+            final fold = activeFolds[foldIdx];
+            if (i > fold.startIndex && i <= fold.endIndex) {
+              i = fold.endIndex;
+              continue;
+            }
+          }
+        }
+
+        final lineHeight = _getLineHeight(i);
         currentY += lineHeight;
         if (currentY >= viewBottom) {
           lastVisibleLine = i;
@@ -6587,7 +6703,12 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         }
       }
     }
+    findVisibleSw.stop();
+    print(
+      '[PERF] findVisibleLines: ${findVisibleSw.elapsedMicroseconds}μs (first: $firstVisibleLine, last: $lastVisibleLine)',
+    );
 
+    var sw = Stopwatch()..start();
     _drawSearchHighlights(
       canvas,
       offset,
@@ -6596,7 +6717,12 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       firstVisibleLineY,
       hasActiveFolds,
     );
+    sw.stop();
+    if (sw.elapsedMicroseconds > 1000) {
+      print('[PERF] _drawSearchHighlights: ${sw.elapsedMicroseconds}μs');
+    }
 
+    sw = Stopwatch()..start();
     _drawLineDecorations(
       canvas,
       offset,
@@ -6605,7 +6731,12 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       firstVisibleLineY,
       hasActiveFolds,
     );
+    sw.stop();
+    if (sw.elapsedMicroseconds > 1000) {
+      print('[PERF] _drawLineDecorations: ${sw.elapsedMicroseconds}μs');
+    }
 
+    sw = Stopwatch()..start();
     _drawLineHighlight(
       canvas,
       offset,
@@ -6614,7 +6745,12 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       firstVisibleLineY,
       hasActiveFolds,
     );
+    sw.stop();
+    if (sw.elapsedMicroseconds > 1000) {
+      print('[PERF] _drawLineHighlight: ${sw.elapsedMicroseconds}μs');
+    }
 
+    sw = Stopwatch()..start();
     _drawFoldedLineHighlights(
       canvas,
       offset,
@@ -6623,7 +6759,12 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       firstVisibleLineY,
       hasActiveFolds,
     );
+    sw.stop();
+    if (sw.elapsedMicroseconds > 1000) {
+      print('[PERF] _drawFoldedLineHighlights: ${sw.elapsedMicroseconds}μs');
+    }
 
+    sw = Stopwatch()..start();
     _drawSelection(
       canvas,
       offset,
@@ -6632,8 +6773,13 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       firstVisibleLineY,
       hasActiveFolds,
     );
+    sw.stop();
+    if (sw.elapsedMicroseconds > 1000) {
+      print('[PERF] _drawSelection: ${sw.elapsedMicroseconds}μs');
+    }
 
     if (_enableGuideLines && (lastVisibleLine - firstVisibleLine) < 200) {
+      sw = Stopwatch()..start();
       _drawIndentGuides(
         canvas,
         offset,
@@ -6643,10 +6789,15 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         hasActiveFolds,
         textColor,
       );
+      sw.stop();
+      if (sw.elapsedMicroseconds > 1000) {
+        print('[PERF] _drawIndentGuides: ${sw.elapsedMicroseconds}μs');
+      }
     }
 
     // Draw rulers (vertical lines at specific column positions)
     if (_rulers != null && _rulers!.isNotEmpty) {
+      sw = Stopwatch()..start();
       _drawRulers(
         canvas,
         offset,
@@ -6656,14 +6807,47 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         hasActiveFolds,
         textColor,
       );
+      sw.stop();
+      if (sw.elapsedMicroseconds > 1000) {
+        print('[PERF] _drawRulers: ${sw.elapsedMicroseconds}μs');
+      }
     }
 
     double currentY = firstVisibleLineY;
+
+    final activeFoldsForDraw = foldRanges.where((f) => f.isFolded).toList()
+      ..sort((a, b) => a.startIndex.compareTo(b.startIndex));
+    final hasActiveFoldsForDraw = activeFoldsForDraw.isNotEmpty;
+    int foldIdxForDraw = 0;
+    if (hasActiveFoldsForDraw) {
+      while (foldIdxForDraw < activeFoldsForDraw.length &&
+          activeFoldsForDraw[foldIdxForDraw].endIndex < firstVisibleLine) {
+        foldIdxForDraw++;
+      }
+    }
+
+    int paragraphBuildCount = 0;
+    int paragraphCacheHits = 0;
+    final mainLoopSw = Stopwatch()..start();
     for (int i = firstVisibleLine; i <= lastVisibleLine && i < lineCount; i++) {
-      if (hasActiveFolds && isLineFolded(i)) continue;
+      if (hasActiveFoldsForDraw) {
+        while (foldIdxForDraw < activeFoldsForDraw.length &&
+            activeFoldsForDraw[foldIdxForDraw].endIndex < i) {
+          foldIdxForDraw++;
+        }
+        if (foldIdxForDraw < activeFoldsForDraw.length) {
+          final fold = activeFoldsForDraw[foldIdxForDraw];
+          if (i > fold.startIndex && i <= fold.endIndex) {
+            i = fold.endIndex;
+            continue;
+          }
+        }
+      }
 
       final contentTop = currentY;
-      final lineHeight = _lineWrap ? getWrappedLineHeight(i) : lineHeight0;
+      _lineOffsetCache['${i}_$hasActiveFolds'] = contentTop;
+
+      final lineHeight = _getLineHeight(i);
       final visualYOffset = getGhostTextVisualOffset(i);
 
       ui.Paragraph paragraph;
@@ -6676,6 +6860,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
           bufferLineText,
           width: _lineWrap ? wrapWidth : null,
         );
+        paragraphBuildCount++;
       } else {
         if (lineTextCache.containsKey(i)) {
           lineText = lineTextCache[i]!;
@@ -6686,6 +6871,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
         if (paragraphCache.containsKey(i)) {
           paragraph = paragraphCache[i]!;
+          paragraphCacheHits++;
         } else {
           paragraph = buildHighlightedParagraph(
             i,
@@ -6693,6 +6879,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
             width: _lineWrap ? wrapWidth : null,
           );
           paragraphCache[i] = paragraph;
+          paragraphBuildCount++;
 
           if (_lineWrap) {
             lineHeightCache[i] = paragraph.height;
@@ -6738,7 +6925,12 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
       currentY += lineHeight;
     }
+    mainLoopSw.stop();
+    print(
+      '[PERF] mainLoop: ${mainLoopSw.elapsedMicroseconds}μs (lines: ${lastVisibleLine - firstVisibleLine + 1}, builds: $paragraphBuildCount, cacheHits: $paragraphCacheHits)',
+    );
 
+    sw = Stopwatch()..start();
     _drawDiagnostics(
       canvas,
       offset,
@@ -6747,8 +6939,13 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       firstVisibleLineY,
       hasActiveFolds,
     );
+    sw.stop();
+    if (sw.elapsedMicroseconds > 1000) {
+      print('[PERF] _drawDiagnostics: ${sw.elapsedMicroseconds}μs');
+    }
 
     if (controller.ghostText != null) {
+      sw = Stopwatch()..start();
       _drawGhostText(
         canvas,
         offset,
@@ -6757,7 +6954,12 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         firstVisibleLineY,
         hasActiveFolds,
       );
+      sw.stop();
+      if (sw.elapsedMicroseconds > 1000) {
+        print('[PERF] _drawGhostText: ${sw.elapsedMicroseconds}μs');
+      }
     } else if (aiResponse != null && aiResponse!.isNotEmpty) {
+      sw = Stopwatch()..start();
       _drawAiGhostText(
         canvas,
         offset,
@@ -6766,9 +6968,14 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         firstVisibleLineY,
         hasActiveFolds,
       );
+      sw.stop();
+      if (sw.elapsedMicroseconds > 1000) {
+        print('[PERF] _drawAiGhostText: ${sw.elapsedMicroseconds}μs');
+      }
     }
 
     if (_enableGutter) {
+      sw = Stopwatch()..start();
       _drawGutter(
         canvas,
         offset,
@@ -6778,9 +6985,14 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         bgColor,
         _textStyle,
       );
+      sw.stop();
+      if (sw.elapsedMicroseconds > 1000) {
+        print('[PERF] _drawGutter: ${sw.elapsedMicroseconds}μs');
+      }
     }
 
     if (focusNode.hasFocus) {
+      sw = Stopwatch()..start();
       _drawBracketHighlight(
         canvas,
         offset,
@@ -6792,6 +7004,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         hasActiveFolds,
         textColor,
       );
+      sw.stop();
+      if (sw.elapsedMicroseconds > 1000) {
+        print('[PERF] _drawBracketHighlight: ${sw.elapsedMicroseconds}μs');
+      }
     }
 
     if (focusNode.hasFocus && caretBlinkController.value > 0.5) {
@@ -6818,9 +7034,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       final handleColor = _selectionStyle.cursorBubbleColor;
       final handleRadius = (lineHeight0 / 2).clamp(6.0, 12.0);
 
-      final handlePaint = Paint()
-        ..color = handleColor
-        ..style = PaintingStyle.fill;
+      _selectionPaint.color = handleColor;
+      _selectionPaint.style = PaintingStyle.fill;
+      final handlePaint = _selectionPaint;
 
       if (selection.isCollapsed) {
         if (showBubble || selectionActive) {
@@ -6972,6 +7188,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       }
     }
 
+    paintSw.stop();
+    print(
+      '[PERF] paint: ${paintSw.elapsedMicroseconds}μs (lines: $lineCount, visible: ${lastVisibleLine - firstVisibleLine + 1}, wrap: $_lineWrap, folds: ${foldRanges.where((f) => f.isFolded).length})',
+    );
     canvas.restore();
   }
 
@@ -6987,19 +7207,20 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     final viewportHeight = vscrollController.position.viewportDimension;
 
     final gutterBgColor = _gutterStyle.backgroundColor ?? bgColor;
+    _bgPaint.color = gutterBgColor;
     canvas.drawRect(
       Rect.fromLTWH(offset.dx, offset.dy, gutterWidth, viewportHeight),
-      Paint()..color = gutterBgColor,
+      _bgPaint,
     );
 
     if (_enableGutterDivider) {
-      final dividerPaint = Paint()
-        ..color = (_editorTheme['root']?.color ?? Colors.grey).withAlpha(150)
-        ..strokeWidth = 1;
+      _guidePaint.color = (_editorTheme['root']?.color ?? Colors.grey)
+          .withAlpha(150);
+      _guidePaint.strokeWidth = 1;
       canvas.drawLine(
         Offset(offset.dx + gutterWidth - 1, offset.dy),
         Offset(offset.dx + gutterWidth - 1, offset.dy + viewportHeight),
-        dividerPaint,
+        _guidePaint,
       );
     }
 
@@ -7082,7 +7303,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
       for (int i = 0; i < lineCount; i++) {
         if (hasActiveFolds && isLineFolded(i)) continue;
-        final lineHeight = _lineWrap ? getWrappedLineHeight(i) : lineHeight0;
+        final lineHeight = _getLineHeight(i);
         if (currentY + lineHeight > viewTop) {
           firstVisibleLine = i;
           firstVisibleLineY = currentY;
@@ -7099,7 +7320,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       if (hasActiveFolds && isLineFolded(i)) continue;
 
       final contentTop = currentY;
-      final lineHeight = _lineWrap ? getWrappedLineHeight(i) : lineHeight0;
+      final lineHeight = _getLineHeight(i);
 
       final visualYOffset = getGhostTextVisualOffset(i);
 
@@ -7143,9 +7364,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         if (_gutterStyle.showBreakpoints &&
             controller.breakpoints.contains(i + 1)) {
           final isHovered = hoveredBreakpointLine == i + 1;
-          final breakpointPaint = Paint()
-            ..color = _gutterStyle.breakpointColor
-            ..style = PaintingStyle.fill;
+          _decorationPaint.color = _gutterStyle.breakpointColor;
+          _decorationPaint.style = PaintingStyle.fill;
+          final breakpointPaint = _decorationPaint;
           final breakpointRadius = 4.0;
           final breakpointCenterX = offset.dx + breakpointColumnWidth / 2;
           final breakpointCenterY =
@@ -7157,13 +7378,14 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
           // Draw hover highlight (semi-transparent circle) if hovering
           if (isHovered) {
-            final hoverPaint = Paint()
-              ..color = _gutterStyle.breakpointColor.withValues(alpha: 0.3)
-              ..style = PaintingStyle.fill;
+            _decorationPaint.color = _gutterStyle.breakpointColor.withValues(
+              alpha: 0.3,
+            );
+            _decorationPaint.style = PaintingStyle.fill;
             canvas.drawCircle(
               Offset(breakpointCenterX, breakpointCenterY),
               breakpointRadius + 2,
-              hoverPaint,
+              _decorationPaint,
             );
           }
 
@@ -7183,13 +7405,14 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
               contentTop -
               vscrollController.offset +
               lineHeight / 2;
-          final hoverPaint = Paint()
-            ..color = _gutterStyle.breakpointColor.withOpacity(0.5)
-            ..style = PaintingStyle.fill;
+          _decorationPaint.color = _gutterStyle.breakpointColor.withOpacity(
+            0.5,
+          );
+          _decorationPaint.style = PaintingStyle.fill;
           canvas.drawCircle(
             Offset(breakpointCenterX, breakpointCenterY),
             breakpointRadius,
-            hoverPaint,
+            _decorationPaint,
           );
         }
 
@@ -7422,36 +7645,52 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
       final trimmed = lineText.trimRight();
 
-      // Check for Jinja template tags
-      final jinjaTagMatch = RegExp(r'\{%\s*(\w+)').firstMatch(trimmed);
+      // Early exit: skip empty lines and lines that don't end with brackets/colons
+      // This avoids expensive regex matching for most lines
+      final endsWithBracket =
+          trimmed.endsWith('{') ||
+          trimmed.endsWith('(') ||
+          trimmed.endsWith('[') ||
+          trimmed.endsWith(':');
+
+      // Check for Jinja template tags (only if line might be relevant)
+      final jinjaTagMatch = endsWithBracket || trimmed.contains('{%')
+          ? RegExp(r'\{%\s*(\w+)').firstMatch(trimmed)
+          : null;
       int? jinjaEndLine;
       if (jinjaTagMatch != null) {
         final tagName = jinjaTagMatch.group(1);
         if (tagName != null) {
-          jinjaEndLine = findMatchingJinjaEndTag(i, tagName);
+          final cacheKey = 'jinja_${i}_$tagName';
+          if (_jinjaEndTagCache.containsKey(cacheKey)) {
+            jinjaEndLine = _jinjaEndTagCache[cacheKey];
+          } else {
+            jinjaEndLine = findMatchingJinjaEndTag(i, tagName);
+            _jinjaEndTagCache[cacheKey] = jinjaEndLine;
+          }
         }
       }
 
-      // Check for HTML/XML tags
-      final htmlTagMatch = RegExp(
-        r'<\s*([a-zA-Z][a-zA-Z0-9-]*)\s*[^>]*>',
-      ).firstMatch(trimmed);
+      // Check for HTML/XML tags (only if line might be relevant)
+      final htmlTagMatch = endsWithBracket || trimmed.contains('<')
+          ? RegExp(r'<\s*([a-zA-Z][a-zA-Z0-9-]*)\s*[^>]*>').firstMatch(trimmed)
+          : null;
       int? htmlEndLine;
       if (htmlTagMatch != null) {
         final tagName = htmlTagMatch.group(1);
         if (tagName != null) {
           final isSelfClosing = RegExp(r'/\s*>').hasMatch(trimmed);
           if (!isSelfClosing) {
-            htmlEndLine = findMatchingHtmlEndTag(i, tagName);
+            final cacheKey = 'html_${i}_$tagName';
+            if (_htmlEndTagCache.containsKey(cacheKey)) {
+              htmlEndLine = _htmlEndTagCache[cacheKey];
+            } else {
+              htmlEndLine = findMatchingHtmlEndTag(i, tagName);
+              _htmlEndTagCache[cacheKey] = htmlEndLine;
+            }
           }
         }
       }
-
-      final endsWithBracket =
-          trimmed.endsWith('{') ||
-          trimmed.endsWith('(') ||
-          trimmed.endsWith('[') ||
-          trimmed.endsWith(':');
 
       // Skip if neither Jinja tag, HTML tag, nor bracket/colon
       if (jinjaEndLine == null && htmlEndLine == null && !endsWithBracket) {
@@ -7471,7 +7710,14 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       } else if (lastChar == '{' || lastChar == '(' || lastChar == '[') {
         final lineStartOffset = controller.getLineStartOffset(i);
         final bracketPos = lineStartOffset + trimmed.length - 1;
-        final matchPos = findMatchingBracket(controller.text, bracketPos);
+        final cacheKey = 'bracket_$bracketPos';
+        int? matchPos;
+        if (_bracketMatchCache.containsKey(cacheKey)) {
+          matchPos = _bracketMatchCache[cacheKey];
+        } else {
+          matchPos = findMatchingBracket(controller.text, bracketPos);
+          _bracketMatchCache[cacheKey] = matchPos;
+        }
 
         if (matchPos != null) {
           endLine = controller.getLineAtOffset(matchPos) + 1;
@@ -7501,10 +7747,14 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         guideX = boxes.isNotEmpty ? boxes.last.right : 0;
       }
 
+      // Limit the check to a reasonable number of lines ahead
+      // This prevents checking hundreds of lines for very long blocks
       bool wouldPassThroughText = false;
+      final maxCheckLines = 100; // Limit check to 100 lines ahead
+      final checkEnd = (i + maxCheckLines).clamp(i + 1, endLine - 1);
       for (
         int checkLine = i + 1;
-        checkLine < endLine - 1 && checkLine < controller.lineCount;
+        checkLine < checkEnd && checkLine < controller.lineCount;
         checkLine++
       ) {
         if (hasActiveFolds && isLineFolded(checkLine)) continue;
@@ -7538,20 +7788,25 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       ));
     }
 
-    final scanBackLimit = 500;
+    // Reduced scan back limit - only scan a small buffer above visible area
+    // This dramatically reduces the number of lines processed
+    final scanBackLimit = 50; // Reduced from 500 to 50
     final scanStart = (firstVisibleLine - scanBackLimit).clamp(
       0,
       firstVisibleLine,
     );
-    for (int i = scanStart; i < firstVisibleLine; i++) {
-      processLine(i);
-    }
 
+    // Process visible lines first (most important)
     for (
       int i = firstVisibleLine;
       i <= lastVisibleLine && i < controller.lineCount;
       i++
     ) {
+      processLine(i);
+    }
+
+    // Then process a small buffer above (for guides that extend into view)
+    for (int i = scanStart; i < firstVisibleLine; i++) {
       processLine(i);
     }
 
@@ -7573,10 +7828,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       final block = blocks[idx];
       final isSelected = selectedBlockIndex == idx;
 
-      final guidePaint = Paint()
-        ..color = isSelected ? textColor : textColor.withAlpha(100)
-        ..strokeWidth = isSelected ? 1.0 : 0.5
-        ..style = PaintingStyle.stroke;
+      _guidePaint.color = isSelected ? textColor : textColor.withAlpha(100);
+      _guidePaint.strokeWidth = isSelected ? 1.0 : 0.5;
+      _guidePaint.style = PaintingStyle.stroke;
+      final guidePaint = _guidePaint;
 
       double yTop;
       if (!_lineWrap && !hasActiveFolds) {
@@ -7645,10 +7900,12 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     final horizontalScrollOffset = hscrollController.offset;
 
     // Create paint for rulers (same style as indentation guides)
-    final rulerPaint = Paint()
-      ..color = (_editorTheme['root']?.color ?? textColor).withAlpha(100)
-      ..strokeWidth = 0.5
-      ..style = PaintingStyle.stroke;
+    _guidePaint.color = (_editorTheme['root']?.color ?? textColor).withAlpha(
+      100,
+    );
+    _guidePaint.strokeWidth = 0.5;
+    _guidePaint.style = PaintingStyle.stroke;
+    final rulerPaint = _guidePaint;
 
     // Calculate viewport bounds
     final viewportTop = offset.dy + (_innerPadding?.top ?? 0);
@@ -7822,10 +8079,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
           underlineColor = Colors.red;
       }
 
-      final paint = Paint()
-        ..color = underlineColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5;
+      _rulerPaint.color = underlineColor;
+      final paint = _rulerPaint;
 
       for (int lineIndex = startLine; lineIndex <= endLine; lineIndex++) {
         if (lineIndex < firstVisibleLine || lineIndex > lastVisibleLine) {
@@ -7853,6 +8108,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
             width: _lineWrap ? wrapWidth : null,
           );
           paragraphCache[lineIndex] = para;
+          if (_lineWrap) {
+            lineHeightCache[lineIndex] = para.height;
+          }
         }
 
         final lineStartChar = (lineIndex == startLine) ? startChar : 0;
@@ -7954,9 +8212,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
                   backgroundColor: Color.fromARGB(163, 72, 215, 255),
                 ));
 
-      final highlightPaint = Paint()
-        ..color = highlightStyle.backgroundColor ?? Colors.amberAccent
-        ..style = PaintingStyle.fill;
+      _decorationPaint.color =
+          highlightStyle.backgroundColor ?? Colors.amberAccent;
+      _decorationPaint.style = PaintingStyle.fill;
+      final highlightPaint = _decorationPaint;
 
       for (int lineIndex = startLine; lineIndex <= endLine; lineIndex++) {
         if (lineIndex < firstVisibleLine || lineIndex > lastVisibleLine) {
@@ -7994,6 +8253,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
             width: _lineWrap ? wrapWidth : null,
           );
           paragraphCache[lineIndex] = para;
+          if (_lineWrap) {
+            lineHeightCache[lineIndex] = para.height;
+          }
         }
 
         final lineY = getLineYOffset(lineIndex, hasActiveFolds);
@@ -8047,9 +8309,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         _gutterStyle.foldedLineHighlightColor ??
         _selectionStyle.selectionColor.withAlpha(60);
 
-    final highlightPaint = Paint()
-      ..color = highlightColor
-      ..style = PaintingStyle.fill;
+    _decorationPaint.color = highlightColor;
+    _decorationPaint.style = PaintingStyle.fill;
+    final highlightPaint = _decorationPaint;
 
     for (final foldRange in foldRanges) {
       if (!foldRange.isFolded) continue;
@@ -8061,9 +8323,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       }
 
       final lineY = getLineYOffset(foldStartLine, hasActiveFolds);
-      final lineHeight = _lineWrap
-          ? getWrappedLineHeight(foldStartLine)
-          : lineHeight0;
+      final lineHeight = _getLineHeight(foldStartLine);
 
       final screenY =
           offset.dy +
@@ -8097,9 +8357,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     final start = selection.start;
     final end = selection.end;
 
-    final selectionPaint = Paint()
-      ..color = _selectionStyle.selectionColor
-      ..style = PaintingStyle.fill;
+    _selectionPaint.color = _selectionStyle.selectionColor;
+    _selectionPaint.style = PaintingStyle.fill;
+    final selectionPaint = _selectionPaint;
 
     int startLine = controller.getLineAtOffset(start);
     int endLine = controller.getLineAtOffset(end);
@@ -8420,9 +8680,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       if (originalPara != null && clampedCol < lineText.length) {
         final remainingWidth = originalPara.longestLine - cursorX;
         if (remainingWidth > 0) {
+          _bgPaint.color = bgColor;
           canvas.drawRect(
             Rect.fromLTWH(screenX, screenY, remainingWidth + 2, lineHeight0),
-            Paint()..color = bgColor,
+            _bgPaint,
           );
         }
       }
@@ -8496,9 +8757,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       if (originalPara != null && clampedCol < lineText.length) {
         final remainingWidth = originalPara.longestLine - cursorX;
         if (remainingWidth > 0) {
+          _bgPaint.color = bgColor;
           canvas.drawRect(
             Rect.fromLTWH(screenX, screenY, remainingWidth + 2, lineHeight0),
-            Paint()..color = bgColor,
+            _bgPaint,
           );
         }
       }
@@ -8612,9 +8874,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         continue;
       }
 
-      final paint = Paint()
-        ..color = decoration.color
-        ..style = PaintingStyle.fill;
+      _decorationPaint.color = decoration.color;
+      _decorationPaint.style = PaintingStyle.fill;
+      final paint = _decorationPaint;
 
       double currentY = firstVisibleLineY;
       for (
@@ -8624,7 +8886,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       ) {
         if (hasActiveFolds && isLineFolded(i)) continue;
 
-        final lineHeight = _lineWrap ? getWrappedLineHeight(i) : lineHeight0;
+        final lineHeight = _getLineHeight(i);
 
         if (i >= decoration.startLine && i <= decoration.endLine) {
           final screenY =
@@ -8737,9 +8999,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     }
 
     final lineY = getLineYOffset(highlightLine, hasActiveFolds);
-    final lineHeight = _lineWrap
-        ? getWrappedLineHeight(highlightLine)
-        : lineHeight0;
+    final lineHeight = _getLineHeight(highlightLine);
 
     final screenY =
         offset.dy +
@@ -8756,9 +9016,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         (_textStyle?.color ?? _editorTheme['root']?.color ?? Colors.yellow)
             .withValues(alpha: opacity);
 
-    final paint = Paint()
-      ..color = highlightColor
-      ..style = PaintingStyle.fill;
+    _decorationPaint.color = highlightColor;
+    _decorationPaint.style = PaintingStyle.fill;
+    final paint = _decorationPaint;
 
     final width = size.width - gutterWidth - (_innerPadding?.horizontal ?? 0);
     canvas.drawRect(Rect.fromLTWH(screenX, screenY, width, lineHeight), paint);
@@ -8787,9 +9047,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
       switch (decoration.type) {
         case GutterDecorationType.colorBar:
-          final paint = Paint()
-            ..color = decoration.color
-            ..style = PaintingStyle.fill;
+          _decorationPaint.color = decoration.color;
+          _decorationPaint.style = PaintingStyle.fill;
+          final paint = _decorationPaint;
           canvas.drawRect(
             Rect.fromLTWH(offset.dx, screenY, decoration.width, lineHeight),
             paint,
@@ -8822,9 +9082,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
           break;
 
         case GutterDecorationType.dot:
-          final paint = Paint()
-            ..color = decoration.color
-            ..style = PaintingStyle.fill;
+          _decorationPaint.color = decoration.color;
+          _decorationPaint.style = PaintingStyle.fill;
+          final paint = _decorationPaint;
           final radius = (_textStyle?.fontSize ?? 14) / 4;
           canvas.drawCircle(
             Offset(
@@ -8938,9 +9198,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       if (originalPara != null && clampedCol < lineText.length) {
         final remainingWidth = originalPara.longestLine - cursorX;
         if (remainingWidth > 0) {
+          _bgPaint.color = bgColor;
           canvas.drawRect(
             Rect.fromLTWH(screenX, screenY, remainingWidth + 2, lineHeight0),
-            Paint()..color = bgColor,
+            _bgPaint,
           );
         }
       }
@@ -9016,9 +9277,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       if (originalPara != null && multiClampedCol < lineText.length) {
         final remainingWidth = originalPara.longestLine - cursorX;
         if (remainingWidth > 0) {
+          _bgPaint.color = bgColor;
           canvas.drawRect(
             Rect.fromLTWH(screenX, screenY, remainingWidth + 2, lineHeight0),
-            Paint()..color = bgColor,
+            _bgPaint,
           );
         }
       }

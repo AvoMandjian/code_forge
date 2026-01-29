@@ -18,10 +18,11 @@ dependencies:
   flutter_html: ^3.0.0
   meta: ^1.17.0
   re_highlight:
-    git:
-      url: https://github.com/AvoMandjian/code_forge.git
-      ref: DP_V3
-      path: packages/re-highlight
+    path: packages/re-highlight
+    # git:
+    #   url: https://github.com/AvoMandjian/code_forge.git
+    #   ref: DP_V3
+    #   path: packages/re-highlight
   web_socket_channel: ^3.0.3
 
 dev_dependencies:

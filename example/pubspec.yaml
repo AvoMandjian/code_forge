@@ -19,10 +19,10 @@ dev_dependencies:
 
 dependency_overrides:
   code_forge:
-    # path: /Users/avo/Documents/Workplace/Projects/forked_projects/code_forge
-    git:
-      url: https://github.com/AvoMandjian/code_forge.git
-      ref: DP_V3
+    path: ../
+    # git:
+    #   url: https://github.com/AvoMandjian/code_forge.git
+    #   ref: DP_V3
   google_fonts: ^6.3.3
   flutter_lints: ^6.0.0
   intl: 0.20.2
