@@ -1959,7 +1959,7 @@ packages:
     description:
       path: "."
       ref: dev
-      resolved-ref: bfe4f47bec34f78781a8bf5f7c30cd0891948822
+      resolved-ref: fb9dcfeb8122c38a5f785b892f6d3ad6d635081e
       url: "git@git.jinja.app:jinja.app/jinja_app_widgets_catalog.git"
     source: git
     version: "0.0.1"

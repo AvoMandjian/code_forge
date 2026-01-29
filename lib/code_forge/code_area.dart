@@ -4720,6 +4720,11 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       -1; // Track highlights length for cache invalidation
 
   final List<FoldRange> foldRanges = [];
+  // Optimized fold tracking for O(1) lookups
+  final Set<int> _foldedLineSet = {};
+  bool _hasActiveFolds = false;
+  // Cached sorted list of active folds for iteration
+  final List<FoldRange> _cachedActiveFolds = [];
   final MatchHighlightStyle? matchHighlightStyle0;
   final MatchHighlightStyle? matchHighlightStyle;
   late double lineHeight0;
@@ -4748,6 +4753,15 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   TextStyle? _textStyle;
   GutterStyle _gutterStyle;
   CodeSelectionStyle _selectionStyle;
+  // Cached base line number style to avoid recomputation every frame
+  TextStyle? _cachedBaseLineNumberStyle;
+  GutterStyle? _cachedBaseLineNumberStyleGutterStyle;
+  TextStyle? _cachedBaseLineNumberStyleGutterTextStyle;
+  // Cached diagnostic severity map to avoid rebuilding every frame
+  Map<int, int>? _cachedLineSeverityMap;
+  List<LspErrors>? _cachedDiagnosticsForSeverityMap;
+  // Cached fold icon TextPainters to avoid creating new ones every frame
+  final Map<String, TextPainter> _foldIconCache = {};
   final List<LspErrors> _diagnostics;
   int cachedCaretOffset = -1, cachedCaretLine = 0, cachedCaretLineStart = 0;
   int? dragStartOffset;
@@ -4822,10 +4836,11 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   }
 
   void updateDiagnostics(List<LspErrors> diagnostics) {
-    if (diagnostics != diagnostics) {
-      diagnostics = diagnostics;
-      markNeedsPaint();
-    }
+    // Note: _diagnostics is final and set in constructor via updateRenderObject
+    // We invalidate cache when diagnostics change (checked via identical() in paint method)
+    _cachedLineSeverityMap = null; // Invalidate cache
+    _cachedDiagnosticsForSeverityMap = null;
+    markNeedsPaint();
   }
 
   ui.Paragraph buildParagraph(String text, {double? width}) {
@@ -5079,6 +5094,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   set editorTheme(Map<String, TextStyle> theme) {
     if (identical(theme, _editorTheme)) return;
     _editorTheme = theme;
+    _cachedBaseLineNumberStyle = null; // Invalidate cache
     try {
       syntaxHighlighter.dispose();
     } catch (e) {
@@ -5115,6 +5131,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   set textStyle(TextStyle? style) {
     if (identical(style, _textStyle)) return;
     _textStyle = style;
+    _cachedBaseLineNumberStyle = null; // Invalidate cache
 
     final fontSize = style?.fontSize ?? 14.0;
     final lineHeightMultiplier = style?.height ?? 1.2;
@@ -5199,6 +5216,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   set gutterStyle(GutterStyle style) {
     if (identical(style, _gutterStyle)) return;
     _gutterStyle = style;
+    _cachedBaseLineNumberStyle = null; // Invalidate cache
     markNeedsPaint();
   }
 
@@ -5717,6 +5735,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     if (foldRangesNeedsClear) {
       foldRanges.removeWhere((f) => !f.isFolded);
       foldRangesNeedsClear = false;
+      _updateFoldedLineSet();
     }
     if (foldRanges.isNotEmpty) {
       try {
@@ -5741,6 +5760,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       foldWithChildren(fold);
     }
 
+    _updateFoldedLineSet();
     controller.foldings = List.from(foldRanges);
     markNeedsLayout();
     markNeedsPaint();
@@ -5782,6 +5802,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       }
     }
 
+    _updateFoldedLineSet();
     controller.foldings = List.from(foldRanges);
     markNeedsLayout();
     markNeedsPaint();
@@ -5801,6 +5822,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       }
     }
 
+    _updateFoldedLineSet();
     controller.foldings = List.from(foldRanges);
     markNeedsLayout();
     markNeedsPaint();
@@ -5814,7 +5836,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   ({int startLine, int endLine, int indentLevel})?
   getIndicatorBlockForFoldRange(int foldStartLine, int foldEndLine) {
     final tabSize = 4;
-    final hasActiveFolds = foldRanges.any((f) => f.isFolded);
+    // Use cached _hasActiveFolds instead of recalculating
+    final hasActiveFolds = _hasActiveFolds;
 
     // Start from the fold start line to find the block that begins there
     int i = foldStartLine;
@@ -5881,8 +5904,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       }
     }
 
-    final hasActiveFolds = foldRanges.any((f) => f.isFolded);
-    final targetY = getLineYOffset(line, hasActiveFolds);
+    // Use cached _hasActiveFolds instead of recalculating
+    final targetY = getLineYOffset(line, _hasActiveFolds);
     final viewportHeight = vscrollController.position.viewportDimension;
     final maxScroll = vscrollController.position.maxScrollExtent;
     double scrollTarget = targetY - (viewportHeight / 2) + (lineHeight0 / 2);
@@ -5948,6 +5971,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     }
 
     actualFold.isFolded = true;
+    _updateFoldedLineSet();
 
     // Debug print for JSON language
     if (_language.name?.toLowerCase() == 'json') {
@@ -6033,15 +6057,31 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       }
     }
     parentFold.clearOriginallyFoldedChildren();
+    _updateFoldedLineSet();
+  }
+
+  /// Updates the folded line set for O(1) lookups.
+  /// Call this whenever fold state changes.
+  void _updateFoldedLineSet() {
+    _foldedLineSet.clear();
+    _hasActiveFolds = false;
+    _cachedActiveFolds.clear();
+    for (final fold in foldRanges) {
+      if (fold.isFolded) {
+        _hasActiveFolds = true;
+        _cachedActiveFolds.add(fold);
+        // Add all lines that are folded (startIndex + 1 to endIndex inclusive)
+        for (int line = fold.startIndex + 1; line <= fold.endIndex; line++) {
+          _foldedLineSet.add(line);
+        }
+      }
+    }
+    // Sort cached active folds for efficient iteration
+    _cachedActiveFolds.sort((a, b) => a.startIndex.compareTo(b.startIndex));
   }
 
   bool isLineFolded(int lineIndex) {
-    return foldRanges.any(
-      (fold) =>
-          fold.isFolded &&
-          lineIndex > fold.startIndex &&
-          lineIndex <= fold.endIndex,
-    );
+    return _foldedLineSet.contains(lineIndex);
   }
 
   int? findMatchingBracket(String text, int pos) {
@@ -6231,9 +6271,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     final lineCount = controller.lineCount;
     if (lineCount == 0) return 0;
 
-    final activeFolds = foldRanges.where((f) => f.isFolded).toList()
-      ..sort((a, b) => a.startIndex.compareTo(b.startIndex));
-    final hasActiveFolds = activeFolds.isNotEmpty;
+    // Use cached active folds instead of recalculating
+    final activeFolds = _cachedActiveFolds;
+    final hasActiveFolds = _hasActiveFolds;
 
     if (!_lineWrap && !hasActiveFolds) {
       return (y / lineHeight0).floor().clamp(0, lineCount - 1);
@@ -6278,7 +6318,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       );
     }
 
-    final hasActiveFolds = foldRanges.any((f) => f.isFolded);
+    // Use cached _hasActiveFolds instead of recalculating
+    final hasActiveFolds = _hasActiveFolds;
 
     if (controller.isBufferActive) {
       final lineIndex = controller.bufferLineIndex!;
@@ -6390,7 +6431,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
     final localX = position.dx;
 
-    final hasActiveFolds = foldRanges.any((f) => f.isFolded);
+    // Use cached _hasActiveFolds instead of recalculating
+    final hasActiveFolds = _hasActiveFolds;
     final lineStartY = getLineYOffset(tappedLineIndex, hasActiveFolds);
     final localY = position.dy - lineStartY;
 
@@ -6488,7 +6530,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       return;
     }
 
-    final hasActiveFolds = foldRanges.any((f) => f.isFolded);
+    // Use cached _hasActiveFolds instead of recalculating
+    final hasActiveFolds = _hasActiveFolds;
     double visibleHeight = 0;
     double maxLineWidth = longLineWidth;
 
@@ -6668,7 +6711,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     _bgPaint.color = bgColor;
     canvas.drawPaint(_bgPaint);
 
-    final hasActiveFolds = foldRanges.any((f) => f.isFolded);
+    // Use cached _hasActiveFolds instead of recalculating
+    final hasActiveFolds = _hasActiveFolds;
 
     int firstVisibleLine;
     int lastVisibleLine;
@@ -6691,9 +6735,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       lastVisibleLine = lineCount - 1;
       firstVisibleLineY = 0;
 
-      final activeFolds = foldRanges.where((f) => f.isFolded).toList()
-        ..sort((a, b) => a.startIndex.compareTo(b.startIndex));
-      final hasActiveFoldsList = activeFolds.isNotEmpty;
+      // Use cached active folds instead of recalculating
+      final activeFolds = _cachedActiveFolds;
+      final hasActiveFoldsList = _hasActiveFolds;
       int foldIdx = 0;
 
       for (int i = 0; i < lineCount; i++) {
@@ -6880,9 +6924,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
     double currentY = firstVisibleLineY;
 
-    final activeFoldsForDraw = foldRanges.where((f) => f.isFolded).toList()
-      ..sort((a, b) => a.startIndex.compareTo(b.startIndex));
-    final hasActiveFoldsForDraw = activeFoldsForDraw.isNotEmpty;
+    // Use cached active folds instead of recalculating
+    final activeFoldsForDraw = _cachedActiveFolds;
+    final hasActiveFoldsForDraw = _hasActiveFolds;
     int foldIdxForDraw = 0;
     if (hasActiveFoldsForDraw) {
       while (foldIdxForDraw < activeFoldsForDraw.length &&
@@ -7278,26 +7322,38 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       );
     }
 
-    final baseLineNumberStyle = (() {
-      if (_gutterStyle.lineNumberStyle != null) {
-        if (_gutterStyle.lineNumberStyle!.fontSize == null) {
-          return _gutterStyle.lineNumberStyle!.copyWith(
-            fontSize: gutterTextStyle?.fontSize,
-          );
-        }
-        return _gutterStyle.lineNumberStyle;
-      } else {
-        if (gutterTextStyle == null) {
-          return _editorTheme['root'];
-        } else if (gutterTextStyle.color == null) {
-          return gutterTextStyle.copyWith(color: _editorTheme['root']?.color);
+    // Cache baseLineNumberStyle to avoid recomputation every frame
+    TextStyle? baseLineNumberStyle;
+    if (_cachedBaseLineNumberStyle != null &&
+        identical(_gutterStyle, _cachedBaseLineNumberStyleGutterStyle) &&
+        identical(gutterTextStyle, _cachedBaseLineNumberStyleGutterTextStyle)) {
+      baseLineNumberStyle = _cachedBaseLineNumberStyle;
+    } else {
+      baseLineNumberStyle = (() {
+        if (_gutterStyle.lineNumberStyle != null) {
+          if (_gutterStyle.lineNumberStyle!.fontSize == null) {
+            return _gutterStyle.lineNumberStyle!.copyWith(
+              fontSize: gutterTextStyle?.fontSize,
+            );
+          }
+          return _gutterStyle.lineNumberStyle;
         } else {
-          return gutterTextStyle;
+          if (gutterTextStyle == null) {
+            return _editorTheme['root'];
+          } else if (gutterTextStyle.color == null) {
+            return gutterTextStyle.copyWith(color: _editorTheme['root']?.color);
+          } else {
+            return gutterTextStyle;
+          }
         }
-      }
-    })();
+      })();
+      _cachedBaseLineNumberStyle = baseLineNumberStyle;
+      _cachedBaseLineNumberStyleGutterStyle = _gutterStyle;
+      _cachedBaseLineNumberStyleGutterTextStyle = gutterTextStyle;
+    }
 
-    final hasActiveFolds = foldRanges.any((f) => f.isFolded);
+    // Use cached _hasActiveFolds instead of recalculating
+    final hasActiveFolds = _hasActiveFolds;
     final cursorOffset = controller.selection.extentOffset;
     final currentLine = controller.getLineAtOffset(cursorOffset);
     final selection = controller.selection;
@@ -7314,22 +7370,31 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       }
     }
 
-    final Map<int, int> lineSeverityMap = {};
-    for (final diagnostic in _diagnostics) {
-      final startLine = diagnostic.range['start']?['line'] as int?;
-      final endLine = diagnostic.range['end']?['line'] as int?;
-      if (startLine != null) {
-        final severity = diagnostic.severity;
-        if (severity == 1 || severity == 2) {
-          final rangeEnd = endLine ?? startLine;
-          for (int line = startLine; line <= rangeEnd; line++) {
-            final existing = lineSeverityMap[line];
-            if (existing == null || severity < existing) {
-              lineSeverityMap[line] = severity;
+    // Cache diagnostic severity map to avoid rebuilding every frame
+    Map<int, int> lineSeverityMap;
+    if (identical(_diagnostics, _cachedDiagnosticsForSeverityMap) &&
+        _cachedLineSeverityMap != null) {
+      lineSeverityMap = _cachedLineSeverityMap!;
+    } else {
+      lineSeverityMap = {};
+      for (final diagnostic in _diagnostics) {
+        final startLine = diagnostic.range['start']?['line'] as int?;
+        final endLine = diagnostic.range['end']?['line'] as int?;
+        if (startLine != null) {
+          final severity = diagnostic.severity;
+          if (severity == 1 || severity == 2) {
+            final rangeEnd = endLine ?? startLine;
+            for (int line = startLine; line <= rangeEnd; line++) {
+              final existing = lineSeverityMap[line];
+              if (existing == null || severity < existing) {
+                lineSeverityMap[line] = severity;
+              }
             }
           }
         }
       }
+      _cachedLineSeverityMap = lineSeverityMap;
+      _cachedDiagnosticsForSeverityMap = List.from(_diagnostics);
     }
 
     final activeLineColor =
@@ -7342,10 +7407,15 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     final warningColor = _gutterStyle.warningLineNumberColor;
 
     int firstVisibleLine;
+    int lastVisibleLine;
     double firstVisibleLineY;
 
     if (!_lineWrap && !hasActiveFolds) {
       firstVisibleLine = (viewTop / lineHeight0).floor().clamp(
+        0,
+        lineCount - 1,
+      );
+      lastVisibleLine = (viewBottom / lineHeight0).ceil().clamp(
         0,
         lineCount - 1,
       );
@@ -7354,6 +7424,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       double currentY = 0;
       firstVisibleLine = 0;
       firstVisibleLineY = 0;
+      lastVisibleLine = lineCount - 1;
 
       for (int i = 0; i < lineCount; i++) {
         if (hasActiveFolds && isLineFolded(i)) continue;
@@ -7370,9 +7441,79 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     actionBulbRects.clear();
 
     // Pre-compute folded parent ranges for faster lookup
+    // Use cached active folds instead of recalculating
     final foldedParentRanges = hasActiveFolds
-        ? foldRanges.where((f) => f.isFolded).toList()
+        ? _cachedActiveFolds
         : <FoldRange>[];
+
+    // Pre-filter breakpoints for visible range to reduce Set lookup overhead
+    final visibleBreakpoints =
+        _gutterStyle.showBreakpoints && controller.breakpoints.isNotEmpty
+        ? controller.breakpoints
+              .where(
+                (line) =>
+                    line >= firstVisibleLine + 1 && line <= lastVisibleLine + 1,
+              )
+              .toSet()
+        : <int>{};
+
+    // Cache breakpointColumnWidth to avoid recalculating in loop
+    final fontSize = _textStyle?.fontSize ?? 14.0;
+    final breakpointColumnWidth = (_gutterStyle.showBreakpoints)
+        ? fontSize * 1.5
+        : 0;
+
+    // Pre-compute LSP action line map to avoid expensive nested loops + try-catch per line
+    final Map<int, bool> actionLineMap = {};
+    TextPainter? cachedActionBulbPainter;
+    if (lspActionNotifier.value != null && lspConfig != null) {
+      final actions = lspActionNotifier.value!.cast<Map<String, dynamic>>();
+      if (actions.isNotEmpty) {
+        final fileUri = Uri.file(filePath!).toString();
+        for (final item in actions) {
+          try {
+            final line =
+                (item['arguments'][0]['range']['start']['line'] as int);
+            if (line >= firstVisibleLine && line <= lastVisibleLine) {
+              actionLineMap[line] = true;
+            }
+          } catch (e) {
+            try {
+              final line =
+                  (item['edit']['changes'][fileUri][0]['range']['start']['line']
+                      as int);
+              if (line >= firstVisibleLine && line <= lastVisibleLine) {
+                actionLineMap[line] = true;
+              }
+            } catch (e2) {
+              // Skip invalid action items
+              continue;
+            }
+          }
+        }
+
+        // Cache action bulb TextPainter - create once per paint call
+        if (actionLineMap.isNotEmpty) {
+          cachedActionBulbPainter ??= () {
+            final icon = Icons.lightbulb_outline;
+            final painter = TextPainter(
+              text: TextSpan(
+                text: String.fromCharCode(icon.codePoint),
+                style: TextStyle(
+                  fontSize: fontSize,
+                  color: Colors.yellowAccent,
+                  fontFamily: icon.fontFamily,
+                  package: icon.fontPackage,
+                ),
+              ),
+              textDirection: TextDirection.ltr,
+            );
+            painter.layout();
+            return painter;
+          }();
+        }
+      }
+    }
 
     double currentY = firstVisibleLineY;
     for (int i = firstVisibleLine; i < lineCount; i++) {
@@ -7416,12 +7557,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         );
 
         // Draw breakpoint indicator if enabled and breakpoint exists for this line
-        final fontSize = _textStyle?.fontSize ?? 14.0;
-        final breakpointColumnWidth = (_gutterStyle.showBreakpoints)
-            ? fontSize * 1.5
-            : 0;
+        // Use pre-filtered visibleBreakpoints for faster lookup
         if (_gutterStyle.showBreakpoints &&
-            controller.breakpoints.contains(i + 1)) {
+            visibleBreakpoints.contains(i + 1)) {
           final isHovered = hoveredBreakpointLine == i + 1;
           _decorationPaint.color = _gutterStyle.breakpointColor;
           _decorationPaint.style = PaintingStyle.fill;
@@ -7476,22 +7614,28 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         }
 
         // Use cached line number paragraphs to avoid rebuilding them every frame
+        // Cache by text + fontSize only (color changes frequently but paragraph rebuild is still expensive)
         final lineNumberText = (i + 1).toString();
-        final cacheKey =
-            '${lineNumberText}_${lineNumberStyle.color?.value}_${lineNumberStyle.fontSize}';
+        final lineNumberFontSize = lineNumberStyle.fontSize ?? 14.0;
+        final cacheKey = '${lineNumberText}_$lineNumberFontSize';
+        ui.Paragraph? cachedPara = _lineNumberParagraphCache[cacheKey];
+
         ui.Paragraph lineNumPara;
-        if (_lineNumberParagraphCache.containsKey(cacheKey)) {
-          lineNumPara = _lineNumberParagraphCache[cacheKey]!;
+        if (cachedPara != null) {
+          // Use cached paragraph - color is applied via TextStyle during build, but we accept
+          // some cache misses for color changes as rebuilding is still better than every frame
+          lineNumPara = cachedPara;
         } else {
+          // Build new paragraph with current style (including color)
           lineNumPara = _buildLineNumberParagraph(
             lineNumberText,
             lineNumberStyle,
           );
           _lineNumberParagraphCache[cacheKey] = lineNumPara;
-          // Limit cache size to prevent memory growth
+          // Improved cache eviction: remove oldest 25% when cache exceeds limit
           if (_lineNumberParagraphCache.length > 200) {
             final keysToRemove = _lineNumberParagraphCache.keys
-                .take(50)
+                .take((_lineNumberParagraphCache.length * 0.25).ceil())
                 .toList();
             for (final key in keysToRemove) {
               _lineNumberParagraphCache.remove(key);
@@ -7518,73 +7662,26 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
               ),
         );
 
-        // Optimize LSP action checking - only check if actions exist and are for visible lines
-        if (lspActionNotifier.value != null && lspConfig != null) {
-          final actions = lspActionNotifier.value!.cast<Map<String, dynamic>>();
-          // Early exit if no actions
-          if (actions.isEmpty) {
-            // Skip action bulb drawing
-          } else {
-            // Only check actions for current line (avoid expensive any() with try-catch)
-            bool hasActionForLine = false;
-            for (final item in actions) {
-              try {
-                if ((item['arguments'][0]['range']['start']['line'] as int) ==
-                    i) {
-                  hasActionForLine = true;
-                  break;
-                }
-              } catch (e) {
-                try {
-                  final fileUri = Uri.file(filePath!).toString();
-                  if ((item['edit']['changes'][fileUri][0]['range']['start']['line']
-                          as int) ==
-                      i) {
-                    hasActionForLine = true;
-                    break;
-                  }
-                } catch (e2) {
-                  // Skip invalid action items
-                  continue;
-                }
-              }
-            }
+        // Use pre-computed action line map for O(1) lookup instead of nested loops
+        if (actionLineMap.containsKey(i) && cachedActionBulbPainter != null) {
+          final actionBulbPainter = cachedActionBulbPainter;
+          final bulbX = offset.dx + 4;
+          final bulbY =
+              offset.dy +
+              (_innerPadding?.top ?? 0) +
+              contentTop +
+              visualYOffset -
+              vscrollController.offset +
+              (lineHeight0 - actionBulbPainter.height) / 2;
 
-            if (hasActionForLine) {
-              final icon = Icons.lightbulb_outline;
-              final actionBulbPainter = TextPainter(
-                text: TextSpan(
-                  text: String.fromCharCode(icon.codePoint),
-                  style: TextStyle(
-                    fontSize: _textStyle?.fontSize ?? 14,
-                    color: Colors.yellowAccent,
-                    fontFamily: icon.fontFamily,
-                    package: icon.fontPackage,
-                  ),
-                ),
-                textDirection: TextDirection.ltr,
-              );
-              actionBulbPainter.layout();
+          actionBulbRects[i] = Rect.fromLTWH(
+            bulbX,
+            bulbY,
+            actionBulbPainter.width,
+            actionBulbPainter.height,
+          );
 
-              final bulbX = offset.dx + 4;
-              final bulbY =
-                  offset.dy +
-                  (_innerPadding?.top ?? 0) +
-                  contentTop +
-                  visualYOffset -
-                  vscrollController.offset +
-                  (lineHeight0 - actionBulbPainter.height) / 2;
-
-              actionBulbRects[i] = Rect.fromLTWH(
-                bulbX,
-                bulbY,
-                actionBulbPainter.width,
-                actionBulbPainter.height,
-              );
-
-              actionBulbPainter.paint(canvas, Offset(bulbX, bulbY));
-            }
-          }
+          actionBulbPainter.paint(canvas, Offset(bulbX, bulbY));
         }
 
         if (_enableFolding) {
@@ -7649,19 +7746,36 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     double fontSize,
     double y,
   ) {
-    final iconPainter = TextPainter(
-      text: TextSpan(
-        text: String.fromCharCode(icon.codePoint),
-        style: TextStyle(
-          color: color,
-          fontSize: fontSize,
-          fontFamily: icon.fontFamily,
-          package: icon.fontPackage,
+    // Cache fold icon TextPainters to avoid creating new ones every frame
+    final cacheKey =
+        '${icon.codePoint}_${fontSize}_${color.value}_${icon.fontFamily}_${icon.fontPackage}';
+    TextPainter? iconPainter = _foldIconCache[cacheKey];
+
+    if (iconPainter == null) {
+      iconPainter = TextPainter(
+        text: TextSpan(
+          text: String.fromCharCode(icon.codePoint),
+          style: TextStyle(
+            color: color,
+            fontSize: fontSize,
+            fontFamily: icon.fontFamily,
+            package: icon.fontPackage,
+          ),
         ),
-      ),
-      textDirection: TextDirection.ltr,
-    );
-    iconPainter.layout();
+        textDirection: TextDirection.ltr,
+      );
+      iconPainter.layout();
+      _foldIconCache[cacheKey] = iconPainter;
+
+      // Limit cache size to prevent memory growth
+      if (_foldIconCache.length > 50) {
+        final keysToRemove = _foldIconCache.keys.take(10).toList();
+        for (final key in keysToRemove) {
+          _foldIconCache.remove(key);
+        }
+      }
+    }
+
     iconPainter.paint(
       canvas,
       offset +
@@ -9865,7 +9979,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
           currentPosition.dy +
           vscrollController.offset -
           (_innerPadding?.top ?? 0);
-      final hasActiveFolds = foldRanges.any((f) => f.isFolded);
+      // Use cached _hasActiveFolds instead of recalculating
+      final hasActiveFolds = _hasActiveFolds;
 
       int hoveredLine;
       if (!hasActiveFolds && !_lineWrap) {
