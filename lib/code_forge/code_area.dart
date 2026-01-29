@@ -1,7 +1,16 @@
 import 'dart:async';
-import 'package:universal_io/io.dart';
 import 'dart:math';
 import 'dart:ui' as ui;
+
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:markdown_widget/markdown_widget.dart';
+import 'package:re_highlight/languages/dart.dart';
+import 'package:re_highlight/re_highlight.dart';
+import 'package:re_highlight/styles/vs2015.dart';
+import 'package:universal_io/io.dart';
 
 import '../LSP/lsp.dart';
 import 'controller.dart';
@@ -10,15 +19,6 @@ import 'scroll.dart';
 import 'styling.dart';
 import 'syntax_highlighter.dart';
 import 'undo_redo.dart';
-
-import 'package:re_highlight/re_highlight.dart';
-import 'package:re_highlight/styles/vs2015.dart';
-import 'package:re_highlight/languages/dart.dart';
-import 'package:markdown_widget/markdown_widget.dart';
-import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 
 /// A highly customizable code editor widget for Flutter.
 ///
@@ -3234,6 +3234,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   int _cachedCaretOffset = -1, _cachedCaretLine = 0, _cachedCaretLineStart = 0;
   int? _dragStartOffset;
   Timer? _selectionTimer, _hoverTimer;
+  int? _hoveredBreakpointLine;
   Offset? _pointerDownPosition;
   Offset _currentPosition = Offset.zero;
   bool _enableFolding, _enableGuideLines, _enableGutter, _enableGutterDivider;
@@ -5334,6 +5335,29 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       if (contentTop + visualYOffset > viewBottom) break;
 
       if (contentTop + visualYOffset + lineHeight >= viewTop) {
+        final screenY =
+            (innerPadding?.top ?? 0) +
+            contentTop +
+            visualYOffset -
+            vscrollController.offset;
+
+        // Draw breakpoint circle
+        final hasBreakpoint = controller.breakpoints.contains(i);
+        final isHovered = _hoveredBreakpointLine == i;
+
+        if (hasBreakpoint || isHovered) {
+          final circleRadius = (textStyle?.fontSize ?? 14) / 3;
+          final paint = Paint()
+            ..color = hasBreakpoint ? Colors.red : Colors.red.withOpacity(0.3)
+            ..style = PaintingStyle.fill;
+
+          canvas.drawCircle(
+            offset + Offset(4.0 + circleRadius, screenY + lineHeight / 2),
+            circleRadius,
+            paint,
+          );
+        }
+
         _drawGutterDecorations(
           canvas,
           offset,
@@ -7244,6 +7268,27 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     final textOffset = _getTextOffsetFromPosition(contentPosition);
 
     if (event is PointerHoverEvent) {
+      // Check for breakpoint hover
+      final circleRadius = (textStyle?.fontSize ?? 14) / 3;
+      final circleRightBound = 4.0 + (circleRadius * 2) + 4.0;
+
+      if (enableGutter && localPosition.dx < circleRightBound) {
+        final clickY =
+            localPosition.dy +
+            vscrollController.offset -
+            (innerPadding?.top ?? 0);
+        if (clickY >= 0) {
+          final hoveredLine = _findVisibleLineByYPosition(clickY);
+          if (_hoveredBreakpointLine != hoveredLine) {
+            _hoveredBreakpointLine = hoveredLine;
+            markNeedsPaint();
+          }
+        }
+      } else if (_hoveredBreakpointLine != null) {
+        _hoveredBreakpointLine = null;
+        markNeedsPaint();
+      }
+
       if (hoverNotifier.value == null) {
         _hoverTimer?.cancel();
       }
@@ -7283,6 +7328,16 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       }
       if (contextMenuOffsetNotifier.value.dx >= 0) {
         contextMenuOffsetNotifier.value = const Offset(-1, -1);
+      }
+
+      // Check for breakpoint click
+      final circleRadius = (textStyle?.fontSize ?? 14) / 3;
+      final circleX = 4.0 + circleRadius;
+      if (enableGutter &&
+          (localPosition.dx - circleX).abs() < circleRadius + 4) {
+        final clickedLine = _findVisibleLineByYPosition(clickY);
+        controller.toggleBreakpoint(clickedLine);
+        return;
       }
 
       if (lspActionNotifier.value != null && _actionBulbRects.isNotEmpty) {

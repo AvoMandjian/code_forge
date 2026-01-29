@@ -333,6 +333,9 @@ class CodeForgeController implements DeltaTextInputClient {
   /// Gutter decorations for showing indicators in the gutter (git status, breakpoints, etc.)
   final List<GutterDecoration> _gutterDecorations = [];
 
+  /// Set of line numbers (0-based) where breakpoints are set
+  final Set<int> _breakpoints = {};
+
   /// Ghost text for AI suggestions or inline completions
   GhostText? _ghostText;
 
@@ -346,6 +349,9 @@ class CodeForgeController implements DeltaTextInputClient {
   /// Returns an unmodifiable view of gutter decorations
   List<GutterDecoration> get gutterDecorations =>
       List.unmodifiable(_gutterDecorations);
+
+  /// Returns an unmodifiable view of breakpoints
+  Set<int> get breakpoints => Set.unmodifiable(_breakpoints);
 
   /// Returns the current ghost text, if any
   GhostText? get ghostText => _ghostText;
@@ -446,6 +452,45 @@ class CodeForgeController implements DeltaTextInputClient {
     _gutterDecorations.clear();
     decorationsChanged = true;
     notifyListeners();
+  }
+
+  /// Toggles a breakpoint at the specified line number (0-based).
+  void toggleBreakpoint(int line) {
+    if (line < 0 || line >= lineCount) return;
+    if (_breakpoints.contains(line)) {
+      _breakpoints.remove(line);
+    } else {
+      _breakpoints.add(line);
+    }
+    notifyListeners();
+  }
+
+  /// Adds a breakpoint at the specified line number (0-based).
+  void addBreakpoint(int line) {
+    if (line < 0 || line >= lineCount) return;
+    if (_breakpoints.add(line)) {
+      notifyListeners();
+    }
+  }
+
+  /// Removes a breakpoint at the specified line number (0-based).
+  void removeBreakpoint(int line) {
+    if (_breakpoints.remove(line)) {
+      notifyListeners();
+    }
+  }
+
+  /// Clears all breakpoints.
+  void clearBreakpoints() {
+    if (_breakpoints.isNotEmpty) {
+      _breakpoints.clear();
+      notifyListeners();
+    }
+  }
+
+  /// Checks if a breakpoint exists at the specified line number (0-based).
+  bool hasBreakpoint(int line) {
+    return _breakpoints.contains(line);
   }
 
   /// Sets the ghost text (inline suggestion) at a specific position.
