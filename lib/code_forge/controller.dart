@@ -4,6 +4,7 @@ import 'dart:io';
 import '../code_forge.dart';
 import 'rope.dart';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -54,6 +55,8 @@ class CodeForgeController implements DeltaTextInputClient {
   bool _usesCclsSemanticHighlight = false;
   List<dynamic> _suggestions = [];
   StreamSubscription? _lspResponsesSubscription;
+  Set<String> _wordCache = {};
+  Timer? _debounceTimer;
 
   CodeForgeController({this.lspConfig}) {
     if (lspConfig != null) {
@@ -177,49 +180,51 @@ class CodeForgeController implements DeltaTextInputClient {
         }
       });
     } else {
-      _listeners.add(() {
-        _previousValue = text;
-        _prevSelection = selection;
+      _listeners.add(() async {
+        _debounceTimer?.cancel();
+        _debounceTimer = Timer(const Duration(milliseconds: 200), () async {
+          if (text != _previousValue) {
+            _wordCache = await compute(CodeForgeController._extractWords, text);
+          }
+          _previousValue = text;
+          _prevSelection = selection;
 
-        final cursorPosition = selection.extentOffset;
-        final prefix = getCurrentWordPrefix(text, cursorPosition);
-        if (_isTyping && selection.extentOffset > 0) {
-          final regExp = RegExp(r'\b\w+\b');
-          final List<String> words = regExp
-              .allMatches(text)
-              .map((m) => m.group(0)!)
-              .toList();
-
-          String currentWord = '';
-          if (text.isNotEmpty) {
-            final match = RegExp(r'\w+$').firstMatch(text);
-            if (match != null) {
-              currentWord = match.group(0)!;
+          final cursorPosition = selection.extentOffset;
+          final prefix = getCurrentWordPrefix(text, cursorPosition);
+          if (_isTyping && selection.extentOffset > 0) {
+            String currentWord = '';
+            if (text.isNotEmpty) {
+              final match = RegExp(
+                r'\w+$',
+              ).firstMatch(text.substring(0, cursorPosition));
+              if (match != null) {
+                currentWord = match.group(0)!;
+              }
             }
-          }
 
-          _suggestions.clear();
+            _suggestions.clear();
 
-          for (final i in words) {
-            if (!_suggestions.contains(i) && i != currentWord) {
-              _suggestions.add(i);
+            for (final i in _wordCache) {
+              if (!_suggestions.contains(i) && i != currentWord) {
+                _suggestions.add(i);
+              }
             }
-          }
-          if (prefix.isNotEmpty) {
-            _suggestions = _suggestions
-                .where((s) => s.startsWith(prefix))
-                .toList();
-          }
-          _sortSuggestions(prefix);
-          final triggerChar = text[cursorPosition - 1];
-          if (!_isAlpha(triggerChar)) {
+            if (prefix.isNotEmpty) {
+              _suggestions = _suggestions
+                  .where((s) => s.startsWith(prefix))
+                  .toList();
+            }
+            _sortSuggestions(prefix);
+            final triggerChar = text[cursorPosition - 1];
+            if (!_isAlpha(triggerChar)) {
+              if (!_isDisposed) suggestionsNotifier.value = null;
+              return;
+            }
+            if (!_isDisposed) suggestionsNotifier.value = _suggestions;
+          } else {
             if (!_isDisposed) suggestionsNotifier.value = null;
-            return;
           }
-          if (!_isDisposed) suggestionsNotifier.value = _suggestions;
-        } else {
-          if (!_isDisposed) suggestionsNotifier.value = null;
-        }
+        });
       });
     }
   }
@@ -307,11 +312,11 @@ class CodeForgeController implements DeltaTextInputClient {
   /// The range of text that has been modified and needs reprocessing.
   TextRange? dirtyRegion;
 
-  /// List of all fold ranges detected in the document.
+  /// Map of all fold ranges detected in the document, keyed by start line index.
   ///
-  /// This list is automatically populated based on code structure
+  /// This map is automatically populated based on code structure
   /// (braces, indentation, etc.) when folding is enabled.
-  List<FoldRange> foldings = [];
+  Map<int, FoldRange?> foldings = {};
 
   /// List of search highlights to display in the editor.
   ///
@@ -741,10 +746,7 @@ class CodeForgeController implements DeltaTextInputClient {
     while (targetLine < lineCount && _isLineInFoldedRegion(targetLine)) {
       final foldStart = _getFoldStartForLine(targetLine);
       if (foldStart != null) {
-        final fold = foldings.firstWhere(
-          (f) => f.startIndex == foldStart && f.isFolded,
-          orElse: () => FoldRange(targetLine, targetLine),
-        );
+        final fold = foldings[foldStart] ?? FoldRange(targetLine, targetLine);
         targetLine = fold.endIndex + 1;
       } else {
         targetLine++;
@@ -820,6 +822,36 @@ class CodeForgeController implements DeltaTextInputClient {
       );
     } else {
       setSelectionSilently(TextSelection.collapsed(offset: lineEnd));
+    }
+  }
+
+  /// Moves the cursor to the beginning of the document.
+  ///
+  /// If [isShiftPressed] is true, extends the selection to the document start.
+  void pressDocumentHomeKey({bool isShiftPressed = false}) {
+    if (isShiftPressed) {
+      setSelectionSilently(
+        TextSelection(baseOffset: selection.baseOffset, extentOffset: 0),
+      );
+    } else {
+      setSelectionSilently(TextSelection.collapsed(offset: 0));
+    }
+  }
+
+  /// Moves the cursor to the end of the document.
+  ///
+  /// If [isShiftPressed] is true, extends the selection to the document end.
+  void pressDocumentEndKey({bool isShiftPressed = false}) {
+    final endOffset = length;
+    if (isShiftPressed) {
+      setSelectionSilently(
+        TextSelection(
+          baseOffset: selection.baseOffset,
+          extentOffset: endOffset,
+        ),
+      );
+    } else {
+      setSelectionSilently(TextSelection.collapsed(offset: endOffset));
     }
   }
 
@@ -910,8 +942,9 @@ class CodeForgeController implements DeltaTextInputClient {
   String get visibleText {
     if (foldings.isEmpty) return text;
     final visLines = List<String>.from(lines);
-    for (final fold in foldings.reversed) {
-      if (!fold.isFolded) continue;
+    for (final fold
+        in foldings.values.where((f) => f != null).toList().reversed) {
+      if (!fold!.isFolded) continue;
       final start = fold.startIndex + 1;
       final end = fold.endIndex + 1;
       final safeStart = start.clamp(0, visLines.length);
@@ -999,7 +1032,7 @@ class CodeForgeController implements DeltaTextInputClient {
 
     _selection = newSelection;
     selectionOnly = true;
-    _isTyping = false; // Explicit selection change resets typing state
+    _isTyping = false;
 
     if (connection != null && connection!.attached) {
       _lastSentText = text;
@@ -1160,8 +1193,9 @@ class CodeForgeController implements DeltaTextInputClient {
     final cursorPosition = selection.extentOffset;
     final safePosition = cursorPosition.clamp(0, _rope.length);
     final currentLine = _rope.getLineAtOffset(safePosition);
-    final isFolded = foldings.any(
+    final isFolded = foldings.values.any(
       (fold) =>
+          fold != null &&
           fold.isFolded &&
           currentLine > fold.startIndex &&
           currentLine <= fold.endIndex,
@@ -1182,6 +1216,30 @@ class CodeForgeController implements DeltaTextInputClient {
     } else {
       replaceRange(safePosition, safePosition, textToInsert);
     }
+  }
+
+  /// Inserts text at the specified line and character position.
+  ///
+  /// [line] is zero-based (0 for the first line).
+  /// [character] is zero-based column position within the line.
+  /// The character position will be clamped to the line's length.
+  void insertText(String text, int line, int character) {
+    if (readOnly) return;
+
+    _flushBuffer();
+
+    // Clamp line to valid range
+    final clampedLine = line.clamp(0, lineCount - 1);
+
+    // Get the line text to clamp character position
+    final lineText = getLineText(clampedLine);
+    final clampedChar = character.clamp(0, lineText.length);
+
+    // Calculate the offset
+    final offset = getLineStartOffset(clampedLine) + clampedChar;
+
+    // Insert the text
+    replaceRange(offset, offset, text);
   }
 
   void _syncToConnection() {
@@ -1425,7 +1483,14 @@ class CodeForgeController implements DeltaTextInputClient {
   @override
   void showToolbar() {}
   @override
-  void updateEditingValue(TextEditingValue value) {}
+  void updateEditingValue(TextEditingValue value) {
+    text = value.text;
+    selection = value.selection;
+    dirtyRegion = TextRange(start: 0, end: value.text.length);
+    dirtyLine = null;
+    notifyListeners();
+  }
+
   @override
   void updateFloatingCursor(RawFloatingCursorPoint point) {}
 
@@ -1922,6 +1987,14 @@ class CodeForgeController implements DeltaTextInputClient {
     return text.substring(start, safeOffset);
   }
 
+  /// Refetch the current file to delflect text changes
+  /// Only works if a valid file is provided via `filePath`.
+  void refetchFile() {
+    if (_openedFile != null) {
+      text = File(_openedFile!).readAsStringSync();
+    }
+  }
+
   /// Disposes of the controller and releases resources.
   ///
   /// Call this method when the controller is no longer needed to prevent
@@ -1929,6 +2002,7 @@ class CodeForgeController implements DeltaTextInputClient {
   void dispose() {
     _isDisposed = true;
     _semanticTokenTimer?.cancel();
+    _debounceTimer?.cancel();
     _flushTimer?.cancel();
     _codeActionTimer?.cancel();
     _lspResponsesSubscription?.cancel();
@@ -2096,7 +2170,12 @@ class CodeForgeController implements DeltaTextInputClient {
 
   Future<void> _fetchSemanticTokensFull() async {
     if (lspConfig == null) return;
-    if (_usesCclsSemanticHighlight) return;
+    if (_usesCclsSemanticHighlight) {
+      if (!_isDisposed) {
+        semanticTokens.value = (null, _semanticTokensVersion++);
+      }
+      return;
+    }
 
     try {
       final tokens = await lspConfig!.getSemanticTokensFull(openedFile!);
@@ -2883,8 +2962,9 @@ class CodeForgeController implements DeltaTextInputClient {
   }
 
   bool _isLineInFoldedRegion(int lineIndex) {
-    return foldings.any(
+    return foldings.values.any(
       (fold) =>
+          fold != null &&
           fold.isFolded &&
           lineIndex > fold.startIndex &&
           lineIndex <= fold.endIndex,
@@ -2892,8 +2972,8 @@ class CodeForgeController implements DeltaTextInputClient {
   }
 
   int? _getFoldStartForLine(int lineIndex) {
-    for (final fold in foldings) {
-      if (fold.isFolded &&
+    for (final fold in foldings.values.where((f) => f != null)) {
+      if (fold!.isFolded &&
           lineIndex > fold.startIndex &&
           lineIndex <= fold.endIndex) {
         return fold.startIndex;
@@ -2903,10 +2983,15 @@ class CodeForgeController implements DeltaTextInputClient {
   }
 
   FoldRange? _getFoldRangeAtCurrentLine(int lineIndex) {
-    try {
-      return foldings.firstWhere((f) => f.startIndex == lineIndex);
-    } catch (_) {
-      return null;
+    return foldings[lineIndex];
+  }
+
+  static Set<String> _extractWords(String text) {
+    final regExp = RegExp(r'\b\w+\b');
+    final set = <String>{};
+    for (final match in regExp.allMatches(text)) {
+      set.add(match.group(0)!);
     }
+    return set;
   }
 }

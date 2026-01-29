@@ -37,9 +37,13 @@
 >
 > CodeForge does **not** support Flutter web, as it relies on `dart:io` for core functionality. Web support may be considered in the future if dependencies allow.
 
-> [!WARNING]
->
-> The current version contains a critical bug causing the app to crash when handling large text. This issue was inadvertently introduced in version 5.1.0 and will be addressed in the upcoming major release, 6.0.0, scheduled for February 1-2.
+## What's new in 6.0.0
+- FIX: [#15](https://github.com/heckmon/code_forge/issues/15)
+- FIX: [#16](https://github.com/heckmon/code_forge/issues/16)
+- FIX: [#18](https://github.com/heckmon/code_forge/issues/18)
+- FIX: Highlight glitch in ccls LSP server.
+- FEATURE: Added `enableKeybordSuggestions` and `keyboardType` parameters as requested in [#20](https://github.com/heckmon/code_forge/issues/20)
+- ENHANCEMENT: Enahanced large text handling by caching fold ranges and bracket matches.
 
 ## ✨ Why CodeForge?
 
@@ -152,7 +156,7 @@ Add CodeForge to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  code_forge: ^5.2.0
+  code_forge: ^6.0.0
 ```
 
 Then run:
@@ -458,6 +462,7 @@ CodeForge(
   enableGuideLines: true,     // Indentation guides
   enableGutterDivider: false, // Gutter separator line
   enableSuggestions: true,    // Autocomplete
+  enableKeyboardSuggestions: true // Suggestions from the OS keyboard
   
   // Behavior
   readOnly: false,            // Read-only mode
@@ -477,23 +482,34 @@ CodeForge(
 | Property | Type | Description |
 |----------|------|-------------|
 | `controller` | `CodeForgeController?` | Text and selection controller |
+| `findController` | `FindController?` | Finder controller for managing search functionality |
 | `undoController` | `UndoRedoController?` | Undo/redo history controller |
-| `language` | `Mode?` | Syntax highlighting language |
 | `editorTheme` | `Map<String, TextStyle>?` | Syntax color theme |
+| `language` | `Mode?` | Syntax highlighting language |
+| `focusNode` | `FocusNode?` | Focus node for managing keyboard focus |
 | `textStyle` | `TextStyle?` | Base text style |
-| `lspConfig` | `LspConfig?` | LSP server configuration |
-| `aiCompletion` | `AiCompletion?` | AI completion settings |
-| `filePath` | `String?` | File path for LSP |
-| `initialText` | `String?` | Initial editor content |
-| `readOnly` | `bool` | Read-only mode |
-| `enableFolding` | `bool` | Enable code folding |
-| `enableGutter` | `bool` | Show line numbers |
-| `enableGuideLines` | `bool` | Show indentation guides |
+| `ghostTextStyle` | `TextStyle?` | Text style for ghost text (inline suggestions) |
+| `innerPadding` | `EdgeInsets?` | Padding inside the editor content area |
+| `verticalScrollController` | `ScrollController?` | Custom scroll controller for vertical scrolling |
+| `horizontalScrollController` | `ScrollController?` | Custom scroll controller for horizontal scrolling |
 | `selectionStyle` | `CodeSelectionStyle?` | Selection styling |
 | `gutterStyle` | `GutterStyle?` | Gutter styling |
 | `suggestionStyle` | `SuggestionStyle?` | Suggestion popup styling |
 | `hoverDetailsStyle` | `HoverDetailsStyle?` | Hover popup styling |
-| `matchHighlightStyle` | `MatchHighlightStyle?` | Highlight the matching words <br> in the controller.findWord() API |
+| `matchHighlightStyle` | `MatchHighlightStyle?` | Highlight the matching words in the controller.findWord() API |
+| `filePath` | `String?` | File path for LSP |
+| `initialText` | `String?` | Initial editor content |
+| `readOnly` | `bool` | Read-only mode |
+| `lineWrap` | `bool` | Line wrapping |
+| `autoFocus` | `bool` | Auto-focus on mount |
+| `enableFolding` | `bool` | Enable code folding |
+| `enableGuideLines` | `bool` | Show indentation guides |
+| `enableGutter` | `bool` | Show line numbers |
+| `enableGutterDivider` | `bool` | Show gutter divider |
+| `enableSuggestions` | `bool` | Enable autocomplete suggestions |
+| `enableKeyboardSuggestions` | `bool` | Show auto completions in OS virtual keyboard |
+| `keyboardType` | `TextInputType` | Type of virtual keyboard |
+| `finderBuilder` | `PreferredSizeWidget Function(FindController findController)?` | Builder for custom Finder widget |
 
 ### CodeForgeController
 

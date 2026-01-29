@@ -190,3 +190,11 @@ This release establishes **CodeForge** as a powerful, production-ready code edit
 
 ## 5.2.0
 - ENHANCEMENT: Greatly enhanced large text handling.
+
+## 6.0.0
+- FIX: [#15](https://github.com/heckmon/code_forge/issues/15)
+- FIX: [#16](https://github.com/heckmon/code_forge/issues/16)
+- FIX: [#18](https://github.com/heckmon/code_forge/issues/18)
+- FIX: Highlight glitch in ccls LSP server.
+- FEATURE: Added `enableKeybordSuggestions` and `keyboardType` parameters as requested in [#20](https://github.com/heckmon/code_forge/issues/20)
+- ENHANCEMENT: Enahanced large text handling by caching fold ranges and bracket matches.

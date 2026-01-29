@@ -1,6 +1,6 @@
 name: code_forge
 description: "A sophisticated code editor package with AI completion, LSP support, syntax highlighting, and advanced editing capabilities."
-version: 5.2.0
+version: 6.0.0
 homepage: https://github.com/heckmon/code_forge
 
 environment:
@@ -11,7 +11,6 @@ dependencies:
   flutter:
     sdk: flutter  
   markdown_widget: ^2.3.2+8
-  meta: ^1.17.0
   re_highlight: ^0.0.3
   web_socket_channel: ^3.0.3
 

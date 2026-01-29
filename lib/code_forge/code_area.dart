@@ -174,6 +174,16 @@ class CodeForge extends StatefulWidget {
   /// Requires LSP integration for language-aware completions.
   final bool enableSuggestions;
 
+  /// Whether to show auto completions in the OS virtual keyboard.
+  ///
+  /// Defaults to true.
+  final bool enableKeyboardSuggestions;
+
+  /// The type of the virtual keyboard that will used by the [CodeForge].
+  ///
+  /// Defaults to [TextInputType.multiline]
+  final TextInputType keyboardType;
+
   /// Builder for a custom Finder widget.
   ///
   /// This builder is called to create the finder/search widget. It provides
@@ -206,6 +216,8 @@ class CodeForge extends StatefulWidget {
     this.enableFolding = true,
     this.enableGuideLines = true,
     this.enableSuggestions = true,
+    this.enableKeyboardSuggestions = true,
+    this.keyboardType = TextInputType.multiline,
     this.enableGutter = true,
     this.enableGutterDivider = false,
     this.selectionStyle,
@@ -233,7 +245,8 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
   late final GutterStyle _gutterStyle;
   late final SuggestionStyle _suggestionStyle;
   late final HoverDetailsStyle _hoverDetailsStyle;
-  late final ValueNotifier<List<dynamic>?> _suggestionNotifier, _hoverNotifier;
+  late final ValueNotifier<List<dynamic>?> _suggestionNotifier;
+  late final ValueNotifier<(Offset, Map<String, int>)?> _hoverNotifier;
   late final ValueNotifier<List<LspErrors>> _diagnosticsNotifier;
   late final ValueNotifier<LspSignatureHelps?> _lspSignatureNotifier;
   late final ValueNotifier<String?> _aiNotifier;
@@ -243,6 +256,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
   late final ValueNotifier<List<dynamic>?> _lspActionNotifier;
   late final UndoRedoController _undoRedoController;
   late final String? _filePath;
+  late final FindController _findController;
   late final VoidCallback _semanticTokensListener;
   late final VoidCallback _controllerListener;
   final ValueNotifier<Offset> _offsetNotifier = ValueNotifier(Offset(0, 0));
@@ -251,6 +265,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
   final _suggScrollController = ScrollController();
   final _actionScrollController = ScrollController();
   final Map<String, String> _suggestionDetailsCache = {};
+  late bool _readOnly;
   TextInputConnection? _connection;
   StreamSubscription? _lspResponsesSubscription;
   bool _isHovering = false, _isSignatureInvoked = false;
@@ -260,7 +275,6 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
   int _sugSelIndex = 0, _actionSelIndex = 0;
   String? _selectedSuggestionMd;
   Timer? _hoverTimer;
-  late final FindController _findController;
 
   @override
   void initState() {
@@ -284,12 +298,17 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
     _selectionActiveNotifier = ValueNotifier(false);
     _isHoveringPopup = ValueNotifier<bool>(false);
     _controller.userCodeAction = _fetchCodeActionsForCurrentPosition;
-    _controller.readOnly = widget.readOnly;
     _selectionStyle = widget.selectionStyle ?? CodeSelectionStyle();
     _undoRedoController = widget.undoController ?? UndoRedoController();
     _filePath = widget.filePath;
-
+    _readOnly = widget.readOnly;
     _controller.setUndoController(_undoRedoController);
+
+    if (widget.readOnly && !_controller.readOnly) {
+      _controller.readOnly = true;
+    } else if (_controller.readOnly && !widget.readOnly) {
+      _readOnly = true;
+    }
 
     _gutterStyle =
         widget.gutterStyle ??
@@ -303,7 +322,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
     _suggestionStyle =
         widget.suggestionStyle ??
         SuggestionStyle(
-          elevation: 6,
+          elevation: 8,
           textStyle: (() {
             TextStyle style = widget.textStyle ?? TextStyle();
             if (style.color == null) {
@@ -311,15 +330,51 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
             }
             return style;
           })(),
-          backgroundColor:
-              _editorTheme['root']?.backgroundColor ?? Colors.white,
+          backgroundColor: (() {
+            final lightnessDelta = 0.03;
+            final base = _editorTheme['root']!.backgroundColor!;
+            final hsl = HSLColor.fromColor(base);
+            final newLightness = (hsl.lightness + lightnessDelta).clamp(
+              0.0,
+              1.0,
+            );
+            return hsl.withLightness(newLightness).toColor();
+          })(),
           focusColor: Color(0xff024281),
           hoverColor: Colors.grey.withAlpha(15),
           splashColor: Colors.blueAccent.withAlpha(50),
-          shape: BeveledRectangleBorder(
+          selectedBackgroundColor: Color(0xFF094771),
+          borderColor:
+              _editorTheme['root']!.color?.withAlpha(50) ?? Colors.grey[400],
+          borderWidth: 1.0,
+          itemHeight: 24.0,
+          iconSize: 16.0,
+          methodIconColor: Color(0xFFDCDFE4),
+          propertyIconColor: Color(0xFF98C379),
+          classIconColor: Color(0xFFE06C75),
+          variableIconColor: Color(0xFF61AFEF),
+          keywordIconColor: Color(0xFFC678DD),
+          labelTextStyle: TextStyle(
+            fontSize: widget.textStyle?.fontSize ?? 14,
+            fontWeight: FontWeight.w500,
+            color: _editorTheme['root']!.color,
+          ),
+          detailTextStyle: TextStyle(
+            fontSize: (widget.textStyle?.fontSize ?? 14) * 0.85,
+            color: _editorTheme['root']!.color?.withAlpha(150),
+          ),
+          typeTextStyle: TextStyle(
+            fontSize: (widget.textStyle?.fontSize ?? 14) * 0.9,
+            fontStyle: FontStyle.italic,
+            color: _editorTheme['root']!.color?.withAlpha(180),
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(6),
             side: BorderSide(
-              color: _editorTheme['root']!.color ?? Colors.grey[400]!,
-              width: 0.2,
+              color:
+                  _editorTheme['root']!.color?.withAlpha(50) ??
+                  Colors.grey[400]!,
+              width: 1.0,
             ),
           ),
         );
@@ -376,14 +431,15 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
     _controller.semanticTokens.addListener(_semanticTokensListener);
 
     _focusNode.addListener(() {
-      if (_focusNode.hasFocus && !widget.readOnly) {
+      if (_focusNode.hasFocus && !_readOnly) {
         if (_connection == null || !_connection!.attached) {
           _connection = TextInput.attach(
             _controller,
-            const TextInputConfiguration(
+            TextInputConfiguration(
               readOnly: false,
               enableDeltaModel: true,
-              inputType: TextInputType.multiline,
+              enableSuggestions: widget.enableKeyboardSuggestions,
+              inputType: widget.keyboardType,
               inputAction: TextInputAction.newline,
               autocorrect: false,
             ),
@@ -477,7 +533,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
   void _scrollToSelectedSuggestion() {
     if (!_suggScrollController.hasClients) return;
 
-    final itemExtent = (widget.textStyle?.fontSize ?? 14) + 6.5;
+    final itemExtent = _suggestionStyle.itemHeight ?? 24.0;
     final selectedOffset = _sugSelIndex * itemExtent;
     final currentScroll = _suggScrollController.offset;
     final viewportHeight = _suggScrollController.position.viewportDimension;
@@ -503,7 +559,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
   void _scrollToSelectedAction() {
     if (!_actionScrollController.hasClients) return;
 
-    final itemExtent = (widget.textStyle?.fontSize ?? 14) + 6.5;
+    final itemExtent = _suggestionStyle.itemHeight ?? 24.0;
     final selectedOffset = _actionSelIndex * itemExtent;
     final currentScroll = _actionScrollController.offset;
     final viewportHeight = _actionScrollController.position.viewportDimension;
@@ -539,6 +595,31 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
       return 'lsp|$label|$id|$sort|$source|$importUri';
     }
     return 'str|${item.toString()}';
+  }
+
+  Color _getCompletionIconColor(CompletionItemType type) {
+    switch (type) {
+      case CompletionItemType.method:
+      case CompletionItemType.function:
+      case CompletionItemType.constructor:
+        return _suggestionStyle.methodIconColor ?? Color(0xFFDCDFE4);
+      case CompletionItemType.field:
+      case CompletionItemType.property:
+        return _suggestionStyle.propertyIconColor ?? Color(0xFF98C379);
+      case CompletionItemType.class_:
+      case CompletionItemType.interface:
+      case CompletionItemType.enum_:
+      case CompletionItemType.struct:
+        return _suggestionStyle.classIconColor ?? Color(0xFFE06C75);
+      case CompletionItemType.variable:
+      case CompletionItemType.value_:
+      case CompletionItemType.constant:
+        return _suggestionStyle.variableIconColor ?? Color(0xFF61AFEF);
+      case CompletionItemType.keyword:
+        return _suggestionStyle.keywordIconColor ?? Color(0xFFC678DD);
+      default:
+        return _suggestionStyle.textStyle.color ?? Colors.grey;
+    }
   }
 
   Future<void> _fetchCodeActionsForCurrentPosition() async {
@@ -872,7 +953,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
   }
 
   void _deleteWordBackward() {
-    if (widget.readOnly) return;
+    if (_readOnly) return;
     final selection = _controller.selection;
     final text = _controller.text;
 
@@ -906,7 +987,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
   }
 
   void _deleteWordForward() {
-    if (widget.readOnly) return;
+    if (_readOnly) return;
     final selection = _controller.selection;
     final text = _controller.text;
 
@@ -1014,7 +1095,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
   }
 
   void _moveLineUp() {
-    if (widget.readOnly) return;
+    if (_readOnly) return;
     final selection = _controller.selection;
     final text = _controller.text;
     final selStart = selection.start;
@@ -1047,7 +1128,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
   }
 
   void _moveLineDown() {
-    if (widget.readOnly) return;
+    if (_readOnly) return;
     final selection = _controller.selection;
     final text = _controller.text;
     final selStart = selection.start;
@@ -1078,7 +1159,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
   }
 
   void _duplicateLine() {
-    if (widget.readOnly) return;
+    if (_readOnly) return;
     final text = _controller.text;
     final selection = _controller.selection;
     final caret = selection.extentOffset;
@@ -1096,506 +1177,412 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
-    return ColoredBox(
-      color: _editorTheme['root']?.backgroundColor ?? Colors.grey[900]!,
-      child: Column(
-        children: [
-          if (widget.finderBuilder != null)
-            ListenableBuilder(
-              listenable: _findController,
-              builder: (context, _) {
-                if (!_findController.isActive) {
-                  return const SizedBox.shrink();
-                }
-                return widget.finderBuilder!(context, _findController);
-              },
-            ),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (_, constraints) {
-                return Stack(
-                  children: [
-                    RawScrollbar(
-                      controller: _vscrollController,
+    final mediaQuery = MediaQuery.of(context);
+    final screenWidth = mediaQuery.size.width;
+    final screenHeight = mediaQuery.size.height;
+    return LayoutBuilder(
+      builder: (_, constraints) {
+        final editorHeight = constraints.maxHeight;
+        return Column(
+          children: [
+            if (widget.finderBuilder != null)
+              ListenableBuilder(
+                listenable: _findController,
+                builder: (context, _) {
+                  if (!_findController.isActive) {
+                    return const SizedBox.shrink();
+                  }
+                  return widget.finderBuilder!(context, _findController);
+                },
+              ),
+            Expanded(
+              child: Stack(
+                children: [
+                  RawScrollbar(
+                    controller: _vscrollController,
+                    thumbVisibility: _isHovering,
+                    child: RawScrollbar(
                       thumbVisibility: _isHovering,
-                      child: RawScrollbar(
-                        thumbVisibility: _isHovering,
-                        controller: _hscrollController,
-                        child: GestureDetector(
-                          onTap: () {
-                            _focusNode.requestFocus();
-                            if (_contextMenuOffsetNotifier.value.dx >= 0) {
-                              _contextMenuOffsetNotifier.value = const Offset(
-                                -1,
-                                -1,
-                              );
-                            }
-                            _suggestionNotifier.value = null;
-                            _lspSignatureNotifier.value = null;
+                      controller: _hscrollController,
+                      child: GestureDetector(
+                        onTap: () {
+                          _focusNode.requestFocus();
+                          if (_contextMenuOffsetNotifier.value.dx >= 0) {
+                            _contextMenuOffsetNotifier.value = const Offset(
+                              -1,
+                              -1,
+                            );
+                          }
+                          _suggestionNotifier.value = null;
+                          _lspSignatureNotifier.value = null;
+                        },
+                        onDoubleTapDown: (details) {
+                          if (_controller.text.isNotEmpty) return;
+                          _contextMenuOffsetNotifier.value =
+                              details.localPosition;
+                        },
+                        child: MouseRegion(
+                          onEnter: (event) {
+                            if (mounted) setState(() => _isHovering = true);
                           },
-                          onDoubleTapDown: (details) {
-                            if (_controller.text.isNotEmpty) return;
-                            _contextMenuOffsetNotifier.value =
-                                details.localPosition;
+                          onExit: (event) {
+                            if (mounted) setState(() => _isHovering = false);
                           },
-                          child: MouseRegion(
-                            onEnter: (event) {
-                              if (mounted) setState(() => _isHovering = true);
-                            },
-                            onExit: (event) {
-                              if (mounted) setState(() => _isHovering = false);
-                            },
-                            child: ValueListenableBuilder(
-                              valueListenable: _selectionActiveNotifier,
-                              builder: (context, selVal, child) {
-                                return TwoDimensionalScrollable(
-                                  horizontalDetails: ScrollableDetails.horizontal(
-                                    controller: _hscrollController,
-                                    physics: selVal
-                                        ? const NeverScrollableScrollPhysics()
-                                        : const ClampingScrollPhysics(),
-                                  ),
-                                  verticalDetails: ScrollableDetails.vertical(
-                                    controller: _vscrollController,
-                                    physics: selVal
-                                        ? const NeverScrollableScrollPhysics()
-                                        : const ClampingScrollPhysics(),
-                                  ),
-                                  viewportBuilder: (_, voffset, hoffset) => CustomViewport(
-                                    verticalOffset: voffset,
-                                    verticalAxisDirection: AxisDirection.down,
-                                    horizontalOffset: hoffset,
-                                    horizontalAxisDirection:
-                                        AxisDirection.right,
-                                    mainAxis: Axis.vertical,
-                                    lineWrap: widget.lineWrap,
-                                    delegate: TwoDimensionalChildBuilderDelegate(
-                                      maxXIndex: 0,
-                                      maxYIndex: 0,
-                                      builder: (_, vic) {
-                                        return Focus(
-                                          focusNode: _focusNode,
-                                          onKeyEvent: (node, event) {
-                                            if (event is KeyDownEvent ||
-                                                event is KeyRepeatEvent) {
-                                              final isShiftPressed =
-                                                  HardwareKeyboard
-                                                      .instance
-                                                      .isShiftPressed;
-                                              final isCtrlPressed =
-                                                  HardwareKeyboard
-                                                      .instance
-                                                      .isControlPressed ||
-                                                  HardwareKeyboard
-                                                      .instance
-                                                      .isMetaPressed;
-                                              if (_suggestionNotifier.value !=
-                                                      null &&
-                                                  _suggestionNotifier
-                                                      .value!
-                                                      .isNotEmpty) {
-                                                final suggestions =
-                                                    _suggestionNotifier.value!;
-                                                switch (event.logicalKey) {
-                                                  case LogicalKeyboardKey
-                                                      .arrowDown:
-                                                    if (mounted) {
-                                                      setState(() {
-                                                        _sugSelIndex =
-                                                            (_sugSelIndex + 1) %
-                                                            suggestions.length;
-                                                        _scrollToSelectedSuggestion();
-                                                      });
-                                                    }
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey
-                                                      .arrowUp:
-                                                    if (mounted) {
-                                                      setState(() {
-                                                        _sugSelIndex =
-                                                            (_sugSelIndex -
-                                                                1 +
-                                                                suggestions
-                                                                    .length) %
-                                                            suggestions.length;
-                                                        _scrollToSelectedSuggestion();
-                                                      });
-                                                    }
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey.enter:
-                                                  case LogicalKeyboardKey.tab:
-                                                    _acceptSuggestion();
-                                                    if (_extraText.isNotEmpty) {
-                                                      _controller
-                                                          .applyWorkspaceEdit(
-                                                            _extraText,
-                                                          );
-                                                    }
+                          child: ValueListenableBuilder(
+                            valueListenable: _selectionActiveNotifier,
+                            builder: (context, selVal, child) {
+                              return TwoDimensionalScrollable(
+                                horizontalDetails: ScrollableDetails.horizontal(
+                                  controller: _hscrollController,
+                                  physics: selVal
+                                      ? const NeverScrollableScrollPhysics()
+                                      : const ClampingScrollPhysics(),
+                                ),
+                                verticalDetails: ScrollableDetails.vertical(
+                                  controller: _vscrollController,
+                                  physics: selVal
+                                      ? const NeverScrollableScrollPhysics()
+                                      : const ClampingScrollPhysics(),
+                                ),
+                                viewportBuilder: (_, voffset, hoffset) => CustomViewport(
+                                  verticalOffset: voffset,
+                                  verticalAxisDirection: AxisDirection.down,
+                                  horizontalOffset: hoffset,
+                                  horizontalAxisDirection: AxisDirection.right,
+                                  mainAxis: Axis.vertical,
+                                  lineWrap: widget.lineWrap,
+                                  delegate: TwoDimensionalChildBuilderDelegate(
+                                    maxXIndex: 0,
+                                    maxYIndex: 0,
+                                    builder: (_, vic) {
+                                      return Focus(
+                                        focusNode: _focusNode,
+                                        onKeyEvent: (node, event) {
+                                          if (event is KeyDownEvent ||
+                                              event is KeyRepeatEvent) {
+                                            final isShiftPressed =
+                                                HardwareKeyboard
+                                                    .instance
+                                                    .isShiftPressed;
+                                            final isCtrlPressed =
+                                                HardwareKeyboard
+                                                    .instance
+                                                    .isControlPressed ||
+                                                HardwareKeyboard
+                                                    .instance
+                                                    .isMetaPressed;
+                                            if (_suggestionNotifier.value !=
+                                                    null &&
+                                                _suggestionNotifier
+                                                    .value!
+                                                    .isNotEmpty) {
+                                              final suggestions =
+                                                  _suggestionNotifier.value!;
+                                              switch (event.logicalKey) {
+                                                case LogicalKeyboardKey
+                                                    .arrowDown:
+                                                  if (mounted) {
                                                     setState(() {
-                                                      _isSignatureInvoked =
-                                                          true;
+                                                      _sugSelIndex =
+                                                          (_sugSelIndex + 1) %
+                                                          suggestions.length;
+                                                      _scrollToSelectedSuggestion();
                                                     });
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey
-                                                      .escape:
-                                                    _suggestionNotifier.value =
-                                                        null;
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  default:
-                                                    break;
-                                                }
+                                                  }
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey.arrowUp:
+                                                  if (mounted) {
+                                                    setState(() {
+                                                      _sugSelIndex =
+                                                          (_sugSelIndex -
+                                                              1 +
+                                                              suggestions
+                                                                  .length) %
+                                                          suggestions.length;
+                                                      _scrollToSelectedSuggestion();
+                                                    });
+                                                  }
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey.enter:
+                                                case LogicalKeyboardKey.tab:
+                                                  _acceptSuggestion();
+                                                  if (_extraText.isNotEmpty) {
+                                                    _controller
+                                                        .applyWorkspaceEdit(
+                                                          _extraText,
+                                                        );
+                                                  }
+                                                  setState(() {
+                                                    _isSignatureInvoked = true;
+                                                  });
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey.escape:
+                                                  _suggestionNotifier.value =
+                                                      null;
+                                                  return KeyEventResult.handled;
+                                                default:
+                                                  break;
                                               }
+                                            }
 
-                                              if (_lspActionNotifier.value !=
-                                                      null &&
+                                            if (_lspActionNotifier.value !=
+                                                    null &&
+                                                _lspActionOffsetNotifier
+                                                        .value !=
+                                                    null &&
+                                                _lspActionNotifier
+                                                    .value!
+                                                    .isNotEmpty) {
+                                              final actions =
+                                                  _lspActionNotifier.value!;
+                                              switch (event.logicalKey) {
+                                                case LogicalKeyboardKey
+                                                    .arrowDown:
+                                                  if (mounted) {
+                                                    setState(() {
+                                                      _actionSelIndex =
+                                                          (_actionSelIndex +
+                                                              1) %
+                                                          actions.length;
+                                                      _scrollToSelectedAction();
+                                                    });
+                                                  }
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey.arrowUp:
+                                                  if (mounted) {
+                                                    setState(() {
+                                                      _actionSelIndex =
+                                                          (_actionSelIndex -
+                                                              1 +
+                                                              actions.length) %
+                                                          actions.length;
+                                                      _scrollToSelectedAction();
+                                                    });
+                                                  }
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey.enter:
+                                                case LogicalKeyboardKey.tab:
+                                                  (() async {
+                                                    await _controller
+                                                        .applyWorkspaceEdit(
+                                                          _lspActionNotifier
+                                                              .value![_actionSelIndex],
+                                                        );
+                                                  })();
+                                                  _lspActionNotifier.value =
+                                                      null;
                                                   _lspActionOffsetNotifier
-                                                          .value !=
-                                                      null &&
-                                                  _lspActionNotifier
-                                                      .value!
-                                                      .isNotEmpty) {
-                                                final actions =
-                                                    _lspActionNotifier.value!;
-                                                switch (event.logicalKey) {
-                                                  case LogicalKeyboardKey
-                                                      .arrowDown:
-                                                    if (mounted) {
-                                                      setState(() {
-                                                        _actionSelIndex =
-                                                            (_actionSelIndex +
-                                                                1) %
-                                                            actions.length;
-                                                        _scrollToSelectedAction();
-                                                      });
-                                                    }
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey
-                                                      .arrowUp:
-                                                    if (mounted) {
-                                                      setState(() {
-                                                        _actionSelIndex =
-                                                            (_actionSelIndex -
-                                                                1 +
-                                                                actions
-                                                                    .length) %
-                                                            actions.length;
-                                                        _scrollToSelectedAction();
-                                                      });
-                                                    }
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey.enter:
-                                                  case LogicalKeyboardKey.tab:
-                                                    (() async {
-                                                      await _controller
-                                                          .applyWorkspaceEdit(
-                                                            _lspActionNotifier
-                                                                .value![_actionSelIndex],
-                                                          );
-                                                    })();
-                                                    _lspActionNotifier.value =
-                                                        null;
-                                                    _lspActionOffsetNotifier
-                                                            .value =
-                                                        null;
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey
-                                                      .escape:
-                                                    _lspActionNotifier.value =
-                                                        null;
-                                                    _lspActionOffsetNotifier
-                                                            .value =
-                                                        null;
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  default:
-                                                    break;
-                                                }
+                                                          .value =
+                                                      null;
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey.escape:
+                                                  _lspActionNotifier.value =
+                                                      null;
+                                                  _lspActionOffsetNotifier
+                                                          .value =
+                                                      null;
+                                                  return KeyEventResult.handled;
+                                                default:
+                                                  break;
                                               }
+                                            }
 
-                                              if (isCtrlPressed &&
-                                                  isShiftPressed) {
-                                                switch (event.logicalKey) {
-                                                  case LogicalKeyboardKey.space:
-                                                    setState(() {
-                                                      _isSignatureInvoked =
-                                                          true;
-                                                    });
-                                                    (() async =>
-                                                        await _callSignatureHelp())();
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey
-                                                      .arrowUp:
-                                                    _moveLineUp();
-                                                    _commonKeyFunctions();
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey
-                                                      .arrowDown:
-                                                    _moveLineDown();
-                                                    _commonKeyFunctions();
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey
-                                                      .arrowLeft:
-                                                    _moveWordLeft(true);
-                                                    _commonKeyFunctions();
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey
-                                                      .arrowRight:
-                                                    _moveWordRight(true);
-                                                    _commonKeyFunctions();
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  default:
-                                                    break;
-                                                }
+                                            if (isCtrlPressed &&
+                                                isShiftPressed) {
+                                              switch (event.logicalKey) {
+                                                case LogicalKeyboardKey.space:
+                                                  setState(() {
+                                                    _isSignatureInvoked = true;
+                                                  });
+                                                  (() async =>
+                                                      await _callSignatureHelp())();
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey.arrowUp:
+                                                  _moveLineUp();
+                                                  _commonKeyFunctions();
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey
+                                                    .arrowDown:
+                                                  _moveLineDown();
+                                                  _commonKeyFunctions();
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey
+                                                    .arrowLeft:
+                                                  _moveWordLeft(true);
+                                                  _commonKeyFunctions();
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey
+                                                    .arrowRight:
+                                                  _moveWordRight(true);
+                                                  _commonKeyFunctions();
+                                                  return KeyEventResult.handled;
+                                                default:
+                                                  break;
                                               }
+                                            }
 
-                                              if (isCtrlPressed) {
-                                                switch (event.logicalKey) {
-                                                  case LogicalKeyboardKey.keyF:
-                                                    final isAlt =
-                                                        HardwareKeyboard
-                                                            .instance
-                                                            .isAltPressed;
+                                            if (isCtrlPressed) {
+                                              switch (event.logicalKey) {
+                                                case LogicalKeyboardKey.keyF:
+                                                  final isAlt = HardwareKeyboard
+                                                      .instance
+                                                      .isAltPressed;
+                                                  _findController.isActive =
+                                                      true;
+                                                  _findController
+                                                          .isReplaceMode =
+                                                      isAlt;
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey.keyH:
+                                                  if (!HardwareKeyboard
+                                                      .instance
+                                                      .isMetaPressed) {
                                                     _findController.isActive =
                                                         true;
                                                     _findController
                                                             .isReplaceMode =
-                                                        isAlt;
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey.keyH:
-                                                    if (!HardwareKeyboard
-                                                        .instance
-                                                        .isMetaPressed) {
-                                                      _findController.isActive =
-                                                          true;
-                                                      _findController
-                                                              .isReplaceMode =
-                                                          true;
+                                                        true;
 
-                                                      return KeyEventResult
-                                                          .handled;
-                                                    }
-                                                    break;
-                                                  case LogicalKeyboardKey.keyC:
-                                                    _controller.copy();
                                                     return KeyEventResult
                                                         .handled;
-                                                  case LogicalKeyboardKey.keyX:
-                                                    if (widget.readOnly) {
-                                                      return KeyEventResult
-                                                          .handled;
-                                                    }
-                                                    _controller.cut();
+                                                  }
+                                                  break;
+                                                case LogicalKeyboardKey.keyC:
+                                                  _controller.copy();
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey.keyX:
+                                                  if (_readOnly) {
                                                     return KeyEventResult
                                                         .handled;
-                                                  case LogicalKeyboardKey.keyV:
-                                                    if (widget.readOnly) {
-                                                      return KeyEventResult
-                                                          .handled;
-                                                    }
-                                                    _controller.paste();
+                                                  }
+                                                  _controller.cut();
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey.keyV:
+                                                  if (_readOnly) {
                                                     return KeyEventResult
                                                         .handled;
-                                                  case LogicalKeyboardKey.keyA:
-                                                    _controller.selectAll();
+                                                  }
+                                                  _controller.paste();
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey.keyA:
+                                                  _controller.selectAll();
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey.keyD:
+                                                  if (_readOnly) {
                                                     return KeyEventResult
                                                         .handled;
-                                                  case LogicalKeyboardKey.keyD:
-                                                    if (widget.readOnly) {
-                                                      return KeyEventResult
-                                                          .handled;
-                                                    }
-                                                    _duplicateLine();
+                                                  }
+                                                  _duplicateLine();
+                                                  _commonKeyFunctions();
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey.keyZ:
+                                                  if (_readOnly) {
+                                                    return KeyEventResult
+                                                        .handled;
+                                                  }
+                                                  if (_undoRedoController
+                                                      .canUndo) {
+                                                    _undoRedoController.undo();
                                                     _commonKeyFunctions();
+                                                  }
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey.keyY:
+                                                  if (_readOnly) {
                                                     return KeyEventResult
                                                         .handled;
-                                                  case LogicalKeyboardKey.keyZ:
-                                                    if (widget.readOnly) {
-                                                      return KeyEventResult
-                                                          .handled;
-                                                    }
-                                                    if (_undoRedoController
-                                                        .canUndo) {
-                                                      _undoRedoController
-                                                          .undo();
-                                                      _commonKeyFunctions();
-                                                    }
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey.keyY:
-                                                    if (widget.readOnly) {
-                                                      return KeyEventResult
-                                                          .handled;
-                                                    }
-                                                    if (_undoRedoController
-                                                        .canRedo) {
-                                                      _undoRedoController
-                                                          .redo();
-                                                      _commonKeyFunctions();
-                                                    }
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey
-                                                      .backspace:
-                                                    if (widget.readOnly) {
-                                                      return KeyEventResult
-                                                          .handled;
-                                                    }
-                                                    _deleteWordBackward();
+                                                  }
+                                                  if (_undoRedoController
+                                                      .canRedo) {
+                                                    _undoRedoController.redo();
                                                     _commonKeyFunctions();
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey
-                                                      .delete:
-                                                    if (widget.readOnly) {
-                                                      return KeyEventResult
-                                                          .handled;
-                                                    }
-                                                    _deleteWordForward();
-                                                    _commonKeyFunctions();
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey
-                                                      .arrowLeft:
-                                                    _moveWordLeft(false);
-                                                    _commonKeyFunctions();
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey
-                                                      .arrowRight:
-                                                    _moveWordRight(false);
-                                                    _commonKeyFunctions();
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey
-                                                      .period:
-                                                    (() async {
-                                                      _suggestionNotifier
-                                                              .value =
-                                                          null;
-                                                      await _fetchCodeActionsForCurrentPosition();
-                                                    })();
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  default:
-                                                    break;
-                                                }
-                                              }
-
-                                              if (isShiftPressed &&
-                                                  !isCtrlPressed) {
-                                                switch (event.logicalKey) {
-                                                  case LogicalKeyboardKey.tab:
-                                                    if (widget.readOnly) {
-                                                      return KeyEventResult
-                                                          .handled;
-                                                    }
-                                                    _controller.unindent();
-                                                    _commonKeyFunctions();
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey
-                                                      .arrowLeft:
-                                                    _controller
-                                                        .pressLetfArrowKey(
-                                                          isShiftPressed:
-                                                              isShiftPressed,
-                                                        );
-                                                    _commonKeyFunctions();
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey
-                                                      .arrowRight:
-                                                    _handleArrowRight(true);
-                                                    _commonKeyFunctions();
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey
-                                                      .arrowUp:
-                                                    _controller.pressUpArrowKey(
-                                                      isShiftPressed:
-                                                          isShiftPressed,
-                                                    );
-                                                    _commonKeyFunctions();
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey
-                                                      .arrowDown:
-                                                    _controller
-                                                        .pressDownArrowKey(
-                                                          isShiftPressed:
-                                                              isShiftPressed,
-                                                        );
-                                                    _commonKeyFunctions();
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey.home:
-                                                    _controller.pressHomeKey(
-                                                      isShiftPressed:
-                                                          isShiftPressed,
-                                                    );
-                                                    _commonKeyFunctions();
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  case LogicalKeyboardKey.end:
-                                                    _controller.pressEndKey(
-                                                      isShiftPressed:
-                                                          isShiftPressed,
-                                                    );
-                                                    _commonKeyFunctions();
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  default:
-                                                    break;
-                                                }
-                                              }
-
-                                              switch (event.logicalKey) {
+                                                  }
+                                                  return KeyEventResult.handled;
                                                 case LogicalKeyboardKey
                                                     .backspace:
-                                                  if (widget.readOnly) {
+                                                  if (_readOnly) {
                                                     return KeyEventResult
                                                         .handled;
                                                   }
-                                                  _controller.backspace();
-                                                  if (_suggestionNotifier
-                                                          .value !=
-                                                      null) {
-                                                    _suggestionNotifier.value =
-                                                        null;
-                                                  }
+                                                  _deleteWordBackward();
                                                   _commonKeyFunctions();
                                                   return KeyEventResult.handled;
-
                                                 case LogicalKeyboardKey.delete:
-                                                  if (widget.readOnly) {
+                                                  if (_readOnly) {
                                                     return KeyEventResult
                                                         .handled;
                                                   }
-                                                  _controller.delete();
-                                                  if (_suggestionNotifier
-                                                          .value !=
-                                                      null) {
-                                                    _suggestionNotifier.value =
-                                                        null;
-                                                  }
+                                                  _deleteWordForward();
                                                   _commonKeyFunctions();
                                                   return KeyEventResult.handled;
+                                                case LogicalKeyboardKey
+                                                    .arrowLeft:
+                                                  _moveWordLeft(false);
+                                                  _commonKeyFunctions();
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey
+                                                    .arrowRight:
+                                                  _moveWordRight(false);
+                                                  _commonKeyFunctions();
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey.period:
+                                                  (() async {
+                                                    _suggestionNotifier.value =
+                                                        null;
+                                                    await _fetchCodeActionsForCurrentPosition();
+                                                  })();
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey.home:
+                                                  _controller
+                                                      .pressDocumentHomeKey(
+                                                        isShiftPressed:
+                                                            isShiftPressed,
+                                                      );
+                                                  _commonKeyFunctions();
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey.end:
+                                                  _controller
+                                                      .pressDocumentEndKey(
+                                                        isShiftPressed:
+                                                            isShiftPressed,
+                                                      );
+                                                  _commonKeyFunctions();
+                                                  return KeyEventResult.handled;
+                                                default:
+                                                  break;
+                                              }
+                                            }
 
+                                            if (isShiftPressed &&
+                                                !isCtrlPressed) {
+                                              switch (event.logicalKey) {
+                                                case LogicalKeyboardKey.tab:
+                                                  if (_readOnly) {
+                                                    return KeyEventResult
+                                                        .handled;
+                                                  }
+                                                  _controller.unindent();
+                                                  _commonKeyFunctions();
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey
+                                                    .arrowLeft:
+                                                  _controller.pressLetfArrowKey(
+                                                    isShiftPressed:
+                                                        isShiftPressed,
+                                                  );
+                                                  _commonKeyFunctions();
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey
+                                                    .arrowRight:
+                                                  _handleArrowRight(true);
+                                                  _commonKeyFunctions();
+                                                  return KeyEventResult.handled;
+                                                case LogicalKeyboardKey.arrowUp:
+                                                  _controller.pressUpArrowKey(
+                                                    isShiftPressed:
+                                                        isShiftPressed,
+                                                  );
+                                                  _commonKeyFunctions();
+                                                  return KeyEventResult.handled;
                                                 case LogicalKeyboardKey
                                                     .arrowDown:
                                                   _controller.pressDownArrowKey(
@@ -1604,278 +1591,356 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                   );
                                                   _commonKeyFunctions();
                                                   return KeyEventResult.handled;
-
-                                                case LogicalKeyboardKey.arrowUp:
-                                                  _controller.pressUpArrowKey(
-                                                    isShiftPressed:
-                                                        isShiftPressed,
-                                                  );
-                                                  _commonKeyFunctions();
-                                                  return KeyEventResult.handled;
-
-                                                case LogicalKeyboardKey
-                                                    .arrowRight:
-                                                  _handleArrowRight(
-                                                    isShiftPressed,
-                                                  );
-                                                  _commonKeyFunctions();
-                                                  return KeyEventResult.handled;
-
-                                                case LogicalKeyboardKey
-                                                    .arrowLeft:
-                                                  _controller.pressLetfArrowKey(
-                                                    isShiftPressed:
-                                                        isShiftPressed,
-                                                  );
-                                                  if (_suggestionNotifier
-                                                          .value !=
-                                                      null) {
-                                                    _suggestionNotifier.value =
-                                                        null;
-                                                  }
-                                                  _commonKeyFunctions();
-                                                  return KeyEventResult.handled;
-
                                                 case LogicalKeyboardKey.home:
-                                                  if (_suggestionNotifier
-                                                          .value !=
-                                                      null) {
-                                                    _suggestionNotifier.value =
-                                                        null;
-                                                  }
                                                   _controller.pressHomeKey(
                                                     isShiftPressed:
                                                         isShiftPressed,
                                                   );
                                                   _commonKeyFunctions();
                                                   return KeyEventResult.handled;
-
                                                 case LogicalKeyboardKey.end:
-                                                  if (_suggestionNotifier
-                                                          .value !=
-                                                      null) {
-                                                    _suggestionNotifier.value =
-                                                        null;
-                                                  }
                                                   _controller.pressEndKey(
                                                     isShiftPressed:
                                                         isShiftPressed,
                                                   );
                                                   _commonKeyFunctions();
                                                   return KeyEventResult.handled;
-
-                                                case LogicalKeyboardKey.escape:
-                                                  _hoverTimer?.cancel();
-                                                  _lspSignatureNotifier.value =
-                                                      null;
-                                                  _contextMenuOffsetNotifier
-                                                      .value = const Offset(
-                                                    -1,
-                                                    -1,
-                                                  );
-                                                  _findController.isActive =
-                                                      false;
-                                                  _findController
-                                                          .isReplaceMode =
-                                                      false;
-                                                  _aiNotifier.value = null;
-                                                  _suggestionNotifier.value =
-                                                      null;
-                                                  _hoverNotifier.value = null;
-                                                  setState(() {
-                                                    _isSignatureInvoked = false;
-                                                  });
-                                                  return KeyEventResult.handled;
-
-                                                case LogicalKeyboardKey.tab:
-                                                  if (widget.readOnly) {
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  }
-                                                  // Check for ghost text from controller (non-persistent)
-                                                  final ghost =
-                                                      _controller.ghostText;
-                                                  if (ghost != null &&
-                                                      !ghost.shouldPersist) {
-                                                    _acceptControllerGhostText();
-                                                    return KeyEventResult
-                                                        .handled;
-                                                  }
-                                                  if (_aiNotifier.value !=
-                                                      null) {
-                                                    _acceptGhostText();
-                                                  } else if (_suggestionNotifier
-                                                          .value ==
-                                                      null) {
-                                                    _controller.indent();
-                                                    _commonKeyFunctions();
-                                                  }
-                                                  return KeyEventResult.handled;
-
-                                                case LogicalKeyboardKey.enter:
-                                                  if (_aiNotifier.value !=
-                                                      null) {
-                                                    _aiNotifier.value = null;
-                                                  }
-                                                  break;
                                                 default:
+                                                  break;
                                               }
                                             }
-                                            return KeyEventResult.ignored;
-                                          },
-                                          child: _CodeField(
-                                            context: context,
-                                            controller: _controller,
-                                            editorTheme: _editorTheme,
-                                            language: _language,
-                                            languageId: _controller
-                                                .lspConfig
-                                                ?.languageId,
-                                            lspConfig: _controller.lspConfig,
-                                            semanticTokens: _semanticTokens,
-                                            semanticTokensVersion:
-                                                _semanticTokensVersion,
-                                            innerPadding: widget.innerPadding,
-                                            vscrollController:
-                                                _vscrollController,
-                                            hscrollController:
-                                                _hscrollController,
-                                            focusNode: _focusNode,
-                                            readOnly: widget.readOnly,
-                                            caretBlinkController:
-                                                _caretBlinkController,
-                                            lineHighlightController:
-                                                _lineHighlightController,
-                                            textStyle: widget.textStyle,
-                                            enableFolding: widget.enableFolding,
-                                            enableGuideLines:
-                                                widget.enableGuideLines,
-                                            enableGutter: widget.enableGutter,
-                                            enableGutterDivider:
-                                                widget.enableGutterDivider,
-                                            gutterStyle: _gutterStyle,
-                                            selectionStyle: _selectionStyle,
-                                            diagnostics:
-                                                _diagnosticsNotifier.value,
-                                            isMobile: _isMobile,
-                                            selectionActiveNotifier:
-                                                _selectionActiveNotifier,
-                                            contextMenuOffsetNotifier:
-                                                _contextMenuOffsetNotifier,
-                                            hoverNotifier: _hoverNotifier,
-                                            lineWrap: widget.lineWrap,
-                                            offsetNotifier: _offsetNotifier,
-                                            aiNotifier: _aiNotifier,
-                                            aiOffsetNotifier: _aiOffsetNotifier,
-                                            isHoveringPopup: _isHoveringPopup,
-                                            suggestionNotifier:
-                                                _suggestionNotifier,
-                                            ghostTextStyle:
-                                                widget.ghostTextStyle,
-                                            matchHighlightStyle:
-                                                widget.matchHighlightStyle,
-                                            lspActionNotifier:
-                                                _lspActionNotifier,
-                                            lspActionOffsetNotifier:
-                                                _lspActionOffsetNotifier,
-                                            signatureNotifier:
-                                                _lspSignatureNotifier,
-                                            filePath: _filePath,
-                                          ),
-                                        );
-                                      },
-                                    ),
+
+                                            switch (event.logicalKey) {
+                                              case LogicalKeyboardKey.backspace:
+                                                if (_readOnly) {
+                                                  return KeyEventResult.handled;
+                                                }
+                                                _controller.backspace();
+                                                if (_suggestionNotifier.value !=
+                                                    null) {
+                                                  _suggestionNotifier.value =
+                                                      null;
+                                                }
+                                                _commonKeyFunctions();
+                                                return KeyEventResult.handled;
+
+                                              case LogicalKeyboardKey.delete:
+                                                if (_readOnly) {
+                                                  return KeyEventResult.handled;
+                                                }
+                                                _controller.delete();
+                                                if (_suggestionNotifier.value !=
+                                                    null) {
+                                                  _suggestionNotifier.value =
+                                                      null;
+                                                }
+                                                _commonKeyFunctions();
+                                                return KeyEventResult.handled;
+
+                                              case LogicalKeyboardKey.arrowDown:
+                                                _controller.pressDownArrowKey(
+                                                  isShiftPressed:
+                                                      isShiftPressed,
+                                                );
+                                                _commonKeyFunctions();
+                                                return KeyEventResult.handled;
+
+                                              case LogicalKeyboardKey.arrowUp:
+                                                _controller.pressUpArrowKey(
+                                                  isShiftPressed:
+                                                      isShiftPressed,
+                                                );
+                                                _commonKeyFunctions();
+                                                return KeyEventResult.handled;
+
+                                              case LogicalKeyboardKey
+                                                  .arrowRight:
+                                                _handleArrowRight(
+                                                  isShiftPressed,
+                                                );
+                                                _commonKeyFunctions();
+                                                return KeyEventResult.handled;
+
+                                              case LogicalKeyboardKey.arrowLeft:
+                                                _controller.pressLetfArrowKey(
+                                                  isShiftPressed:
+                                                      isShiftPressed,
+                                                );
+                                                if (_suggestionNotifier.value !=
+                                                    null) {
+                                                  _suggestionNotifier.value =
+                                                      null;
+                                                }
+                                                _commonKeyFunctions();
+                                                return KeyEventResult.handled;
+
+                                              case LogicalKeyboardKey.home:
+                                                if (_suggestionNotifier.value !=
+                                                    null) {
+                                                  _suggestionNotifier.value =
+                                                      null;
+                                                }
+                                                _controller.pressHomeKey(
+                                                  isShiftPressed:
+                                                      isShiftPressed,
+                                                );
+                                                _commonKeyFunctions();
+                                                return KeyEventResult.handled;
+
+                                              case LogicalKeyboardKey.end:
+                                                if (_suggestionNotifier.value !=
+                                                    null) {
+                                                  _suggestionNotifier.value =
+                                                      null;
+                                                }
+                                                _controller.pressEndKey(
+                                                  isShiftPressed:
+                                                      isShiftPressed,
+                                                );
+                                                _commonKeyFunctions();
+                                                return KeyEventResult.handled;
+
+                                              case LogicalKeyboardKey.escape:
+                                                _hoverTimer?.cancel();
+                                                _lspSignatureNotifier.value =
+                                                    null;
+                                                _contextMenuOffsetNotifier
+                                                    .value = const Offset(
+                                                  -1,
+                                                  -1,
+                                                );
+                                                _findController.isActive =
+                                                    false;
+                                                _findController.isReplaceMode =
+                                                    false;
+                                                _aiNotifier.value = null;
+                                                _suggestionNotifier.value =
+                                                    null;
+                                                _hoverNotifier.value = null;
+                                                setState(() {
+                                                  _isSignatureInvoked = false;
+                                                });
+                                                return KeyEventResult.handled;
+
+                                              case LogicalKeyboardKey.tab:
+                                                if (_readOnly) {
+                                                  return KeyEventResult.handled;
+                                                }
+                                                final ghost =
+                                                    _controller.ghostText;
+                                                if (ghost != null &&
+                                                    !ghost.shouldPersist) {
+                                                  _acceptControllerGhostText();
+                                                  return KeyEventResult.handled;
+                                                }
+                                                if (_aiNotifier.value != null) {
+                                                  _acceptGhostText();
+                                                } else if (_suggestionNotifier
+                                                        .value ==
+                                                    null) {
+                                                  _controller.indent();
+                                                  _commonKeyFunctions();
+                                                }
+                                                return KeyEventResult.handled;
+
+                                              case LogicalKeyboardKey.enter:
+                                                if (_aiNotifier.value != null) {
+                                                  _aiNotifier.value = null;
+                                                }
+                                                break;
+                                              default:
+                                            }
+                                          }
+                                          return KeyEventResult.ignored;
+                                        },
+                                        child: _CodeField(
+                                          context: context,
+                                          controller: _controller,
+                                          editorTheme: _editorTheme,
+                                          language: _language,
+                                          languageId:
+                                              _controller.lspConfig?.languageId,
+                                          lspConfig: _controller.lspConfig,
+                                          semanticTokens: _semanticTokens,
+                                          semanticTokensVersion:
+                                              _semanticTokensVersion,
+                                          innerPadding: widget.innerPadding,
+                                          vscrollController: _vscrollController,
+                                          hscrollController: _hscrollController,
+                                          focusNode: _focusNode,
+                                          readOnly: _readOnly,
+                                          caretBlinkController:
+                                              _caretBlinkController,
+                                          lineHighlightController:
+                                              _lineHighlightController,
+                                          textStyle: widget.textStyle,
+                                          enableFolding: widget.enableFolding,
+                                          enableGuideLines:
+                                              widget.enableGuideLines,
+                                          enableGutter: widget.enableGutter,
+                                          enableGutterDivider:
+                                              widget.enableGutterDivider,
+                                          gutterStyle: _gutterStyle,
+                                          selectionStyle: _selectionStyle,
+                                          diagnostics:
+                                              _diagnosticsNotifier.value,
+                                          isMobile: _isMobile,
+                                          selectionActiveNotifier:
+                                              _selectionActiveNotifier,
+                                          contextMenuOffsetNotifier:
+                                              _contextMenuOffsetNotifier,
+                                          hoverNotifier: _hoverNotifier,
+                                          lineWrap: widget.lineWrap,
+                                          offsetNotifier: _offsetNotifier,
+                                          aiNotifier: _aiNotifier,
+                                          aiOffsetNotifier: _aiOffsetNotifier,
+                                          isHoveringPopup: _isHoveringPopup,
+                                          suggestionNotifier:
+                                              _suggestionNotifier,
+                                          ghostTextStyle: widget.ghostTextStyle,
+                                          matchHighlightStyle:
+                                              widget.matchHighlightStyle,
+                                          lspActionNotifier: _lspActionNotifier,
+                                          lspActionOffsetNotifier:
+                                              _lspActionOffsetNotifier,
+                                          signatureNotifier:
+                                              _lspSignatureNotifier,
+                                          filePath: _filePath,
+                                        ),
+                                      );
+                                    },
                                   ),
-                                );
-                              },
-                            ),
+                                ),
+                              );
+                            },
                           ),
                         ),
                       ),
                     ),
-                    _buildContextMenu(),
-                    ValueListenableBuilder(
-                      valueListenable: _offsetNotifier,
-                      builder: (_, offset, __) {
-                        return ValueListenableBuilder(
-                          valueListenable: _lspSignatureNotifier,
-                          builder: (_, signature, __) {
-                            if (signature == null ||
-                                signature.activeParameter < 0 ||
-                                signature.parameters.isEmpty) {
-                              return SizedBox.shrink();
-                            }
-                            final sigScrollCtrl = ScrollController();
-                            return Positioned(
-                              width: screenWidth < 700
-                                  ? screenWidth * 0.63
-                                  : null,
-                              top:
-                                  offset.dy +
-                                  (widget.textStyle?.fontSize ?? 14) +
-                                  10 +
-                                  (screenWidth < 700
-                                      ? (offset.dy < screenHeight / 2)
-                                            ? 0
-                                            : -150
-                                      : 0),
-                              left: offset.dx,
-                              child: ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  maxWidth: 420,
-                                  maxHeight: 400,
-                                  minWidth: 70,
-                                ),
-                                child: Card(
-                                  color: _hoverDetailsStyle.backgroundColor,
-                                  shape: _hoverDetailsStyle.shape,
-                                  child: RawScrollbar(
-                                    interactive: true,
+                  ),
+                  _buildContextMenu(),
+                  ValueListenableBuilder(
+                    valueListenable: _offsetNotifier,
+                    builder: (_, offset, __) {
+                      return ValueListenableBuilder(
+                        valueListenable: _lspSignatureNotifier,
+                        builder: (_, signature, __) {
+                          if (signature == null ||
+                              signature.activeParameter < 0 ||
+                              signature.parameters.isEmpty) {
+                            return SizedBox.shrink();
+                          }
+                          final sigScrollCtrl = ScrollController();
+                          return Positioned(
+                            width: screenWidth < 700
+                                ? screenWidth * 0.63
+                                : null,
+                            top:
+                                offset.dy +
+                                (widget.textStyle?.fontSize ?? 14) +
+                                10 +
+                                (screenWidth < 700
+                                    ? (offset.dy < screenHeight / 2)
+                                          ? 0
+                                          : -150
+                                    : 0),
+                            left: offset.dx,
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: 420,
+                                maxHeight: 400,
+                                minWidth: 70,
+                              ),
+                              child: Card(
+                                color: _hoverDetailsStyle.backgroundColor,
+                                shape: _hoverDetailsStyle.shape,
+                                child: RawScrollbar(
+                                  interactive: true,
+                                  controller: sigScrollCtrl,
+                                  thumbVisibility: true,
+                                  thumbColor: _editorTheme['root']!.color!
+                                      .withAlpha(100),
+                                  child: SingleChildScrollView(
                                     controller: sigScrollCtrl,
-                                    thumbVisibility: true,
-                                    thumbColor: _editorTheme['root']!.color!
-                                        .withAlpha(100),
-                                    child: SingleChildScrollView(
-                                      controller: sigScrollCtrl,
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Padding(
-                                            padding: const EdgeInsets.only(
-                                              top: 7,
-                                              left: 6.5,
-                                            ),
-                                            child: RichText(
-                                              text: (() {
-                                                final label = signature.label;
-                                                final activeParamIndex =
-                                                    signature.activeParameter;
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 7,
+                                            left: 6.5,
+                                          ),
+                                          child: RichText(
+                                            text: (() {
+                                              final label = signature.label;
+                                              final activeParamIndex =
+                                                  signature.activeParameter;
 
-                                                if (activeParamIndex < 0 ||
-                                                    activeParamIndex >=
-                                                        signature
-                                                            .parameters
-                                                            .length) {
-                                                  return TextSpan(text: label);
-                                                }
+                                              if (activeParamIndex < 0 ||
+                                                  activeParamIndex >=
+                                                      signature
+                                                          .parameters
+                                                          .length) {
+                                                return TextSpan(text: label);
+                                              }
 
-                                                final paramLabel = signature
-                                                    .parameters[activeParamIndex]['label'];
+                                              final paramLabel = signature
+                                                  .parameters[activeParamIndex]['label'];
 
-                                                if (paramLabel is List &&
-                                                    paramLabel.length >= 2) {
-                                                  final range = paramLabel
-                                                      .cast<int>();
+                                              if (paramLabel is List &&
+                                                  paramLabel.length >= 2) {
+                                                final range = paramLabel
+                                                    .cast<int>();
+                                                final firstPart = label
+                                                    .substring(0, range[0]);
+                                                final highlightPart = label
+                                                    .substring(
+                                                      range[0],
+                                                      range[1],
+                                                    );
+                                                final finalPart = label
+                                                    .substring(range[1]);
+
+                                                return TextSpan(
+                                                  style: TextStyle(
+                                                    fontSize:
+                                                        (widget
+                                                                .textStyle
+                                                                ?.fontSize ??
+                                                            15) +
+                                                        1.75,
+                                                    color: _editorTheme['root']
+                                                        ?.color,
+                                                  ),
+                                                  children: [
+                                                    TextSpan(text: firstPart),
+                                                    TextSpan(
+                                                      text: highlightPart,
+                                                      style: TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: Colors.blue,
+                                                      ),
+                                                    ),
+                                                    TextSpan(text: finalPart),
+                                                  ],
+                                                );
+                                              } else if (paramLabel is String) {
+                                                final paramText = paramLabel;
+                                                final paramIndex = label
+                                                    .indexOf(paramText);
+
+                                                if (paramIndex >= 0) {
                                                   final firstPart = label
-                                                      .substring(0, range[0]);
-                                                  final highlightPart = label
-                                                      .substring(
-                                                        range[0],
-                                                        range[1],
-                                                      );
+                                                      .substring(0, paramIndex);
+                                                  final highlightPart =
+                                                      paramText;
                                                   final finalPart = label
-                                                      .substring(range[1]);
+                                                      .substring(
+                                                        paramIndex +
+                                                            paramText.length,
+                                                      );
 
                                                   return TextSpan(
                                                     style: TextStyle(
@@ -1902,89 +1967,471 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                       TextSpan(text: finalPart),
                                                     ],
                                                   );
-                                                } else if (paramLabel
-                                                    is String) {
-                                                  final paramText = paramLabel;
-                                                  final paramIndex = label
-                                                      .indexOf(paramText);
-
-                                                  if (paramIndex >= 0) {
-                                                    final firstPart = label
-                                                        .substring(
-                                                          0,
-                                                          paramIndex,
-                                                        );
-                                                    final highlightPart =
-                                                        paramText;
-                                                    final finalPart = label
-                                                        .substring(
-                                                          paramIndex +
-                                                              paramText.length,
-                                                        );
-
-                                                    return TextSpan(
-                                                      style: TextStyle(
-                                                        fontSize:
-                                                            (widget
-                                                                    .textStyle
-                                                                    ?.fontSize ??
-                                                                15) +
-                                                            1.75,
-                                                        color:
-                                                            _editorTheme['root']
-                                                                ?.color,
-                                                      ),
-                                                      children: [
-                                                        TextSpan(
-                                                          text: firstPart,
-                                                        ),
-                                                        TextSpan(
-                                                          text: highlightPart,
-                                                          style: TextStyle(
-                                                            fontWeight:
-                                                                FontWeight.bold,
-                                                            color: Colors.blue,
-                                                          ),
-                                                        ),
-                                                        TextSpan(
-                                                          text: finalPart,
-                                                        ),
-                                                      ],
-                                                    );
-                                                  }
                                                 }
+                                              }
 
-                                                return TextSpan(
-                                                  text: label,
-                                                  style: TextStyle(
-                                                    fontSize:
-                                                        (widget
-                                                                .textStyle
-                                                                ?.fontSize ??
-                                                            15) +
-                                                        1.75,
-                                                    color: _editorTheme['root']
-                                                        ?.color,
+                                              return TextSpan(
+                                                text: label,
+                                                style: TextStyle(
+                                                  fontSize:
+                                                      (widget
+                                                              .textStyle
+                                                              ?.fontSize ??
+                                                          15) +
+                                                      1.75,
+                                                  color: _editorTheme['root']
+                                                      ?.color,
+                                                ),
+                                              );
+                                            })(),
+                                          ),
+                                        ),
+                                        Divider(
+                                          color:
+                                              signature.documentation.isNotEmpty
+                                              ? _editorTheme['root']?.color
+                                              : Colors.transparent,
+                                          thickness: 0.5,
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            left: 6.5,
+                                          ),
+                                          child: MarkdownBlock(
+                                            data: signature.documentation,
+                                            config: MarkdownConfig.darkConfig.copy(
+                                              configs: [
+                                                PConfig(
+                                                  textStyle: _hoverDetailsStyle
+                                                      .textStyle,
+                                                ),
+                                                PreConfig(
+                                                  language:
+                                                      _controller
+                                                          .lspConfig
+                                                          ?.languageId
+                                                          .toLowerCase() ??
+                                                      'dart',
+                                                  theme: _editorTheme,
+                                                  textStyle: TextStyle(
+                                                    fontSize: _hoverDetailsStyle
+                                                        .textStyle
+                                                        .fontSize,
                                                   ),
-                                                );
-                                              })(),
+                                                  styleNotMatched: TextStyle(
+                                                    color: _editorTheme['root']!
+                                                        .color,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: _editorTheme['root']!
+                                                        .backgroundColor!,
+                                                    borderRadius:
+                                                        BorderRadius.zero,
+                                                    border: Border.all(
+                                                      width: 0.2,
+                                                      color:
+                                                          _editorTheme['root']!
+                                                              .color ??
+                                                          Colors.grey,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ),
-                                          Divider(
-                                            color:
-                                                signature
-                                                    .documentation
-                                                    .isNotEmpty
-                                                ? _editorTheme['root']?.color
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                  ValueListenableBuilder(
+                    valueListenable: _offsetNotifier,
+                    builder: (context, offset, child) {
+                      if (offset.dy < 0 ||
+                          offset.dx < 0 ||
+                          !widget.enableSuggestions) {
+                        return SizedBox.shrink();
+                      }
+                      return ValueListenableBuilder(
+                        valueListenable: _suggestionNotifier,
+                        builder: (_, sugg, child) {
+                          if (_aiNotifier.value != null) {
+                            return SizedBox.shrink();
+                          }
+                          if (sugg == null || sugg.isEmpty) {
+                            _sugSelIndex = 0;
+                            return SizedBox.shrink();
+                          }
+                          final completionScrlCtrl = ScrollController();
+                          final desiredWidth = screenWidth < 700
+                              ? screenWidth * 0.63
+                              : screenWidth * 0.3;
+                          final suggestionWidth = min(desiredWidth, 400.0);
+                          final itemExtent =
+                              _suggestionStyle.itemHeight ?? 24.0;
+                          final estimatedHeight = min(
+                            sugg.length * itemExtent,
+                            400.0,
+                          );
+                          double adjustedLeft = offset.dx;
+                          if (adjustedLeft + suggestionWidth > screenWidth) {
+                            adjustedLeft = screenWidth - suggestionWidth;
+                          }
+                          if (adjustedLeft < 0) {
+                            adjustedLeft = 0;
+                          }
+                          final fontSize = widget.textStyle?.fontSize ?? 14;
+                          final spaceBelow =
+                              editorHeight - offset.dy - fontSize - 10;
+                          double adjustedTop;
+                          if (estimatedHeight > spaceBelow) {
+                            final spaceAbove = offset.dy - 10;
+                            if (spaceAbove >= estimatedHeight) {
+                              adjustedTop = offset.dy - estimatedHeight - 10;
+                            } else {
+                              adjustedTop = offset.dy + fontSize + 10;
+                            }
+                          } else {
+                            adjustedTop = offset.dy + fontSize + 10;
+                          }
+                          if (adjustedTop < 0) {
+                            adjustedTop = 0;
+                          }
+                          return Stack(
+                            children: [
+                              Positioned(
+                                width: suggestionWidth,
+                                top: adjustedTop,
+                                left: adjustedLeft,
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    maxHeight: 400,
+                                    maxWidth: 400,
+                                    minWidth: 70,
+                                  ),
+                                  child: Card(
+                                    shape: _suggestionStyle.shape,
+                                    elevation: _suggestionStyle.elevation,
+                                    color: _suggestionStyle.backgroundColor,
+                                    margin: EdgeInsets.zero,
+                                    child: RawScrollbar(
+                                      thumbVisibility: true,
+                                      thumbColor: _editorTheme['root']!.color!
+                                          .withAlpha(80),
+                                      interactive: true,
+                                      controller: _suggScrollController,
+                                      child: ListView.builder(
+                                        itemExtent:
+                                            _suggestionStyle.itemHeight ?? 24.0,
+                                        controller: _suggScrollController,
+                                        padding: EdgeInsets.zero,
+                                        shrinkWrap: true,
+                                        itemCount: sugg.length,
+                                        itemBuilder: (_, indx) {
+                                          final item = sugg[indx];
+                                          if (item is LspCompletion &&
+                                              indx == _sugSelIndex) {
+                                            final key = _getSuggestionCacheKey(
+                                              item,
+                                            );
+                                            if (!_suggestionDetailsCache
+                                                    .containsKey(key) &&
+                                                _controller.lspConfig != null) {
+                                              (() async {
+                                                try {
+                                                  final data = await _controller
+                                                      .lspConfig!
+                                                      .resolveCompletionItem(
+                                                        item.completionItem,
+                                                      );
+                                                  final mdText =
+                                                      "${data['detail'] ?? ''}\n${(() {
+                                                        final doc = data['documentation'];
+                                                        if (doc == null) {
+                                                          return '';
+                                                        }
+
+                                                        if (doc is Map<String, dynamic> && doc.containsKey('value')) {
+                                                          return doc['value'];
+                                                        }
+
+                                                        return doc;
+                                                      })()}";
+                                                  if (!mounted) return;
+                                                  setState(() {
+                                                    final edits =
+                                                        data['additionalTextEdits'];
+                                                    if (edits is List) {
+                                                      try {
+                                                        _extraText = edits
+                                                            .map(
+                                                              (e) =>
+                                                                  Map<
+                                                                    String,
+                                                                    dynamic
+                                                                  >.from(
+                                                                    e as Map,
+                                                                  ),
+                                                            )
+                                                            .toList();
+                                                      } catch (_) {
+                                                        _extraText = edits
+                                                            .cast<
+                                                              Map<
+                                                                String,
+                                                                dynamic
+                                                              >
+                                                            >();
+                                                      }
+                                                    } else {
+                                                      _extraText = [];
+                                                    }
+                                                    _suggestionDetailsCache[key] =
+                                                        mdText;
+                                                    _selectedSuggestionMd =
+                                                        mdText;
+                                                  });
+                                                } catch (e) {
+                                                  debugPrint(
+                                                    "Completion Resolve failed: ${e.toString()}",
+                                                  );
+                                                }
+                                              })();
+                                            } else if (_suggestionDetailsCache
+                                                .containsKey(key)) {
+                                              final cached =
+                                                  _suggestionDetailsCache[key];
+                                              if (_selectedSuggestionMd !=
+                                                  cached) {
+                                                WidgetsBinding.instance
+                                                    .addPostFrameCallback((_) {
+                                                      if (!mounted) return;
+                                                      setState(() {
+                                                        _selectedSuggestionMd =
+                                                            cached;
+                                                      });
+                                                    });
+                                              }
+                                            }
+                                          } else if (indx == _sugSelIndex &&
+                                              item is! LspCompletion) {
+                                            if (_selectedSuggestionMd != null) {
+                                              WidgetsBinding.instance
+                                                  .addPostFrameCallback((_) {
+                                                    if (!mounted) return;
+                                                    setState(() {
+                                                      _selectedSuggestionMd =
+                                                          null;
+                                                    });
+                                                  });
+                                            }
+                                          }
+
+                                          return Container(
+                                            height: _suggestionStyle.itemHeight,
+                                            padding: EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 2,
+                                            ),
+                                            color: _sugSelIndex == indx
+                                                ? (_suggestionStyle
+                                                          .selectedBackgroundColor ??
+                                                      _suggestionStyle
+                                                          .focusColor)
                                                 : Colors.transparent,
-                                            thickness: 0.5,
-                                          ),
-                                          Padding(
-                                            padding: const EdgeInsets.only(
-                                              left: 6.5,
+                                            child: InkWell(
+                                              canRequestFocus: false,
+                                              hoverColor:
+                                                  _suggestionStyle.hoverColor,
+                                              focusColor:
+                                                  _suggestionStyle.focusColor,
+                                              splashColor:
+                                                  _suggestionStyle.splashColor,
+                                              borderRadius:
+                                                  BorderRadius.circular(3),
+                                              onTap: () {
+                                                if (mounted) {
+                                                  setState(() {
+                                                    _sugSelIndex = indx;
+                                                    final text =
+                                                        item is LspCompletion
+                                                        ? item.label
+                                                        : item as String;
+                                                    _controller
+                                                        .insertAtCurrentCursor(
+                                                          text,
+                                                          replaceTypedChar:
+                                                              true,
+                                                        );
+                                                    if (_extraText.isNotEmpty) {
+                                                      _controller
+                                                          .applyWorkspaceEdit(
+                                                            _extraText,
+                                                          );
+                                                    }
+                                                    _suggestionNotifier.value =
+                                                        null;
+                                                    _isSignatureInvoked = true;
+                                                    _callSignatureHelp();
+                                                  });
+                                                }
+                                              },
+                                              child: Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.center,
+                                                children: [
+                                                  if (item
+                                                      is LspCompletion) ...[
+                                                    SizedBox(
+                                                      width:
+                                                          _suggestionStyle
+                                                              .iconSize ??
+                                                          16,
+                                                      height:
+                                                          _suggestionStyle
+                                                              .iconSize ??
+                                                          16,
+                                                      child: Icon(
+                                                        item.icon.icon,
+                                                        color:
+                                                            _getCompletionIconColor(
+                                                              item.itemType,
+                                                            ),
+                                                        size:
+                                                            _suggestionStyle
+                                                                .iconSize ??
+                                                            16,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Expanded(
+                                                      flex: 3,
+                                                      child: Text(
+                                                        item.label,
+                                                        style:
+                                                            _suggestionStyle
+                                                                .labelTextStyle ??
+                                                            _suggestionStyle
+                                                                .textStyle,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                    if (item.importUri?[0] !=
+                                                        null) ...[
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                        flex: 2,
+                                                        child: Text(
+                                                          item.importUri![0],
+                                                          style:
+                                                              _suggestionStyle
+                                                                  .detailTextStyle ??
+                                                              _suggestionStyle
+                                                                  .textStyle
+                                                                  .copyWith(
+                                                                    color: _suggestionStyle
+                                                                        .textStyle
+                                                                        .color
+                                                                        ?.withAlpha(
+                                                                          150,
+                                                                        ),
+                                                                  ),
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                          textAlign:
+                                                              TextAlign.right,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ],
+                                                  if (item is String)
+                                                    Expanded(
+                                                      child: Text(
+                                                        item,
+                                                        style:
+                                                            _suggestionStyle
+                                                                .labelTextStyle ??
+                                                            _suggestionStyle
+                                                                .textStyle,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                ],
+                                              ),
                                             ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              if (_selectedSuggestionMd != null &&
+                                  _lspSignatureNotifier.value == null)
+                                Positioned(
+                                  width: screenWidth < 700
+                                      ? screenWidth * 0.63
+                                      : null,
+                                  top:
+                                      offset.dy +
+                                      (widget.textStyle?.fontSize ?? 14) +
+                                      10 +
+                                      (screenWidth < 700
+                                          ? (offset.dy < (screenWidth / 2) &&
+                                                    400 < screenHeight)
+                                                ? (((widget.textStyle?.fontSize ??
+                                                                  14) +
+                                                              6.5) *
+                                                          (_suggestionNotifier
+                                                                  .value
+                                                                  ?.length ??
+                                                              0))
+                                                      .clamp(0, 400)
+                                                : -100
+                                          : 0),
+                                  left: screenWidth < 700
+                                      ? offset.dx
+                                      : ((adjustedLeft +
+                                                    suggestionWidth +
+                                                    420) >
+                                                screenWidth
+                                            ? adjustedLeft - 420 - 10
+                                            : adjustedLeft + suggestionWidth),
+                                  child: ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                      maxWidth: 420,
+                                      maxHeight: 400,
+                                      minWidth: 70,
+                                    ),
+                                    child: Card(
+                                      color: _hoverDetailsStyle.backgroundColor,
+                                      shape: _hoverDetailsStyle.shape,
+                                      child: Padding(
+                                        padding: EdgeInsets.all(
+                                          _selectedSuggestionMd!.trim().isEmpty
+                                              ? 0
+                                              : 8.0,
+                                        ),
+                                        child: RawScrollbar(
+                                          interactive: true,
+                                          controller: completionScrlCtrl,
+                                          thumbVisibility: true,
+                                          thumbColor: _editorTheme['root']!
+                                              .color!
+                                              .withAlpha(100),
+                                          child: SingleChildScrollView(
+                                            controller: completionScrlCtrl,
                                             child: MarkdownBlock(
-                                              data: signature.documentation,
+                                              data: _selectedSuggestionMd!,
                                               config: MarkdownConfig.darkConfig.copy(
                                                 configs: [
                                                   PConfig(
@@ -2030,822 +2477,444 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                               ),
                                             ),
                                           ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    ),
-                    ValueListenableBuilder(
-                      valueListenable: _offsetNotifier,
-                      builder: (context, offset, child) {
-                        if (offset.dy < 0 ||
-                            offset.dx < 0 ||
-                            !widget.enableSuggestions) {
-                          return SizedBox.shrink();
-                        }
-                        return ValueListenableBuilder(
-                          valueListenable: _suggestionNotifier,
-                          builder: (_, sugg, child) {
-                            if (_aiNotifier.value != null) {
-                              return SizedBox.shrink();
-                            }
-                            if (sugg == null || sugg.isEmpty) {
-                              _sugSelIndex = 0;
-                              return SizedBox.shrink();
-                            }
-                            final completionScrlCtrl = ScrollController();
-                            return Stack(
-                              children: [
-                                Positioned(
-                                  width: screenWidth < 700
-                                      ? screenWidth * 0.63
-                                      : screenWidth * 0.3,
-                                  top:
-                                      offset.dy +
-                                      (widget.textStyle?.fontSize ?? 14) +
-                                      10,
-                                  left: offset.dx,
-                                  child: ConstrainedBox(
-                                    constraints: BoxConstraints(
-                                      maxHeight: 400,
-                                      maxWidth: 400,
-                                      minWidth: 70,
-                                    ),
-                                    child: Card(
-                                      shape: _suggestionStyle.shape,
-                                      elevation: _suggestionStyle.elevation,
-                                      color: _suggestionStyle.backgroundColor,
-                                      margin: EdgeInsets.zero,
-                                      child: RawScrollbar(
-                                        thumbVisibility: true,
-                                        thumbColor: _editorTheme['root']!.color!
-                                            .withAlpha(80),
-                                        interactive: true,
-                                        controller: _suggScrollController,
-                                        child: ListView.builder(
-                                          itemExtent:
-                                              (widget.textStyle?.fontSize ??
-                                                  14) +
-                                              6.5,
-                                          controller: _suggScrollController,
-                                          padding: EdgeInsets.only(right: 5),
-                                          shrinkWrap: true,
-                                          itemCount: sugg.length,
-                                          itemBuilder: (_, indx) {
-                                            final item = sugg[indx];
-                                            if (item is LspCompletion &&
-                                                indx == _sugSelIndex) {
-                                              final key =
-                                                  _getSuggestionCacheKey(item);
-                                              if (!_suggestionDetailsCache
-                                                      .containsKey(key) &&
-                                                  _controller.lspConfig !=
-                                                      null) {
-                                                (() async {
-                                                  try {
-                                                    final data = await _controller
-                                                        .lspConfig!
-                                                        .resolveCompletionItem(
-                                                          item.completionItem,
-                                                        );
-                                                    final mdText =
-                                                        "${data['detail'] ?? ''}\n${(() {
-                                                          final doc = data['documentation'];
-                                                          if (doc == null) {
-                                                            return '';
-                                                          }
-
-                                                          if (doc is Map<String, dynamic> && doc.containsKey('value')) {
-                                                            return doc['value'];
-                                                          }
-
-                                                          return doc;
-                                                        })()}";
-                                                    if (!mounted) return;
-                                                    setState(() {
-                                                      final edits =
-                                                          data['additionalTextEdits'];
-                                                      if (edits is List) {
-                                                        try {
-                                                          _extraText = edits
-                                                              .map(
-                                                                (e) =>
-                                                                    Map<
-                                                                      String,
-                                                                      dynamic
-                                                                    >.from(
-                                                                      e as Map,
-                                                                    ),
-                                                              )
-                                                              .toList();
-                                                        } catch (_) {
-                                                          _extraText = edits
-                                                              .cast<
-                                                                Map<
-                                                                  String,
-                                                                  dynamic
-                                                                >
-                                                              >();
-                                                        }
-                                                      } else {
-                                                        _extraText = [];
-                                                      }
-                                                      _suggestionDetailsCache[key] =
-                                                          mdText;
-                                                      _selectedSuggestionMd =
-                                                          mdText;
-                                                    });
-                                                  } catch (e) {
-                                                    debugPrint(
-                                                      "Completion Resolve failed: ${e.toString()}",
-                                                    );
-                                                  }
-                                                })();
-                                              } else if (_suggestionDetailsCache
-                                                  .containsKey(key)) {
-                                                final cached =
-                                                    _suggestionDetailsCache[key];
-                                                if (_selectedSuggestionMd !=
-                                                    cached) {
-                                                  WidgetsBinding.instance
-                                                      .addPostFrameCallback((
-                                                        _,
-                                                      ) {
-                                                        if (!mounted) return;
-                                                        setState(() {
-                                                          _selectedSuggestionMd =
-                                                              cached;
-                                                        });
-                                                      });
-                                                }
-                                              }
-                                            } else if (indx == _sugSelIndex &&
-                                                item is! LspCompletion) {
-                                              if (_selectedSuggestionMd !=
-                                                  null) {
-                                                WidgetsBinding.instance
-                                                    .addPostFrameCallback((_) {
-                                                      if (!mounted) return;
-                                                      setState(() {
-                                                        _selectedSuggestionMd =
-                                                            null;
-                                                      });
-                                                    });
-                                              }
-                                            }
-
-                                            return Container(
-                                              color: _sugSelIndex == indx
-                                                  ? _suggestionStyle.focusColor
-                                                  : Colors.transparent,
-                                              child: InkWell(
-                                                canRequestFocus: false,
-                                                hoverColor:
-                                                    _suggestionStyle.hoverColor,
-                                                focusColor:
-                                                    _suggestionStyle.focusColor,
-                                                splashColor: _suggestionStyle
-                                                    .splashColor,
-                                                onTap: () {
-                                                  if (mounted) {
-                                                    setState(() {
-                                                      _sugSelIndex = indx;
-                                                      final text =
-                                                          item is LspCompletion
-                                                          ? item.label
-                                                          : item as String;
-                                                      _controller
-                                                          .insertAtCurrentCursor(
-                                                            text,
-                                                            replaceTypedChar:
-                                                                true,
-                                                          );
-                                                      if (_extraText
-                                                          .isNotEmpty) {
-                                                        _controller
-                                                            .applyWorkspaceEdit(
-                                                              _extraText,
-                                                            );
-                                                      }
-                                                      _suggestionNotifier
-                                                              .value =
-                                                          null;
-                                                      _isSignatureInvoked =
-                                                          true;
-                                                      _callSignatureHelp();
-                                                    });
-                                                  }
-                                                },
-                                                child: Row(
-                                                  children: [
-                                                    if (item
-                                                        is LspCompletion) ...[
-                                                      item.icon,
-                                                      const SizedBox(width: 10),
-                                                      Expanded(
-                                                        child: Text(
-                                                          item.label,
-                                                          style:
-                                                              _suggestionStyle
-                                                                  .textStyle,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                        ),
-                                                      ),
-                                                      const Expanded(
-                                                        child: SizedBox(),
-                                                      ),
-                                                      if (item.importUri?[0] !=
-                                                          null)
-                                                        Expanded(
-                                                          child: Text(
-                                                            item.importUri![0],
-                                                            style: _suggestionStyle
-                                                                .textStyle
-                                                                .copyWith(
-                                                                  color: _suggestionStyle
-                                                                      .textStyle
-                                                                      .color
-                                                                      ?.withAlpha(
-                                                                        150,
-                                                                      ),
-                                                                ),
-                                                            overflow:
-                                                                TextOverflow
-                                                                    .ellipsis,
-                                                          ),
-                                                        ),
-                                                    ],
-                                                    if (item is String)
-                                                      Expanded(
-                                                        child: Text(
-                                                          item,
-                                                          style:
-                                                              _suggestionStyle
-                                                                  .textStyle,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                        ),
-                                                      ),
-                                                  ],
-                                                ),
-                                              ),
-                                            );
-                                          },
                                         ),
                                       ),
                                     ),
                                   ),
                                 ),
-                                if (_selectedSuggestionMd != null &&
-                                    _lspSignatureNotifier.value == null)
-                                  Positioned(
-                                    width: screenWidth < 700
-                                        ? screenWidth * 0.63
-                                        : null,
-                                    top:
-                                        offset.dy +
-                                        (widget.textStyle?.fontSize ?? 14) +
-                                        10 +
-                                        (screenWidth < 700
-                                            ? (offset.dy < (screenWidth / 2) &&
-                                                      400 < screenHeight)
-                                                  ? (((widget.textStyle?.fontSize ??
-                                                                    14) +
-                                                                6.5) *
-                                                            (_suggestionNotifier
-                                                                    .value
-                                                                    ?.length ??
-                                                                0))
-                                                        .clamp(0, 400)
-                                                  : -100
-                                            : 0),
-                                    left: screenWidth < 700
-                                        ? offset.dx
-                                        : offset.dx + screenWidth * 0.3 + 8,
-                                    child: ConstrainedBox(
-                                      constraints: BoxConstraints(
-                                        maxWidth: 420,
-                                        maxHeight: 400,
-                                        minWidth: 70,
-                                      ),
-                                      child: Card(
-                                        color:
-                                            _hoverDetailsStyle.backgroundColor,
-                                        shape: _hoverDetailsStyle.shape,
-                                        child: Padding(
-                                          padding: EdgeInsets.all(
-                                            _selectedSuggestionMd!
-                                                    .trim()
-                                                    .isEmpty
-                                                ? 0
-                                                : 8.0,
-                                          ),
-                                          child: RawScrollbar(
-                                            interactive: true,
-                                            controller: completionScrlCtrl,
-                                            thumbVisibility: true,
-                                            thumbColor: _editorTheme['root']!
-                                                .color!
-                                                .withAlpha(100),
-                                            child: SingleChildScrollView(
-                                              controller: completionScrlCtrl,
-                                              child: MarkdownBlock(
-                                                data: _selectedSuggestionMd!,
-                                                config: MarkdownConfig.darkConfig.copy(
-                                                  configs: [
-                                                    PConfig(
-                                                      textStyle:
-                                                          _hoverDetailsStyle
-                                                              .textStyle,
-                                                    ),
-                                                    PreConfig(
-                                                      language:
-                                                          _controller
-                                                              .lspConfig
-                                                              ?.languageId
-                                                              .toLowerCase() ??
-                                                          'dart',
-                                                      theme: _editorTheme,
-                                                      textStyle: TextStyle(
-                                                        fontSize:
-                                                            _hoverDetailsStyle
-                                                                .textStyle
-                                                                .fontSize,
-                                                      ),
-                                                      styleNotMatched: TextStyle(
-                                                        color:
-                                                            _editorTheme['root']!
-                                                                .color,
-                                                      ),
-                                                      decoration: BoxDecoration(
-                                                        color:
-                                                            _editorTheme['root']!
-                                                                .backgroundColor!,
-                                                        borderRadius:
-                                                            BorderRadius.zero,
-                                                        border: Border.all(
-                                                          width: 0.2,
-                                                          color:
-                                                              _editorTheme['root']!
-                                                                  .color ??
-                                                              Colors.grey,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            );
-                          },
-                        );
-                      },
-                    ),
-                    ValueListenableBuilder(
-                      valueListenable: _hoverNotifier,
-                      builder: (_, hov, c) {
-                        if (hov == null ||
-                            _controller.lspConfig == null ||
-                            !widget.enableSuggestions) {
-                          return SizedBox.shrink();
-                        }
-                        final Offset position = hov[0];
-                        final Map<String, int> lineChar = hov[1];
-                        final width = _isMobile
-                            ? screenWidth * 0.63
-                            : screenWidth * 0.3;
-                        final maxHeight = _isMobile
-                            ? screenHeight * 0.4
-                            : 550.0;
+                            ],
+                          );
+                        },
+                      );
+                    },
+                  ),
+                  ValueListenableBuilder(
+                    valueListenable: _hoverNotifier,
+                    builder: (_, hov, c) {
+                      if (hov == null ||
+                          _controller.lspConfig == null ||
+                          !widget.enableSuggestions) {
+                        return SizedBox.shrink();
+                      }
+                      final Offset position = hov.$1;
+                      final Map<String, int> lineChar = hov.$2;
+                      final width = _isMobile
+                          ? screenWidth * 0.63
+                          : screenWidth * 0.3;
+                      final maxHeight = _isMobile ? screenHeight * 0.4 : 550.0;
 
-                        return Positioned(
-                          top: position.dy,
-                          left: position.dx,
-                          child: MouseRegion(
-                            onEnter: (_) => _isHoveringPopup.value = true,
-                            onExit: (_) => _isHoveringPopup.value = false,
-                            child: FutureBuilder<Map<String, dynamic>>(
-                              future: (() async {
-                                final lspConfig = _controller.lspConfig;
-                                final line = lineChar['line']!;
-                                final character = lineChar['character']!;
+                      return Positioned(
+                        top: position.dy,
+                        left: position.dx,
+                        child: MouseRegion(
+                          onEnter: (_) => _isHoveringPopup.value = true,
+                          onExit: (_) => _isHoveringPopup.value = false,
+                          child: FutureBuilder<Map<String, dynamic>>(
+                            future: (() async {
+                              final lspConfig = _controller.lspConfig;
+                              final line = lineChar['line']!;
+                              final character = lineChar['character']!;
 
-                                String diagnosticMessage = '';
-                                int severity = 0;
-                                String hoverMessage = '';
+                              String diagnosticMessage = '';
+                              int severity = 0;
+                              String hoverMessage = '';
 
-                                final diagnostic = _diagnosticsNotifier.value
-                                    .firstWhere(
-                                      (diag) {
-                                        final diagStartLine =
-                                            diag.range['start']['line'] as int;
-                                        final diagEndLine =
-                                            diag.range['end']['line'] as int;
-                                        final diagStartChar =
-                                            diag.range['start']['character']
-                                                as int;
-                                        final diagEndChar =
-                                            diag.range['end']['character']
-                                                as int;
+                              final diagnostic = _diagnosticsNotifier.value
+                                  .firstWhere(
+                                    (diag) {
+                                      final diagStartLine =
+                                          diag.range['start']['line'] as int;
+                                      final diagEndLine =
+                                          diag.range['end']['line'] as int;
+                                      final diagStartChar =
+                                          diag.range['start']['character']
+                                              as int;
+                                      final diagEndChar =
+                                          diag.range['end']['character'] as int;
 
-                                        if (line < diagStartLine ||
-                                            line > diagEndLine) {
-                                          return false;
-                                        }
+                                      if (line < diagStartLine ||
+                                          line > diagEndLine) {
+                                        return false;
+                                      }
 
-                                        if (line == diagStartLine &&
-                                            line == diagEndLine) {
-                                          return character >= diagStartChar &&
-                                              character < diagEndChar;
-                                        } else if (line == diagStartLine) {
-                                          return character >= diagStartChar;
-                                        } else if (line == diagEndLine) {
-                                          return character < diagEndChar;
-                                        } else {
-                                          return true;
-                                        }
-                                      },
-                                      orElse: () => LspErrors(
-                                        severity: 0,
-                                        range: {},
-                                        message: '',
-                                      ),
-                                    );
-
-                                if (diagnostic.message.isNotEmpty) {
-                                  diagnosticMessage = diagnostic.message;
-                                  severity = diagnostic.severity;
-                                }
-
-                                if (lspConfig != null) {
-                                  hoverMessage = await lspConfig.getHover(
-                                    _filePath!,
-                                    line,
-                                    character,
-                                  );
-                                }
-
-                                return {
-                                  'diagnostic': diagnosticMessage,
-                                  'severity': severity,
-                                  'hover': hoverMessage,
-                                };
-                              })(),
-                              builder: (_, snapShot) {
-                                if (snapShot.hasError) {
-                                  return SizedBox.shrink();
-                                }
-
-                                if (snapShot.connectionState ==
-                                    ConnectionState.waiting) {
-                                  return ConstrainedBox(
-                                    constraints: BoxConstraints(
-                                      maxWidth: width,
-                                      maxHeight: maxHeight,
-                                    ),
-                                    child: Card(
-                                      color: _hoverDetailsStyle.backgroundColor,
-                                      shape: _hoverDetailsStyle.shape,
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(8.0),
-                                        child: Text(
-                                          "Loading...",
-                                          style: _hoverDetailsStyle.textStyle,
-                                        ),
-                                      ),
+                                      if (line == diagStartLine &&
+                                          line == diagEndLine) {
+                                        return character >= diagStartChar &&
+                                            character < diagEndChar;
+                                      } else if (line == diagStartLine) {
+                                        return character >= diagStartChar;
+                                      } else if (line == diagEndLine) {
+                                        return character < diagEndChar;
+                                      } else {
+                                        return true;
+                                      }
+                                    },
+                                    orElse: () => LspErrors(
+                                      severity: 0,
+                                      range: {},
+                                      message: '',
                                     ),
                                   );
-                                }
 
-                                final data = snapShot.data;
-                                if (data == null) {
-                                  return SizedBox.shrink();
-                                }
+                              if (diagnostic.message.isNotEmpty) {
+                                diagnosticMessage = diagnostic.message;
+                                severity = diagnostic.severity;
+                              }
 
-                                final diagnosticMessage =
-                                    data['diagnostic'] ?? '';
-                                final severity = data['severity'] ?? 0;
-                                final hoverMessage = data['hover'] ?? '';
+                              if (lspConfig != null) {
+                                hoverMessage = await lspConfig.getHover(
+                                  _filePath!,
+                                  line,
+                                  character,
+                                );
+                              }
 
-                                if (diagnosticMessage.isEmpty &&
-                                    hoverMessage.isEmpty) {
-                                  return SizedBox.shrink();
-                                }
+                              return {
+                                'diagnostic': diagnosticMessage,
+                                'severity': severity,
+                                'hover': hoverMessage,
+                              };
+                            })(),
+                            builder: (_, snapShot) {
+                              if (snapShot.hasError) {
+                                return SizedBox.shrink();
+                              }
 
-                                IconData diagnosticIcon;
-                                Color diagnosticColor;
-
-                                switch (severity) {
-                                  case 1:
-                                    diagnosticIcon = Icons.error_outline;
-                                    diagnosticColor = Colors.red;
-                                    break;
-                                  case 2:
-                                    diagnosticIcon =
-                                        Icons.warning_amber_outlined;
-                                    diagnosticColor = Colors.orange;
-                                    break;
-                                  case 3:
-                                    diagnosticIcon = Icons.info_outline;
-                                    diagnosticColor = Colors.blue;
-                                    break;
-                                  case 4:
-                                    diagnosticIcon = Icons.lightbulb_outline;
-                                    diagnosticColor = Colors.grey;
-                                    break;
-                                  default:
-                                    diagnosticIcon = Icons.info_outline;
-                                    diagnosticColor = Colors.grey;
-                                }
-
-                                final hoverScrollController =
-                                    ScrollController();
-                                final errorSCrollController =
-                                    ScrollController();
-
+                              if (snapShot.connectionState ==
+                                  ConnectionState.waiting) {
                                 return ConstrainedBox(
                                   constraints: BoxConstraints(
                                     maxWidth: width,
                                     maxHeight: maxHeight,
                                   ),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      if (diagnosticMessage.isNotEmpty)
-                                        Card(
-                                          surfaceTintColor: diagnosticColor,
-                                          color: _hoverDetailsStyle
-                                              .backgroundColor,
-                                          shape: BeveledRectangleBorder(
-                                            side: BorderSide(
-                                              color: diagnosticColor,
-                                              width: 0.2,
+                                  child: Card(
+                                    color: _hoverDetailsStyle.backgroundColor,
+                                    shape: _hoverDetailsStyle.shape,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(8.0),
+                                      child: Text(
+                                        "Loading...",
+                                        style: _hoverDetailsStyle.textStyle,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }
+
+                              final data = snapShot.data;
+                              if (data == null) {
+                                return SizedBox.shrink();
+                              }
+
+                              final diagnosticMessage =
+                                  data['diagnostic'] ?? '';
+                              final severity = data['severity'] ?? 0;
+                              final hoverMessage = data['hover'] ?? '';
+
+                              if (diagnosticMessage.isEmpty &&
+                                  hoverMessage.isEmpty) {
+                                return SizedBox.shrink();
+                              }
+
+                              IconData diagnosticIcon;
+                              Color diagnosticColor;
+
+                              switch (severity) {
+                                case 1:
+                                  diagnosticIcon = Icons.error_outline;
+                                  diagnosticColor = Colors.red;
+                                  break;
+                                case 2:
+                                  diagnosticIcon = Icons.warning_amber_outlined;
+                                  diagnosticColor = Colors.orange;
+                                  break;
+                                case 3:
+                                  diagnosticIcon = Icons.info_outline;
+                                  diagnosticColor = Colors.blue;
+                                  break;
+                                case 4:
+                                  diagnosticIcon = Icons.lightbulb_outline;
+                                  diagnosticColor = Colors.grey;
+                                  break;
+                                default:
+                                  diagnosticIcon = Icons.info_outline;
+                                  diagnosticColor = Colors.grey;
+                              }
+
+                              final hoverScrollController = ScrollController();
+                              final errorSCrollController = ScrollController();
+
+                              return ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth: width,
+                                  maxHeight: maxHeight,
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (diagnosticMessage.isNotEmpty)
+                                      Card(
+                                        surfaceTintColor: diagnosticColor,
+                                        color:
+                                            _hoverDetailsStyle.backgroundColor,
+                                        shape: BeveledRectangleBorder(
+                                          side: BorderSide(
+                                            color: diagnosticColor,
+                                            width: 0.2,
+                                          ),
+                                        ),
+                                        margin: EdgeInsets.only(
+                                          bottom: hoverMessage.isNotEmpty
+                                              ? 4
+                                              : 0,
+                                        ),
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(8.0),
+                                          child: RawScrollbar(
+                                            controller: errorSCrollController,
+                                            thumbVisibility: true,
+                                            thumbColor: _editorTheme['root']!
+                                                .color!
+                                                .withAlpha(100),
+                                            child: SingleChildScrollView(
+                                              scrollDirection: Axis.horizontal,
+                                              controller: errorSCrollController,
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Icon(
+                                                    diagnosticIcon,
+                                                    color: diagnosticColor,
+                                                    size: 16,
+                                                  ),
+                                                  SizedBox(width: 8),
+                                                  Text(
+                                                    diagnosticMessage,
+                                                    style: _hoverDetailsStyle
+                                                        .textStyle,
+                                                  ),
+                                                ],
+                                              ),
                                             ),
                                           ),
-                                          margin: EdgeInsets.only(
-                                            bottom: hoverMessage.isNotEmpty
-                                                ? 4
-                                                : 0,
-                                          ),
+                                        ),
+                                      ),
+
+                                    if (hoverMessage.isNotEmpty)
+                                      Flexible(
+                                        child: Card(
+                                          color: _hoverDetailsStyle
+                                              .backgroundColor,
+                                          shape: _hoverDetailsStyle.shape,
                                           child: Padding(
                                             padding: const EdgeInsets.all(8.0),
                                             child: RawScrollbar(
-                                              controller: errorSCrollController,
+                                              controller: hoverScrollController,
                                               thumbVisibility: true,
                                               thumbColor: _editorTheme['root']!
                                                   .color!
                                                   .withAlpha(100),
                                               child: SingleChildScrollView(
-                                                scrollDirection:
-                                                    Axis.horizontal,
-                                                controller:
-                                                    errorSCrollController,
-                                                child: Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Icon(
-                                                      diagnosticIcon,
-                                                      color: diagnosticColor,
-                                                      size: 16,
-                                                    ),
-                                                    SizedBox(width: 8),
-                                                    Text(
-                                                      diagnosticMessage,
-                                                      style: _hoverDetailsStyle
-                                                          .textStyle,
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-
-                                      if (hoverMessage.isNotEmpty)
-                                        Flexible(
-                                          child: Card(
-                                            color: _hoverDetailsStyle
-                                                .backgroundColor,
-                                            shape: _hoverDetailsStyle.shape,
-                                            child: Padding(
-                                              padding: const EdgeInsets.all(
-                                                8.0,
-                                              ),
-                                              child: RawScrollbar(
                                                 controller:
                                                     hoverScrollController,
-                                                thumbVisibility: true,
-                                                thumbColor:
-                                                    _editorTheme['root']!.color!
-                                                        .withAlpha(100),
-                                                child: SingleChildScrollView(
-                                                  controller:
-                                                      hoverScrollController,
-                                                  child: MarkdownBlock(
-                                                    data: hoverMessage,
-                                                    config: MarkdownConfig.darkConfig.copy(
-                                                      configs: [
-                                                        PConfig(
-                                                          textStyle:
+                                                child: MarkdownBlock(
+                                                  data: hoverMessage,
+                                                  config: MarkdownConfig.darkConfig.copy(
+                                                    configs: [
+                                                      PConfig(
+                                                        textStyle:
+                                                            _hoverDetailsStyle
+                                                                .textStyle,
+                                                      ),
+                                                      PreConfig(
+                                                        language:
+                                                            _controller
+                                                                .lspConfig
+                                                                ?.languageId
+                                                                .toLowerCase() ??
+                                                            "dart",
+                                                        theme: _editorTheme,
+                                                        textStyle: TextStyle(
+                                                          fontSize:
                                                               _hoverDetailsStyle
-                                                                  .textStyle,
+                                                                  .textStyle
+                                                                  .fontSize,
                                                         ),
-                                                        PreConfig(
-                                                          language:
-                                                              _controller
-                                                                  .lspConfig
-                                                                  ?.languageId
-                                                                  .toLowerCase() ??
-                                                              "dart",
-                                                          theme: _editorTheme,
-                                                          textStyle: TextStyle(
-                                                            fontSize:
-                                                                _hoverDetailsStyle
-                                                                    .textStyle
-                                                                    .fontSize,
-                                                          ),
-                                                          styleNotMatched:
-                                                              TextStyle(
-                                                                color:
-                                                                    _editorTheme['root']!
-                                                                        .color,
-                                                              ),
-                                                          decoration: BoxDecoration(
-                                                            color: _editorTheme['root']!
-                                                                .backgroundColor!,
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .zero,
-                                                            border: Border.all(
-                                                              width: 0.2,
-                                                              color:
-                                                                  _editorTheme['root']!
-                                                                      .color ??
-                                                                  Colors.grey,
-                                                            ),
+                                                        styleNotMatched: TextStyle(
+                                                          color:
+                                                              _editorTheme['root']!
+                                                                  .color,
+                                                        ),
+                                                        decoration: BoxDecoration(
+                                                          color: _editorTheme['root']!
+                                                              .backgroundColor!,
+                                                          borderRadius:
+                                                              BorderRadius.zero,
+                                                          border: Border.all(
+                                                            width: 0.2,
+                                                            color:
+                                                                _editorTheme['root']!
+                                                                    .color ??
+                                                                Colors.grey,
                                                           ),
                                                         ),
-                                                      ],
-                                                    ),
+                                                      ),
+                                                    ],
                                                   ),
                                                 ),
                                               ),
                                             ),
                                           ),
                                         ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                    ValueListenableBuilder<Offset?>(
-                      valueListenable: _aiOffsetNotifier,
-                      builder: (context, offvalue, child) {
-                        return _isMobile &&
-                                _aiNotifier.value != null &&
-                                offvalue != null &&
-                                _aiNotifier.value!.isNotEmpty
-                            ? Positioned(
-                                top:
-                                    offvalue.dy +
-                                    (widget.textStyle?.fontSize ?? 14) *
-                                        _aiNotifier.value!.split('\n').length +
-                                    15,
-                                left:
-                                    offvalue.dx +
-                                    (_aiNotifier.value!.split('\n')[0].length *
-                                        (widget.textStyle?.fontSize ?? 14) /
-                                        2),
-                                child: Row(
-                                  children: [
-                                    InkWell(
-                                      onTap: () {
-                                        if (_aiNotifier.value == null) return;
-                                        _controller.insertAtCurrentCursor(
-                                          _aiNotifier.value!,
-                                        );
-                                        _aiNotifier.value = null;
-                                        _aiOffsetNotifier.value = null;
-                                      },
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          color: _editorTheme['root']
-                                              ?.backgroundColor,
-                                          borderRadius: BorderRadius.all(
-                                            Radius.circular(8),
-                                          ),
-                                          border: BoxBorder.all(
-                                            width: 1.5,
-                                            color: Color(0xff64b5f6),
-                                          ),
-                                        ),
-                                        child: Icon(
-                                          Icons.check,
-                                          color: _editorTheme['root']?.color,
-                                        ),
                                       ),
-                                    ),
-                                    SizedBox(width: 30),
-                                    InkWell(
-                                      onTap: () {
-                                        _aiNotifier.value = null;
-                                        _aiOffsetNotifier.value = null;
-                                      },
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          color: _editorTheme['root']
-                                              ?.backgroundColor,
-                                          borderRadius: BorderRadius.all(
-                                            Radius.circular(8),
-                                          ),
-                                          border: BoxBorder.all(
-                                            width: 1.5,
-                                            color: Colors.red,
-                                          ),
-                                        ),
-                                        child: Icon(
-                                          Icons.close,
-                                          color: _editorTheme['root']?.color,
-                                        ),
-                                      ),
-                                    ),
                                   ],
                                 ),
-                              )
-                            : SizedBox.shrink();
-                      },
-                    ),
-                    ValueListenableBuilder(
-                      valueListenable: _lspActionOffsetNotifier,
-                      builder: (_, offset, child) {
-                        if (offset == null ||
-                            _lspActionNotifier.value == null ||
-                            _controller.lspConfig == null ||
-                            !widget.enableSuggestions) {
-                          return SizedBox.shrink();
-                        }
+                              );
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  ValueListenableBuilder<Offset?>(
+                    valueListenable: _aiOffsetNotifier,
+                    builder: (context, offvalue, child) {
+                      return _isMobile &&
+                              _aiNotifier.value != null &&
+                              offvalue != null &&
+                              _aiNotifier.value!.isNotEmpty
+                          ? Positioned(
+                              top:
+                                  offvalue.dy +
+                                  (widget.textStyle?.fontSize ?? 14) *
+                                      _aiNotifier.value!.split('\n').length +
+                                  15,
+                              left:
+                                  offvalue.dx +
+                                  (_aiNotifier.value!.split('\n')[0].length *
+                                      (widget.textStyle?.fontSize ?? 14) /
+                                      2),
+                              child: Row(
+                                children: [
+                                  InkWell(
+                                    onTap: () {
+                                      if (_aiNotifier.value == null) return;
+                                      _controller.insertAtCurrentCursor(
+                                        _aiNotifier.value!,
+                                      );
+                                      _aiNotifier.value = null;
+                                      _aiOffsetNotifier.value = null;
+                                    },
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: _editorTheme['root']
+                                            ?.backgroundColor,
+                                        borderRadius: BorderRadius.all(
+                                          Radius.circular(8),
+                                        ),
+                                        border: BoxBorder.all(
+                                          width: 1.5,
+                                          color: Color(0xff64b5f6),
+                                        ),
+                                      ),
+                                      child: Icon(
+                                        Icons.check,
+                                        color: _editorTheme['root']?.color,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(width: 30),
+                                  InkWell(
+                                    onTap: () {
+                                      _aiNotifier.value = null;
+                                      _aiOffsetNotifier.value = null;
+                                    },
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: _editorTheme['root']
+                                            ?.backgroundColor,
+                                        borderRadius: BorderRadius.all(
+                                          Radius.circular(8),
+                                        ),
+                                        border: BoxBorder.all(
+                                          width: 1.5,
+                                          color: Colors.red,
+                                        ),
+                                      ),
+                                      child: Icon(
+                                        Icons.close,
+                                        color: _editorTheme['root']?.color,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : SizedBox.shrink();
+                    },
+                  ),
+                  ValueListenableBuilder(
+                    valueListenable: _lspActionOffsetNotifier,
+                    builder: (_, offset, child) {
+                      if (offset == null ||
+                          _lspActionNotifier.value == null ||
+                          _controller.lspConfig == null ||
+                          !widget.enableSuggestions) {
+                        return SizedBox.shrink();
+                      }
 
-                        return Positioned(
-                          width: screenWidth < 700
-                              ? screenWidth * 0.63
-                              : screenWidth * 0.3,
-                          top:
-                              offset.dy +
-                              (widget.textStyle?.fontSize ?? 14) +
-                              10,
-                          left: offset.dx,
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              maxHeight: 400,
-                              maxWidth: 400,
-                              minWidth: 70,
-                            ),
-                            child: Card(
-                              shape: _suggestionStyle.shape,
-                              elevation: _suggestionStyle.elevation,
-                              color: _suggestionStyle.backgroundColor,
-                              margin: EdgeInsets.zero,
-                              child: RawScrollbar(
+                      return Positioned(
+                        width: screenWidth < 700
+                            ? screenWidth * 0.63
+                            : screenWidth * 0.3,
+                        top:
+                            offset.dy + (widget.textStyle?.fontSize ?? 14) + 10,
+                        left: offset.dx,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxHeight: 400,
+                            maxWidth: 400,
+                            minWidth: 70,
+                          ),
+                          child: Card(
+                            shape: _suggestionStyle.shape,
+                            elevation: _suggestionStyle.elevation,
+                            color: _suggestionStyle.backgroundColor,
+                            margin: EdgeInsets.zero,
+                            child: RawScrollbar(
+                              controller: _actionScrollController,
+                              thumbVisibility: true,
+                              thumbColor: _editorTheme['root']!.color!
+                                  .withAlpha(80),
+                              child: ListView.builder(
+                                shrinkWrap: true,
                                 controller: _actionScrollController,
-                                thumbVisibility: true,
-                                thumbColor: _editorTheme['root']!.color!
-                                    .withAlpha(80),
-                                child: ListView.builder(
-                                  shrinkWrap: true,
-                                  controller: _actionScrollController,
-                                  itemExtent:
-                                      (widget.textStyle?.fontSize ?? 14) + 6.5,
-                                  itemCount: _lspActionNotifier.value!.length,
-                                  itemBuilder: (_, indx) {
-                                    final actionData = List.from(
-                                      _lspActionNotifier.value!,
-                                    ).cast<Map<String, dynamic>>();
-                                    return Tooltip(
-                                      message: actionData[indx]['title'],
+                                itemExtent: _suggestionStyle.itemHeight ?? 24.0,
+                                itemCount: _lspActionNotifier.value!.length,
+                                itemBuilder: (_, indx) {
+                                  final actionData = _lspActionNotifier.value!
+                                      .cast<Map<String, dynamic>>();
+                                  return Tooltip(
+                                    message: actionData[indx]['title'],
+                                    child: Container(
+                                      height: _suggestionStyle.itemHeight,
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 2,
+                                      ),
+                                      color: indx == _actionSelIndex
+                                          ? (_suggestionStyle
+                                                    .selectedBackgroundColor ??
+                                                _suggestionStyle.focusColor)
+                                          : Colors.transparent,
                                       child: InkWell(
                                         hoverColor: _suggestionStyle.hoverColor,
+                                        splashColor:
+                                            _suggestionStyle.splashColor,
+                                        borderRadius: BorderRadius.circular(3),
                                         onTap: () {
                                           try {
                                             (() async {
@@ -2864,61 +2933,55 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                 null;
                                           }
                                         },
-                                        child: Container(
-                                          color: indx == _actionSelIndex
-                                              ? _suggestionStyle.focusColor
-                                              : Colors.transparent,
-                                          child: Row(
-                                            children: [
-                                              Padding(
-                                                padding: const EdgeInsets.only(
-                                                  left: 5.5,
-                                                ),
-                                                child: Icon(
-                                                  Icons.lightbulb_outline,
-                                                  color: Colors.yellowAccent,
-                                                  size:
-                                                      _suggestionStyle
-                                                          .textStyle
-                                                          .fontSize ??
-                                                      14,
-                                                ),
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.center,
+                                          children: [
+                                            SizedBox(
+                                              width:
+                                                  _suggestionStyle.iconSize ??
+                                                  16,
+                                              height:
+                                                  _suggestionStyle.iconSize ??
+                                                  16,
+                                              child: Icon(
+                                                Icons.lightbulb_outline,
+                                                color: Colors.yellowAccent,
+                                                size:
+                                                    _suggestionStyle.iconSize ??
+                                                    16,
                                               ),
-                                              Expanded(
-                                                child: Padding(
-                                                  padding:
-                                                      const EdgeInsets.only(
-                                                        left: 20,
-                                                      ),
-                                                  child: Text(
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    actionData[indx]['title'],
-                                                    style: _suggestionStyle
-                                                        .textStyle,
-                                                  ),
-                                                ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                actionData[indx]['title'],
+                                                style:
+                                                    _suggestionStyle
+                                                        .labelTextStyle ??
+                                                    _suggestionStyle.textStyle,
+                                                overflow: TextOverflow.ellipsis,
                                               ),
-                                            ],
-                                          ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                    );
-                                  },
-                                ),
+                                    ),
+                                  );
+                                },
                               ),
                             ),
                           ),
-                        );
-                      },
-                    ),
-                  ],
-                );
-              },
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        );
+      },
     );
   }
 
@@ -2982,8 +3045,8 @@ class _CodeField extends LeafRenderObjectWidget {
   final List<LspErrors> diagnostics;
   final ValueNotifier<bool> selectionActiveNotifier, isHoveringPopup;
   final ValueNotifier<Offset> contextMenuOffsetNotifier, offsetNotifier;
-  final ValueNotifier<List<dynamic>?> hoverNotifier, suggestionNotifier;
-  final ValueNotifier<List<dynamic>?> lspActionNotifier;
+  final ValueNotifier<(Offset, Map<String, int>)?> hoverNotifier;
+  final ValueNotifier<List<dynamic>?> lspActionNotifier, suggestionNotifier;
   final ValueNotifier<String?> aiNotifier;
   final ValueNotifier<LspSignatureHelps?> signatureNotifier;
   final ValueNotifier<Offset?> aiOffsetNotifier, lspActionOffsetNotifier;
@@ -3118,8 +3181,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   final bool isMobile;
   final ValueNotifier<bool> selectionActiveNotifier, isHoveringPopup;
   final ValueNotifier<Offset> contextMenuOffsetNotifier, offsetNotifier;
-  final ValueNotifier<List<dynamic>?> hoverNotifier, suggestionNotifier;
-  final ValueNotifier<List<dynamic>?> lspActionNotifier;
+  final ValueNotifier<(Offset, Map<String, int>)?> hoverNotifier;
+  final ValueNotifier<List<dynamic>?> lspActionNotifier, suggestionNotifier;
   final ValueNotifier<Offset?> aiOffsetNotifier, lspActionOffsetNotifier;
   final ValueNotifier<String?> aiNotifier;
   final ValueNotifier<LspSignatureHelps?> signatureNotifier;
@@ -3130,7 +3193,23 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   final Map<int, Rect> _actionBulbRects = {};
   final Map<int, ui.Paragraph> _paragraphCache = {};
   final Map<int, double> _lineHeightCache = {};
-  final List<FoldRange> _foldRanges = [];
+  final Map<int, FoldRange?> _foldRanges = {};
+  final Map<int, int?> _bracketCache = {};
+  final Map<
+    int,
+    List<({int startLine, int endLine, int indentLevel, double guideX})>
+  >
+  _indentGuideCache = {};
+  final Map<String, int> _indentEndLineCache = {};
+  final Map<String, List<ui.TextBox>> _diagnosticPathCache = {};
+  final Map<String, List<ui.TextBox>> _searchHighlightCache = {};
+  final Map<String, double> _lineOffsetCache = {};
+  final Map<
+    int,
+    ({int lineIndex, int columnIndex, Offset offset, double height})
+  >
+  _caretInfoCache = {};
+  final Map<int, int> _lineIndentCache = {};
   final MatchHighlightStyle? _matchHighlightStyle;
   final MatchHighlightStyle? matchHighlightStyle;
   late double _lineHeight;
@@ -3147,6 +3226,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   Map<String, TextStyle> _editorTheme;
   Mode _language;
   EdgeInsets? _innerPadding;
+  double _rightPaddingWidth = 0, _bottomPaddingHeight = 0;
   TextStyle? _textStyle;
   GutterStyle _gutterStyle;
   CodeSelectionStyle _selectionStyle;
@@ -3162,23 +3242,19 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   bool _selectionActive = false, _isDragging = false;
   bool _draggingStartHandle = false, _draggingEndHandle = false;
   bool _showBubble = false, _draggingCHandle = false, _readOnly;
+  bool _isDeferringLayout = false, _hasCachedHeight = false;
   Rect? _startHandleRect, _endHandleRect, _normalHandle;
   double _longLineWidth = 0.0, _wrapWidth = double.infinity;
-  Timer? _resizeTimer;
-  int _cachedLineCount = 0;
-  Timer? _layoutDebounceTimer;
-  bool _isDeferringLayout = false;
-  int _previousLineCount = 0;
+  Timer? _resizeTimer, _layoutDebounceTimer;
   double _cachedTotalHeight = 0.0;
-  bool _hasCachedHeight = false;
   String? _aiResponse, _lastProcessedText;
   TextSelection? _lastSelectionForAi;
   ui.Paragraph? _cachedMagnifiedParagraph;
   int? _cachedMagnifiedLine, _cachedMagnifiedOffset;
+  int? _ghostTextAnchorLine, _highlightedLine;
   int _lastAppliedSemanticVersion = -1, _lastDocumentVersion = -1;
-  int? _ghostTextAnchorLine;
-  int _ghostTextLineCount = 0;
-  int? _highlightedLine;
+  int _previousLineCount = 0;
+  int _ghostTextLineCount = 0, _cachedLineCount = 0;
   Animation<double>? _lineHighlightAnimation;
 
   void updateSemanticTokens(List<LspSemanticToken> tokens, int version) {
@@ -3186,6 +3262,14 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     _lastAppliedSemanticVersion = version;
     _syntaxHighlighter.updateSemanticTokens(tokens, controller.text);
     _paragraphCache.clear();
+    _bracketCache.clear();
+    _indentGuideCache.clear();
+    _indentEndLineCache.clear();
+    _diagnosticPathCache.clear();
+    _searchHighlightCache.clear();
+    _lineOffsetCache.clear();
+    _caretInfoCache.clear();
+    _lineIndentCache.clear();
   }
 
   void _checkDocumentVersionAndClearCache() {
@@ -3196,6 +3280,14 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       _lineTextCache.clear();
       _lineWidthCache.clear();
       _lineHeightCache.clear();
+      _bracketCache.clear();
+      _indentGuideCache.clear();
+      _indentEndLineCache.clear();
+      _diagnosticPathCache.clear();
+      _searchHighlightCache.clear();
+      _lineOffsetCache.clear();
+      _caretInfoCache.clear();
+      _lineIndentCache.clear();
     }
   }
 
@@ -3350,6 +3442,16 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         );
       }
 
+      if (hoverNotifier.value != null) {
+        hoverNotifier.value = (
+          Offset(
+            hoverNotifier.value!.$1.dx,
+            _getCaretInfo().offset.dy - vscrollController.offset,
+          ),
+          hoverNotifier.value!.$2,
+        );
+      }
+
       markNeedsPaint();
     });
 
@@ -3365,6 +3467,16 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         lspActionOffsetNotifier.value = Offset(
           _getCaretInfo().offset.dx - hscrollController.offset,
           lspActionOffsetNotifier.value!.dy,
+        );
+      }
+
+      if (hoverNotifier.value != null) {
+        hoverNotifier.value = (
+          Offset(
+            _getCaretInfo().offset.dx - hscrollController.offset,
+            hoverNotifier.value!.$1.dy,
+          ),
+          hoverNotifier.value!.$2,
         );
       }
 
@@ -3404,7 +3516,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         _ghostTextAnchorLine = controller.getLineAtOffset(
           controller.selection.extentOffset.clamp(0, controller.length),
         );
-        _ghostTextLineCount = aiLines.length - 1; // Extra lines beyond first
+        _ghostTextLineCount = aiLines.length - 1;
       } else if (_aiResponse == null && previousAiResponse != null) {
         _ghostTextAnchorLine = null;
         _ghostTextLineCount = 0;
@@ -3449,6 +3561,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       baseTextStyle: textStyle,
     );
     _paragraphCache.clear();
+    _bracketCache.clear();
     markNeedsLayout();
     markNeedsPaint();
   }
@@ -3458,15 +3571,14 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     _language = lang;
     try {
       _syntaxHighlighter.dispose();
-    } catch (e) {
-      //
-    }
+    } catch (_) {}
     _syntaxHighlighter = SyntaxHighlighter(
       language: lang,
       editorTheme: editorTheme,
       baseTextStyle: textStyle,
     );
     _paragraphCache.clear();
+    _bracketCache.clear();
     markNeedsLayout();
     markNeedsPaint();
   }
@@ -3482,9 +3594,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
     try {
       _syntaxHighlighter.dispose();
-    } catch (e) {
-      //
-    }
+    } catch (_) {}
     _syntaxHighlighter = SyntaxHighlighter(
       language: language,
       editorTheme: editorTheme,
@@ -3495,6 +3605,14 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     _lineWidthCache.clear();
     _lineTextCache.clear();
     _lineHeightCache.clear();
+    _bracketCache.clear();
+    _indentGuideCache.clear();
+    _indentEndLineCache.clear();
+    _diagnosticPathCache.clear();
+    _searchHighlightCache.clear();
+    _lineOffsetCache.clear();
+    _caretInfoCache.clear();
+    _lineIndentCache.clear();
 
     markNeedsLayout();
     markNeedsPaint();
@@ -3503,6 +3621,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   set innerPadding(EdgeInsets? padding) {
     if (identical(padding, _innerPadding)) return;
     _innerPadding = padding;
+    _rightPaddingWidth = padding?.right ?? 0;
+    _bottomPaddingHeight = padding?.bottom ?? 0;
     markNeedsLayout();
     markNeedsPaint();
   }
@@ -3518,6 +3638,14 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     _lineWrap = value;
     _paragraphCache.clear();
     _lineHeightCache.clear();
+    _bracketCache.clear();
+    _indentGuideCache.clear();
+    _indentEndLineCache.clear();
+    _diagnosticPathCache.clear();
+    _searchHighlightCache.clear();
+    _lineOffsetCache.clear();
+    _caretInfoCache.clear();
+    _lineIndentCache.clear();
     markNeedsLayout();
     markNeedsPaint();
   }
@@ -3571,8 +3699,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     final caretHeight = caretInfo.height;
     final vScrollOffset = vscrollController.offset;
     final hScrollOffset = hscrollController.offset;
-    final viewportHeight = vscrollController.position.viewportDimension;
-    final viewportWidth = hscrollController.position.viewportDimension;
+    final viewportHeight =
+        vscrollController.position.viewportDimension - _bottomPaddingHeight;
+    final viewportWidth =
+        hscrollController.position.viewportDimension - _rightPaddingWidth;
     final relX = (caretX - hScrollOffset).clamp(0.0, viewportWidth);
     final relY = (caretY - vScrollOffset).clamp(0.0, viewportHeight);
 
@@ -3584,8 +3714,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         targetOffset.clamp(0, vscrollController.position.maxScrollExtent),
       );
     } else if (caretY + caretHeight >= vScrollOffset + viewportHeight) {
-      final targetOffset =
-          caretY + caretHeight - viewportHeight + (innerPadding?.bottom ?? 0);
+      final targetOffset = caretY + caretHeight - viewportHeight;
       vscrollController.jumpTo(
         targetOffset.clamp(0, vscrollController.position.maxScrollExtent),
       );
@@ -3597,12 +3726,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         targetOffset.clamp(0, hscrollController.position.maxScrollExtent),
       );
     } else if (caretX + 1.5 > hScrollOffset + viewportWidth) {
-      final targetOffset =
-          caretX +
-          1.5 -
-          viewportWidth +
-          (innerPadding?.right ?? 0) +
-          _gutterWidth;
+      final targetOffset = caretX + 1.5 - viewportWidth;
       hscrollController.jumpTo(
         targetOffset.clamp(0, hscrollController.position.maxScrollExtent),
       );
@@ -3698,7 +3822,15 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       );
 
       _paragraphCache.clear();
+      _bracketCache.clear();
       _lineTextCache.clear();
+      _indentGuideCache.clear();
+      _indentEndLineCache.clear();
+      _diagnosticPathCache.clear();
+      _searchHighlightCache.clear();
+      _lineOffsetCache.clear();
+      _caretInfoCache.clear();
+      _lineIndentCache.clear();
     }
 
     final newLineCount = controller.lineCount;
@@ -3747,6 +3879,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
       if (enableFolding) {
         _foldRangesNeedsClear = true;
+        controller.foldings = {};
       }
 
       _deferLayout();
@@ -3873,23 +4006,35 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   }
 
   FoldRange? _computeFoldRangeForLine(int lineIndex) {
+    const folds = {'{': '}', '[': ']', '(': ')'};
     if (!enableFolding) return null;
 
     final line = controller.getLineText(lineIndex);
 
-    if (line.contains('{')) {
-      int braceCount = 0;
-      bool foundOpen = false;
+    if (folds.keys.any((k) => line.contains(k))) {
+      final List<String> stack = [];
 
-      for (int i = lineIndex; i < controller.lineCount; i++) {
+      final checkLine = controller.getLineText(lineIndex);
+      for (int c = 0; c < checkLine.length; c++) {
+        final ch = checkLine[c];
+        if (folds.containsKey(ch)) {
+          stack.add(ch);
+        } else if (stack.isNotEmpty && ch == folds[stack.last]) {
+          stack.removeLast();
+        }
+      }
+
+      if (stack.isEmpty) return null;
+
+      for (int i = lineIndex + 1; i < controller.lineCount; i++) {
         final checkLine = controller.getLineText(i);
         for (int c = 0; c < checkLine.length; c++) {
-          if (checkLine[c] == '{') {
-            if (!foundOpen && i == lineIndex) foundOpen = true;
-            braceCount++;
-          } else if (checkLine[c] == '}') {
-            braceCount--;
-            if (braceCount == 0 && foundOpen && i > lineIndex) {
+          final ch = checkLine[c];
+          if (folds.containsKey(ch)) {
+            stack.add(ch);
+          } else if (stack.isNotEmpty && ch == folds[stack.last]) {
+            stack.removeLast();
+            if (stack.isEmpty) {
               return FoldRange(lineIndex, i);
             }
           }
@@ -3919,37 +4064,48 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
   FoldRange? _getOrComputeFoldRange(int lineIndex) {
     if (_foldRangesNeedsClear) {
-      _foldRanges.removeWhere((f) => !f.isFolded);
+      _foldRanges.clear();
+      _caretInfoCache.clear();
+      _cachedCaretOffset = -1;
       _foldRangesNeedsClear = false;
     }
 
-    try {
-      return _foldRanges.firstWhere((f) => f.startIndex == lineIndex);
-    } catch (_) {
-      final fold = _computeFoldRangeForLine(lineIndex);
-      if (fold != null) {
-        _foldRanges.add(fold);
-        _foldRanges.sort((a, b) => a.startIndex.compareTo(b.startIndex));
-      }
-      return fold;
+    if (_foldRanges.containsKey(lineIndex)) {
+      return _foldRanges[lineIndex];
     }
+
+    final fold = _computeFoldRangeForLine(lineIndex);
+    _foldRanges[lineIndex] = fold;
+    return fold;
   }
 
   void _toggleFold(FoldRange fold) {
-    _isFoldToggleInProgress = true;
-    if (fold.isFolded) {
-      _unfoldWithChildren(fold);
-    } else {
-      _foldWithChildren(fold);
-    }
+    try {
+      _isFoldToggleInProgress = true;
+      if (fold.isFolded) {
+        _unfoldWithChildren(fold);
+      } else {
+        _foldWithChildren(fold);
+      }
 
-    controller.foldings = List.from(_foldRanges);
-    markNeedsLayout();
-    markNeedsPaint();
+      controller.foldings = {
+        for (var f in _foldRanges.values.where((f) => f != null))
+          f!.startIndex: f,
+      };
+      _caretInfoCache.clear();
+      _cachedCaretOffset = -1;
+      _paragraphCache.clear();
+      _lineTextCache.clear();
+      markNeedsLayout();
+      markNeedsPaint();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _isFoldToggleInProgress = false;
+      });
+    } catch (e) {
+      debugPrint('Error toggling fold: $e');
       _isFoldToggleInProgress = false;
-    });
+    }
   }
 
   void _toggleFoldAtLine(int lineNumber) {
@@ -3970,12 +4126,12 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       _getOrComputeFoldRange(i);
     }
 
-    for (final fold in _foldRanges) {
-      if (!fold.isFolded) {
-        final isNested = _foldRanges.any(
+    for (final fold in _foldRanges.values.where((f) => f != null)) {
+      if (!fold!.isFolded) {
+        final isNested = _foldRanges.values.any(
           (other) =>
               other != fold &&
-              other.startIndex < fold.startIndex &&
+              other!.startIndex < fold.startIndex &&
               other.endIndex >= fold.endIndex,
         );
         if (!isNested) {
@@ -3984,7 +4140,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       }
     }
 
-    controller.foldings = List.from(_foldRanges);
+    controller.foldings = {
+      for (var f in _foldRanges.values.where((f) => f != null))
+        f!.startIndex: f,
+    };
     markNeedsLayout();
     markNeedsPaint();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -3996,14 +4155,17 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     if (!enableFolding) return;
     _isFoldToggleInProgress = true;
 
-    for (final fold in _foldRanges) {
-      if (fold.isFolded) {
+    for (final fold in _foldRanges.values.where((f) => f != null)) {
+      if (fold!.isFolded) {
         fold.isFolded = false;
         fold.clearOriginallyFoldedChildren();
       }
     }
 
-    controller.foldings = List.from(_foldRanges);
+    controller.foldings = {
+      for (var f in _foldRanges.values.where((f) => f != null))
+        f!.startIndex: f,
+    };
     markNeedsLayout();
     markNeedsPaint();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -4014,16 +4176,21 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   void _scrollToLine(int line) {
     if (line < 0 || line >= controller.lineCount) return;
 
-    for (final fold in _foldRanges) {
-      if (fold.isFolded && line > fold.startIndex && line <= fold.endIndex) {
+    for (final fold in _foldRanges.values.where((f) => f != null)) {
+      if (fold!.isFolded && line > fold.startIndex && line <= fold.endIndex) {
         _unfoldWithChildren(fold);
-        controller.foldings = List.from(_foldRanges);
+        controller.foldings = {
+          for (var f in _foldRanges.values.where((f) => f != null))
+            f!.startIndex: f,
+        };
         markNeedsLayout();
         break;
       }
     }
 
-    final hasActiveFolds = _foldRanges.any((f) => f.isFolded);
+    final hasActiveFolds = _foldRanges.values.any(
+      (f) => f != null && f.isFolded,
+    );
     final targetY = _getLineYOffset(line, hasActiveFolds);
     final viewportHeight = vscrollController.position.viewportDimension;
     final maxScroll = vscrollController.position.maxScrollExtent;
@@ -4046,8 +4213,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   void _foldWithChildren(FoldRange parentFold) {
     parentFold.clearOriginallyFoldedChildren();
 
-    for (final childFold in _foldRanges) {
-      if (childFold.isFolded &&
+    for (final childFold in _foldRanges.values.where((f) => f != null)) {
+      if (childFold!.isFolded &&
           childFold != parentFold &&
           childFold.startIndex > parentFold.startIndex &&
           childFold.endIndex <= parentFold.endIndex) {
@@ -4071,8 +4238,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   }
 
   bool _isLineFolded(int lineIndex) {
-    return _foldRanges.any(
+    return _foldRanges.values.any(
       (fold) =>
+          fold != null &&
           fold.isFolded &&
           lineIndex > fold.startIndex &&
           lineIndex <= fold.endIndex,
@@ -4080,6 +4248,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   }
 
   int? _findMatchingBracket(String text, int pos) {
+    if (_bracketCache.containsKey(pos)) {
+      return _bracketCache[pos];
+    }
+
     const Map<String, String> pairs = {
       '(': ')',
       '{': '}',
@@ -4090,10 +4262,16 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     };
     const String openers = '({[';
 
-    if (pos < 0 || pos >= text.length) return null;
+    if (pos < 0 || pos >= text.length) {
+      _bracketCache[pos] = null;
+      return null;
+    }
 
     final char = text[pos];
-    if (!pairs.containsKey(char)) return null;
+    if (!pairs.containsKey(char)) {
+      _bracketCache[pos] = null;
+      return null;
+    }
 
     final match = pairs[char]!;
     final isForward = openers.contains(char);
@@ -4103,7 +4281,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       for (int i = pos + 1; i < text.length; i++) {
         if (text[i] == char) depth++;
         if (text[i] == match) {
-          if (depth == 0) return i;
+          if (depth == 0) {
+            _bracketCache[pos] = i;
+            return i;
+          }
           depth--;
         }
       }
@@ -4111,11 +4292,15 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       for (int i = pos - 1; i >= 0; i--) {
         if (text[i] == char) depth++;
         if (text[i] == match) {
-          if (depth == 0) return i;
+          if (depth == 0) {
+            _bracketCache[pos] = i;
+            return i;
+          }
           depth--;
         }
       }
     }
+    _bracketCache[pos] = null;
     return null;
   }
 
@@ -4158,7 +4343,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     final lineCount = controller.lineCount;
     if (lineCount == 0) return 0;
 
-    final hasActiveFolds = _foldRanges.any((f) => f.isFolded);
+    final hasActiveFolds = _foldRanges.values.any(
+      (f) => f != null && f.isFolded,
+    );
 
     if (!lineWrap && !hasActiveFolds) {
       return (y / _lineHeight).floor().clamp(0, lineCount - 1);
@@ -4178,17 +4365,26 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
   ({int lineIndex, int columnIndex, Offset offset, double height})
   _getCaretInfo() {
+    final cursorOffset = controller.selection.extentOffset;
+    if (_caretInfoCache.containsKey(cursorOffset)) {
+      return _caretInfoCache[cursorOffset]!;
+    }
+
     final lineCount = controller.lineCount;
     if (lineCount == 0) {
-      return (
+      final result = (
         lineIndex: 0,
         columnIndex: 0,
         offset: Offset.zero,
         height: _lineHeight,
       );
+      _caretInfoCache[cursorOffset] = result;
+      return result;
     }
 
-    final hasActiveFolds = _foldRanges.any((f) => f.isFolded);
+    final hasActiveFolds = _foldRanges.values.any(
+      (f) => f != null && f.isFolded,
+    );
 
     if (controller.isBufferActive) {
       final lineIndex = controller.bufferLineIndex!;
@@ -4221,8 +4417,6 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         height: _lineHeight,
       );
     }
-
-    final cursorOffset = controller.selection.extentOffset;
 
     int lineIndex;
     int lineStartOffset;
@@ -4263,12 +4457,14 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
     final ghostOffset = _getGhostTextVisualOffset(lineIndex);
 
-    return (
+    final result = (
       lineIndex: lineIndex,
       columnIndex: columnIndex,
       offset: Offset(caretX, lineY + caretYInLine + ghostOffset),
       height: _lineHeight,
     );
+    _caretInfoCache[cursorOffset] = result;
+    return result;
   }
 
   int _getTextOffsetFromPosition(Offset position) {
@@ -4300,7 +4496,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
     final localX = position.dx;
 
-    final hasActiveFolds = _foldRanges.any((f) => f.isFolded);
+    final hasActiveFolds = _foldRanges.values.any(
+      (f) => f != null && f.isFolded,
+    );
     final lineStartY = _getLineYOffset(tappedLineIndex, hasActiveFolds);
     final localY = position.dy - lineStartY;
 
@@ -4357,21 +4555,26 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
     if (_isDeferringLayout && _hasCachedHeight) {
       final contentHeight =
-          _cachedTotalHeight +
-          (innerPadding?.vertical ?? 0) +
-          _ghostTextExtraHeight;
+          _cachedTotalHeight + (innerPadding?.top ?? 0) + _ghostTextExtraHeight;
       final computedWidth = lineWrap
           ? (constraints.maxWidth.isFinite
                 ? constraints.maxWidth
                 : MediaQuery.of(context).size.width)
-          : _longLineWidth + (innerPadding?.horizontal ?? 0) + _gutterWidth;
+          : _longLineWidth + (innerPadding?.left ?? 0) + _gutterWidth;
       final minWidth = lineWrap ? 0.0 : MediaQuery.of(context).size.width;
       final contentWidth = max(computedWidth, minWidth);
-      size = constraints.constrain(Size(contentWidth, contentHeight));
+      size = constraints.constrain(
+        Size(
+          contentWidth + (innerPadding?.right ?? 0),
+          contentHeight + (innerPadding?.bottom ?? 0),
+        ),
+      );
       return;
     }
 
-    final hasActiveFolds = _foldRanges.any((f) => f.isFolded);
+    final hasActiveFolds = _foldRanges.values.any(
+      (f) => f != null && f.isFolded,
+    );
     double visibleHeight = 0;
     double maxLineWidth = _longLineWidth;
 
@@ -4389,6 +4592,13 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
           _wrapWidth = clampedWrapWidth;
           _paragraphCache.clear();
           _lineHeightCache.clear();
+          _bracketCache.clear();
+          _indentGuideCache.clear();
+          _diagnosticPathCache.clear();
+          _searchHighlightCache.clear();
+          _lineOffsetCache.clear();
+          _caretInfoCache.clear();
+          _lineIndentCache.clear();
           markNeedsLayout();
         });
         if (_wrapWidth == double.infinity) {
@@ -4465,17 +4675,22 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     _previousLineCount = lineCount;
 
     final contentHeight =
-        visibleHeight + (innerPadding?.vertical ?? 0) + _ghostTextExtraHeight;
+        visibleHeight + (innerPadding?.top ?? 0) + _ghostTextExtraHeight;
     final computedWidth = lineWrap
         ? (constraints.maxWidth.isFinite
               ? constraints.maxWidth
               : MediaQuery.of(context).size.width)
-        : maxLineWidth + (innerPadding?.horizontal ?? 0) + _gutterWidth;
+        : maxLineWidth + (innerPadding?.left ?? 0) + _gutterWidth;
 
     final minWidth = lineWrap ? 0.0 : MediaQuery.of(context).size.width;
     final contentWidth = max(computedWidth, minWidth);
 
-    size = constraints.constrain(Size(contentWidth, contentHeight));
+    size = constraints.constrain(
+      Size(
+        contentWidth + (innerPadding?.right ?? 0),
+        contentHeight + (innerPadding?.bottom ?? 0),
+      ),
+    );
   }
 
   double _getWrappedLineHeight(int lineIndex) {
@@ -4500,15 +4715,22 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   }
 
   double _getLineYOffset(int targetLine, bool hasActiveFolds) {
-    if (!lineWrap && !hasActiveFolds) {
-      return targetLine * _lineHeight;
+    final cacheKey = '${targetLine}_$hasActiveFolds';
+    if (_lineOffsetCache.containsKey(cacheKey)) {
+      return _lineOffsetCache[cacheKey]!;
     }
 
-    double y = 0;
-    for (int i = 0; i < targetLine; i++) {
-      if (hasActiveFolds && _isLineFolded(i)) continue;
-      y += lineWrap ? _getWrappedLineHeight(i) : _lineHeight;
+    double y;
+    if (!lineWrap && !hasActiveFolds) {
+      y = targetLine * _lineHeight;
+    } else {
+      y = 0;
+      for (int i = 0; i < targetLine; i++) {
+        if (hasActiveFolds && _isLineFolded(i)) continue;
+        y += lineWrap ? _getWrappedLineHeight(i) : _lineHeight;
+      }
     }
+    _lineOffsetCache[cacheKey] = y;
     return y;
   }
 
@@ -4534,7 +4756,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         ..style = PaintingStyle.fill,
     );
 
-    final hasActiveFolds = _foldRanges.any((f) => f.isFolded);
+    final hasActiveFolds = _foldRanges.values.any(
+      (f) => f != null && f.isFolded,
+    );
 
     int firstVisibleLine;
     int lastVisibleLine;
@@ -4755,6 +4979,30 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         lineCount,
         bgColor,
         textStyle,
+      );
+    }
+
+    if (_rightPaddingWidth > 0) {
+      canvas.drawRect(
+        Rect.fromLTWH(
+          offset.dx + size.width - _rightPaddingWidth,
+          offset.dy,
+          _rightPaddingWidth,
+          size.height,
+        ),
+        Paint()..color = Colors.transparent,
+      );
+    }
+
+    if (_bottomPaddingHeight > 0) {
+      canvas.drawRect(
+        Rect.fromLTWH(
+          offset.dx,
+          offset.dy + size.height - _bottomPaddingHeight,
+          size.width,
+          _bottomPaddingHeight,
+        ),
+        Paint()..color = Colors.transparent,
       );
     }
 
@@ -5000,7 +5248,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       }
     })();
 
-    final hasActiveFolds = _foldRanges.any((f) => f.isFolded);
+    final hasActiveFolds = _foldRanges.values.any(
+      (f) => f != null && f.isFolded,
+    );
     final cursorOffset = controller.selection.extentOffset;
     final currentLine = controller.getLineAtOffset(cursorOffset);
     final selection = controller.selection;
@@ -5189,8 +5439,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         if (enableFolding) {
           final foldRange = _getFoldRangeAtLine(i);
           if (foldRange != null) {
-            final isInsideFoldedParent = _foldRanges.any(
+            final isInsideFoldedParent = _foldRanges.values.any(
               (parent) =>
+                  parent != null &&
                   parent.isFolded &&
                   parent.startIndex < i &&
                   parent.endIndex >= i,
@@ -5280,6 +5531,11 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     int leadingSpaces,
     bool hasActiveFolds,
   ) {
+    final key = '$startLine-$leadingSpaces-${hasActiveFolds ? 1 : 0}';
+    if (_indentEndLineCache.containsKey(key)) {
+      return _indentEndLineCache[key]!;
+    }
+
     int endLine = startLine + 1;
     while (endLine < controller.lineCount) {
       if (hasActiveFolds && _isLineFolded(endLine)) {
@@ -5304,6 +5560,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       if (nextLeading <= leadingSpaces) break;
       endLine++;
     }
+
+    _indentEndLineCache[key] = endLine;
     return endLine;
   }
 
@@ -5344,7 +5602,12 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       if (!endsWithBracket) return;
 
       final leadingSpaces = lineText.length - lineText.trimLeft().length;
-      final indentLevel = leadingSpaces ~/ tabSize;
+      final indentLevel = _lineIndentCache.containsKey(i)
+          ? _lineIndentCache[i]!
+          : leadingSpaces ~/ tabSize;
+      if (!_lineIndentCache.containsKey(i)) {
+        _lineIndentCache[i] = indentLevel;
+      }
       final lastChar = trimmed[trimmed.length - 1];
       int endLine = i + 1;
 
@@ -5695,10 +5958,16 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
           continue;
         }
 
-        final boxes = para.getBoxesForRange(
-          lineStartChar.clamp(0, lineText.length),
-          lineEndChar.clamp(0, lineText.length),
-        );
+        final boxKey = '$lineIndex-$lineStartChar-$lineEndChar';
+        final boxes = _diagnosticPathCache.containsKey(boxKey)
+            ? _diagnosticPathCache[boxKey] as List<ui.TextBox>
+            : para.getBoxesForRange(
+                lineStartChar.clamp(0, lineText.length),
+                lineEndChar.clamp(0, lineText.length),
+              );
+        if (!_diagnosticPathCache.containsKey(boxKey)) {
+          _diagnosticPathCache[boxKey] = boxes;
+        }
 
         if (boxes.isEmpty) continue;
 
@@ -5830,10 +6099,16 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         final lineY = _getLineYOffset(lineIndex, hasActiveFolds);
 
         if (lineText.isNotEmpty) {
-          final boxes = para.getBoxesForRange(
-            lineSelStart.clamp(0, lineText.length),
-            lineSelEnd.clamp(0, lineText.length),
-          );
+          final boxKey = '$lineIndex-$lineSelStart-$lineSelEnd';
+          final boxes = _searchHighlightCache.containsKey(boxKey)
+              ? _searchHighlightCache[boxKey] as List<ui.TextBox>
+              : para.getBoxesForRange(
+                  lineSelStart.clamp(0, lineText.length),
+                  lineSelEnd.clamp(0, lineText.length),
+                );
+          if (!_searchHighlightCache.containsKey(boxKey)) {
+            _searchHighlightCache[boxKey] = boxes;
+          }
 
           for (final box in boxes) {
             final screenX =
@@ -5882,8 +6157,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       ..color = highlightColor
       ..style = PaintingStyle.fill;
 
-    for (final foldRange in _foldRanges) {
-      if (!foldRange.isFolded) continue;
+    for (final foldRange in _foldRanges.values.where((f) => f != null)) {
+      if (!foldRange!.isFolded) continue;
 
       final foldStartLine = foldRange.startIndex;
 
@@ -6962,17 +7237,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     final contentPosition = Offset(
       localPosition.dx -
           _gutterWidth -
-          (innerPadding?.horizontal ??
-              innerPadding?.left ??
-              innerPadding?.right ??
-              0) +
+          (innerPadding?.left ?? 0) +
           (lineWrap ? 0 : hscrollController.offset),
-      localPosition.dy -
-          (innerPadding?.vertical ??
-              innerPadding?.top ??
-              innerPadding?.bottom ??
-              0) +
-          vscrollController.offset,
+      localPosition.dy - (innerPadding?.top ?? 0) + vscrollController.offset,
     );
     final textOffset = _getTextOffsetFromPosition(contentPosition);
 
@@ -6989,7 +7256,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         _hoverTimer?.cancel();
         _hoverTimer = Timer(Duration(milliseconds: 1500), () {
           final lineChar = _offsetToLineChar(textOffset);
-          hoverNotifier.value = [event.localPosition, lineChar];
+          hoverNotifier.value = (event.localPosition, lineChar);
         });
       } else {
         _hoverTimer?.cancel();
@@ -7057,7 +7324,13 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
             hoverNotifier.value = null;
           } else if (_isOffsetOverWord(textOffset)) {
             final lineChar = _offsetToLineChar(textOffset);
-            hoverNotifier.value = [localPosition, lineChar];
+            hoverNotifier.value = (localPosition, lineChar);
+          }
+
+          if (lspActionNotifier.value != null ||
+              lspActionOffsetNotifier.value != null) {
+            lspActionNotifier.value = null;
+            lspActionOffsetNotifier.value = null;
           }
         };
 
@@ -7066,12 +7339,14 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
             _draggingStartHandle = true;
             _selectionActive = selectionActiveNotifier.value = true;
             _pointerDownPosition = localPosition;
+            _dragStartOffset = controller.selection.start;
             return;
           }
           if (_endHandleRect?.contains(localPosition) ?? false) {
             _draggingEndHandle = true;
             _selectionActive = selectionActiveNotifier.value = true;
             _pointerDownPosition = localPosition;
+            _dragStartOffset = controller.selection.end;
             return;
           }
         } else if (controller.selection.isCollapsed && _normalHandle != null) {
@@ -7101,7 +7376,6 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         _dtap.addPointer(event);
         _dtap.onDoubleTap = () {
           _selectWordAtOffset(textOffset);
-          // contextMenuOffsetNotifier.value = localPosition;
         };
 
         _dragStartOffset = textOffset;
@@ -7269,7 +7543,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
           _currentPosition.dy +
           vscrollController.offset -
           (innerPadding?.top ?? 0);
-      final hasActiveFolds = _foldRanges.any((f) => f.isFolded);
+      final hasActiveFolds = _foldRanges.values.any(
+        (f) => f != null && f.isFolded,
+      );
 
       int hoveredLine;
       if (!hasActiveFolds && !lineWrap) {

@@ -131,19 +131,71 @@ sealed class OverlayStyle {
 ///
 /// This class extends [OverlayStyle] to provide specific styling for the
 /// autocomplete suggestion list that appears while typing in the editor.
+/// Enhanced with VSCode-like styling options.
 ///
 /// Example:
 /// ```dart
 /// SuggestionStyle(
-///   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-///   backgroundColor: Colors.grey[900]!,
-///   focusColor: Colors.blue.withOpacity(0.3),
-///   hoverColor: Colors.blue.withOpacity(0.1),
-///   splashColor: Colors.blue.withOpacity(0.2),
-///   textStyle: TextStyle(color: Colors.white),
+///   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+///   backgroundColor: Color(0xFF252526), // VSCode dark theme background
+///   selectedBackgroundColor: Color(0xFF094771), // VSCode selection color
+///   focusColor: Color(0xff024281),
+///   hoverColor: Color(0xFF2A2D2E), // VSCode hover color
+///   splashColor: Colors.blueAccent.withAlpha(50),
+///   borderColor: Color(0xFF454545), // VSCode border color
+///   borderWidth: 1.0,
+///   itemHeight: 24.0, // VSCode item height
+///   iconSize: 16.0, // VSCode icon size
+///   methodIconColor: Color(0xFFDCDFE4), // Light for methods
+///   propertyIconColor: Color(0xFF98C379), // Green for properties
+///   classIconColor: Color(0xFFE06C75), // Red for classes
+///   variableIconColor: Color(0xFF61AFEF), // Blue for variables
+///   keywordIconColor: Color(0xFFC678DD), // Purple for keywords
+///   textStyle: TextStyle(color: Colors.white, fontSize: 13),
+///   labelTextStyle: TextStyle(fontWeight: FontWeight.w500),
+///   detailTextStyle: TextStyle(color: Colors.white70, fontSize: 11),
 /// )
 /// ```
 class SuggestionStyle extends OverlayStyle {
+  /// The background color for the selected item.
+  final Color? selectedBackgroundColor;
+
+  /// The border color for the suggestion popup.
+  final Color? borderColor;
+
+  /// The border width for the suggestion popup.
+  final double? borderWidth;
+
+  /// The height of each suggestion item.
+  final double? itemHeight;
+
+  /// The size of icons in the suggestion list.
+  final double? iconSize;
+
+  /// The color for method/function icons.
+  final Color? methodIconColor;
+
+  /// The color for property/field icons.
+  final Color? propertyIconColor;
+
+  /// The color for class/type icons.
+  final Color? classIconColor;
+
+  /// The color for variable icons.
+  final Color? variableIconColor;
+
+  /// The color for keyword icons.
+  final Color? keywordIconColor;
+
+  /// The text style for the suggestion label.
+  final TextStyle? labelTextStyle;
+
+  /// The text style for additional information (like import paths).
+  final TextStyle? detailTextStyle;
+
+  /// The text style for type information.
+  final TextStyle? typeTextStyle;
+
   /// Creates a [SuggestionStyle] with the specified options.
   SuggestionStyle({
     super.elevation,
@@ -153,6 +205,19 @@ class SuggestionStyle extends OverlayStyle {
     required super.hoverColor,
     required super.splashColor,
     required super.textStyle,
+    this.selectedBackgroundColor,
+    this.borderColor,
+    this.borderWidth,
+    this.itemHeight,
+    this.iconSize,
+    this.methodIconColor,
+    this.propertyIconColor,
+    this.classIconColor,
+    this.variableIconColor,
+    this.keywordIconColor,
+    this.labelTextStyle,
+    this.detailTextStyle,
+    this.typeTextStyle,
   });
 }
 
