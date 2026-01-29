@@ -4,9 +4,6 @@ import 'package:code_forge/code_forge.dart';
 import 'package:code_forge/code_forge/suggestion_model.dart';
 import 'package:example/finder.dart';
 import 'package:flutter/material.dart';
-import 'package:re_highlight/languages/all.dart';
-// import 'package:path/path.dart' as p;
-import 'package:re_highlight/styles/all.dart';
 import 'package:re_highlight/styles/atom-one-dark-reasonable.dart';
 
 void main() {
@@ -218,7 +215,7 @@ class _MyAppState extends State<MyApp> {
         body: SafeArea(
           child: CodeForge(
             undoController: undoController,
-            language: langDart,
+            // language: langDart,
             editorTheme: atomOneDarkReasonableTheme,
             controller: codeController,
             matchHighlightStyle: const MatchHighlightStyle(

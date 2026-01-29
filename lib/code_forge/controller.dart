@@ -1976,7 +1976,7 @@ class CodeForgeController implements DeltaTextInputClient {
             start: index,
             end: index + word.length,
             isCurrentMatch: true,
-            style: style,
+            style: const TextStyle(backgroundColor: Color(0xFFFFA726)),
           ),
         );
       }
@@ -2013,7 +2013,7 @@ class CodeForgeController implements DeltaTextInputClient {
           start: match.start,
           end: match.end,
           isCurrentMatch: true,
-          style: style,
+          style: const TextStyle(backgroundColor: Color(0xFFFFA726)),
         ),
       );
     }
