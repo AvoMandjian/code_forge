@@ -1,11 +1,20 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:code_forge/AI_completion/ai.dart';
+import 'package:code_forge/code_forge/suggestion_model.dart';
+import 'package:code_forge/code_forge/suggestions/initialize_language_specific_suggestions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:jinja_app_widgets_catalog/jinja_app_widgets_catalog.dart';
+import 'package:re_highlight/languages/all.dart';
+import 'package:re_highlight/re_highlight.dart';
+import 'package:re_highlight/styles/all.dart';
 import 'package:universal_io/io.dart';
 
 import '../code_forge.dart';
+import 'code_formatter.dart';
 import 'rope.dart';
 
 /// Controller for the [CodeForge] code editor widget.
@@ -19,6 +28,7 @@ import 'rope.dart';
 ///
 /// Example:
 /// ```dart
+/// final controller = CodeForgeController();
 /// final controller = CodeForgeController();
 /// controller.text = 'void main() {\n  print("Hello");\n}';
 ///
@@ -38,6 +48,7 @@ class CodeForgeController implements DeltaTextInputClient {
   static const _documentColorDebounce = Duration(milliseconds: 50);
   static const _documentHighlightDebounce = Duration(milliseconds: 300);
   static const _cclsRefreshDebounce = Duration(milliseconds: 1000);
+
   final List<VoidCallback> _listeners = [];
   final _isMobile = Platform.isAndroid || Platform.isIOS;
   Timer? _flushTimer, _semanticTokenTimer, _codeActionTimer, _syncTimer;
@@ -53,9 +64,11 @@ class CodeForgeController implements DeltaTextInputClient {
   int _cachedTextVersion = -1, _currentVersion = 0, _semanticTokensVersion = 0;
   int? dirtyLine, _bufferLineIndex;
   bool deleteFoldRangeOnDeletingFirstLine = false;
+
   String? _lastSentText;
   TextSelection? _lastSentSelection;
   String? _lastTypedCharacter;
+
   UndoRedoController? _undoController;
   void Function(int lineNumber)? _toggleFoldCallback;
   VoidCallback? _foldAllCallback, _unfoldAllCallback;
@@ -76,7 +89,6 @@ class CodeForgeController implements DeltaTextInputClient {
   bool _lspFoldRangesAdjustedNotFetched = false;
   bool _inlayHintsVisible = false;
   bool documentHighlightsChanged = false;
-
   CodeForgeController({this.lspConfig}) {
     if (lspConfig != null) {
       (() async {
@@ -1028,14 +1040,397 @@ class CodeForgeController implements DeltaTextInputClient {
     }
   }
 
-  /// Save the current content, [controller.text] to the opened file.
-  void saveFile() {
-    if (openedFile == null) {
-      throw FlutterError(
-        "No file found.\nPlease open a file by providing a valid filePath to the CodeForge widget",
+  /// Callback for breakpoint changes.
+  /// Set this to be notified when breakpoints are added or removed.
+  void Function(Set<int> breakpoints)? _onBreakpointsChanged;
+
+  /// Set of line numbers (1-indexed) that have breakpoints set.
+  final breakpoints = <int>{};
+
+  /// Callback for manually triggering AI completion.
+  /// Set this to enable custom AI completion triggers.
+  VoidCallback? manualAiCompletion;
+
+  /// Callback for save file operations.
+  /// Set this to enable custom save file handling.
+  VoidCallback? saveFileCallback;
+
+  /// Callback for showing custom popup suggestions.
+  /// Set by the widget to handle displaying custom suggestion popups.
+  /// The callback receives a list of [SuggestionModel] instances.
+  void Function(List<SuggestionModel>)? showCustomSuggestionsCallback;
+
+  /// Internal callback for code changes.
+  void Function(String currentCode)? _onCodeChanged;
+
+  /// Registers a callback to be notified whenever the code content changes.
+  /// The callback receives the current code text as a parameter.
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.onCodeChanged((String currentCode) {
+  ///   debugPrint('Code changed: ${currentCode.length} characters');
+  /// });
+  /// ```
+  void onCodeChanged(void Function(String currentCode) callback) {
+    _onCodeChanged = callback;
+  }
+
+  void onBreakpointsChanged(void Function(Set<int> breakpoints) callback) {
+    _onBreakpointsChanged = callback;
+  }
+
+  /// Reference to the AI completion configuration.
+  /// Set by the widget to allow controller-based enable/disable control.
+  AiCompletion? _aiCompletion;
+
+  /// Column positions for editor rulers (vertical guide lines).
+  ///
+  /// When set, vertical lines will be drawn at the specified column positions
+  /// to help maintain consistent line lengths. For example, [80, 120] will
+  /// draw rulers at columns 80 and 120.
+  ///
+  /// Set to null or empty list to disable rulers.
+  List<int>? rulers;
+
+  Mode? currentLanguage;
+  Map<String, TextStyle>? currentTheme;
+
+  void setLanguage(String languageName) {
+    if (builtinAllLanguages.containsKey(languageName)) {
+      currentLanguage = builtinAllLanguages[languageName];
+      initializeLanguageSpecificSuggestions(
+        currentLanguage: currentLanguage!,
+        registerCustomSuggestions: registerCustomSuggestions,
+      );
+      notifyListeners();
+    }
+  }
+
+  void setTheme(String themeName) {
+    if (builtinAllThemes.containsKey(themeName)) {
+      currentTheme = builtinAllThemes[themeName];
+      notifyListeners();
+    }
+  }
+
+  /// Sets the AI completion configuration.
+  ///
+  /// This is called by the widget to provide access to the AI completion
+  /// configuration, allowing the controller to enable/disable it.
+  void setAiCompletion(AiCompletion? aiCompletion) {
+    _aiCompletion = aiCompletion;
+  }
+
+  /// Gets the AI completion configuration.
+  ///
+  /// Returns the AI completion instance if set, null otherwise.
+  AiCompletion? get aiCompletion => _aiCompletion;
+
+  /// Enables AI completion if it is configured.
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.enableAiCompletion();
+  /// ```
+  void enableAiCompletion() {
+    if (_aiCompletion != null) {
+      _aiCompletion!.enableCompletion = true;
+      notifyListeners();
+    }
+  }
+
+  /// Disables AI completion if it is configured.
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.disableAiCompletion();
+  /// ```
+  void disableAiCompletion() {
+    if (_aiCompletion != null) {
+      _aiCompletion!.enableCompletion = false;
+      notifyListeners();
+    }
+  }
+
+  /// Toggles AI completion on/off if it is configured.
+  ///
+  /// Returns the new state (true if enabled, false if disabled).
+  ///
+  /// Example:
+  /// ```dart
+  /// final isEnabled = controller.toggleAiCompletion();
+  /// ```
+  bool toggleAiCompletion() {
+    if (_aiCompletion != null) {
+      _aiCompletion!.enableCompletion = !_aiCompletion!.enableCompletion;
+      notifyListeners();
+      return _aiCompletion!.enableCompletion;
+    }
+    return false;
+  }
+
+  /// Returns whether AI completion is currently enabled.
+  ///
+  /// Returns false if AI completion is not configured.
+  ///
+  /// Example:
+  /// ```dart
+  /// if (controller.isAiCompletionEnabled()) {
+  ///   debugPrint('AI completion is active');
+  /// }
+  /// ```
+  bool isAiCompletionEnabled() {
+    return _aiCompletion?.enableCompletion ?? false;
+  }
+
+  /// Sets the column positions for editor rulers.
+  ///
+  /// Rulers are vertical guide lines drawn at the specified column positions
+  /// to help maintain consistent line lengths. For example, [80, 120] will
+  /// draw rulers at columns 80 and 120.
+  ///
+  /// Pass null or an empty list to disable rulers.
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.setRulers([80, 120]); // Show rulers at columns 80 and 120
+  /// controller.setRulers(null); // Disable rulers
+  /// ```
+  void setRulers(List<int>? columns) {
+    rulers = columns;
+    notifyListeners();
+  }
+
+  /// Clears all rulers (disables ruler display).
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.clearRulers();
+  /// ```
+  void clearRulers() {
+    rulers = null;
+    notifyListeners();
+  }
+
+  /// Registered custom suggestions that can be triggered automatically.
+  ///
+  /// These suggestions are checked when the user types trigger patterns
+  /// (defined in [SuggestionModel.triggeredAt]). Suggestions are automatically
+  /// shown when their trigger pattern is detected.
+  List<SuggestionModel> handleRegisteredCustomSuggestions = [];
+
+  JinjaHtmlModel? customSuggestionJinjaFlutterHtml;
+
+  /// Gets the list of registered custom suggestions.
+  ///
+  /// Returns a copy of the registered suggestions list.
+  List<SuggestionModel> get registeredCustomSuggestions =>
+      List.unmodifiable(handleRegisteredCustomSuggestions);
+
+  /// Callback to show Ai suggestion manually when the [AiCompletion.completionType] is [CompletionType.manual] or [CompletionType.mixed].
+  void getManualAiSuggestion() {
+    manualAiCompletion?.call();
+  }
+
+  /// Registers custom suggestions for automatic trigger detection.
+  ///
+  /// Registered suggestions will automatically appear when the user types
+  /// their trigger patterns (defined in [SuggestionModel.triggeredAt]).
+  /// This replaces any previously registered suggestions.
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.registerCustomSuggestions([
+  ///   SuggestionModel(
+  ///     label: 'Hello',
+  ///     replacedOnClick: 'Hello World',
+  ///     description: 'Hello World',
+  ///     triggeredAt: '{{}}',
+  ///   ),
+  ///   SuggestionModel(
+  ///     label: 'World',
+  ///     replacedOnClick: 'World is great',
+  ///     description: 'Hello World',
+  ///     triggeredAt: '{{}}',
+  ///   ),
+  ///   SuggestionModel(
+  ///     label: 'Another Type',
+  ///     replacedOnClick: 'Another Type',
+  ///     description: 'Another Type',
+  ///     triggeredAt: '<<>>',
+  ///   ),
+  /// ]);
+  /// ```
+  ///
+  /// Suggestions can also be registered from backend JSON:
+  /// ```dart
+  /// final jsonData = await fetchSuggestionsFromBackend();
+  /// final suggestions = (jsonData as List)
+  ///     .map((item) => SuggestionModel.fromMap(item as Map<String, dynamic>))
+  ///     .toList();
+  /// controller.registerCustomSuggestions(suggestions);
+  /// ```
+  void registerCustomSuggestions(List<SuggestionModel> suggestions) {
+    if (customSuggestionJinjaFlutterHtml != null) {
+      for (var element in suggestions) {
+        element.jinjaHtmlWidget = customSuggestionJinjaFlutterHtml;
+      }
+    }
+    handleRegisteredCustomSuggestions.addAll(List.from(suggestions));
+    notifyListeners();
+  }
+
+  /// Clears all registered custom suggestions.
+  ///
+  /// After calling this, no custom suggestions will be triggered automatically.
+  void clearRegisteredCustomSuggestions() {
+    handleRegisteredCustomSuggestions.clear();
+    notifyListeners();
+  }
+
+  /// Initializes language-specific default suggestions.
+  ///
+  /// Registers default custom suggestions based on the current language,
+  /// and always includes JINJA suggestions regardless of language.
+  /// This is called automatically when the language is set.
+
+  /// Shows custom popup suggestions in the editor.
+  ///
+  /// Displays a popup with the provided suggestions. When a suggestion is tapped,
+  /// it will replace the current word prefix (or selection) with the [replacedOnClick] text.
+  ///
+  /// Each [SuggestionModel] contains:
+  /// - [SuggestionModel.label]: The text displayed in the suggestion list
+  /// - [SuggestionModel.replacedOnClick]: The text inserted when selected
+  /// - [SuggestionModel.description]: Optional description shown below the label
+  /// - [SuggestionModel.triggeredAt]: The string pattern that triggers this suggestion when typed
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.showCustomSuggestions([
+  ///   SuggestionModel(
+  ///     label: 'template',
+  ///     replacedOnClick: '{{ variable }}',
+  ///     description: 'Insert template variable',
+  ///     triggeredAt: '{{}}',
+  ///   ),
+  ///   SuggestionModel(
+  ///     label: 'function',
+  ///     replacedOnClick: 'function myFunction() {\n  \n}',
+  ///     description: 'Create a new function',
+  ///     triggeredAt: '{{}}',
+  ///   ),
+  /// ]);
+  /// ```
+  ///
+  /// Throws [StateError] if the editor widget has not been initialized or
+  /// the callback has not been set.
+  void showCustomSuggestions(List<SuggestionModel> suggestions) {
+    if (showCustomSuggestionsCallback == null) {
+      throw StateError(
+        'Custom suggestions callback not set. '
+        'Ensure the CodeForge widget is properly initialized.',
       );
     }
-    File(openedFile!).writeAsStringSync(text);
+
+    if (suggestions.isEmpty) {
+      return;
+    }
+
+    showCustomSuggestionsCallback!(suggestions);
+  }
+
+  /// Save the current content, [controller.text] to the opened file.
+  ///
+  /// If [saveFileCallback] is set, it will be called first.
+  /// Then, if [openedFile] is set, the file will be saved to disk.
+  ///
+  /// Throws [FlutterError] if no file is opened and no callback is set.
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.saveFile();
+  /// ```
+  void saveFile() {
+    // Call the widget's saveFile callback if provided
+    saveFileCallback?.call();
+
+    // Save to file if openedFile is set
+    if (openedFile != null) {
+      try {
+        File(openedFile!).writeAsStringSync(text);
+      } catch (e) {
+        // Error is silently caught, but callback was already called
+      }
+    }
+  }
+
+  /// Formats the current code content based on the current language.
+  ///
+  /// Uses [CodeFormatter] to automatically format the code based on the
+  /// language set in [currentLanguage] or the provided [languageName].
+  /// Supports JSON, HTML, SQL, and Jinja.
+  ///
+  /// If formatting is not supported for the current language, the code
+  /// remains unchanged.
+  ///
+  /// [languageName] is optional. If provided, it will be used instead of
+  /// [currentLanguage]. If not provided and [currentLanguage] is null,
+  /// formatting will be skipped.
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.setLanguage('json');
+  /// controller.formatCode(); // Formats as JSON
+  ///
+  /// // Or specify language directly
+  /// controller.formatCode(languageName: 'html');
+  /// ```
+  void formatCode() {
+    _flushBuffer(); // Ensure buffer is flushed before reading text
+
+    // Ensure buffer state is completely cleared
+    _bufferLineIndex = null;
+    _bufferLineText = null;
+    _bufferDirty = false;
+
+    // Force fresh text read directly from rope, bypassing cache
+    _cachedText = null;
+    final currentText = _rope.getText();
+    final langName = currentLanguage?.name;
+
+    if (langName == null) {
+      // No language set, cannot format
+      return;
+    }
+
+    // Get the first ruler column if rulers are set
+    final rulerColumn = rulers != null && rulers!.isNotEmpty
+        ? rulers!.first
+        : null;
+
+    final formattedText = CodeFormatter.formatCode(
+      currentText,
+      langName,
+      rulerColumn: rulerColumn,
+    );
+
+    if (formattedText != null && formattedText != currentText) {
+      final selectionBefore = selection;
+
+      text = formattedText;
+
+      // Try to preserve cursor position
+      final newLength = formattedText.length;
+      if (selectionBefore.extentOffset <= newLength) {
+        selection = selectionBefore;
+      } else {
+        selection = TextSelection.collapsed(offset: newLength);
+      }
+
+      notifyListeners();
+    }
   }
 
   /// Moves the cursor one character to the left.
@@ -1338,6 +1733,7 @@ class CodeForgeController implements DeltaTextInputClient {
   /// If no text is selected, does nothing.
   void cut() {
     if (readOnly) return;
+
     final sel = selection;
     if (sel.start == sel.end) return;
     final selectedText = text.substring(sel.start, sel.end);
@@ -1350,6 +1746,7 @@ class CodeForgeController implements DeltaTextInputClient {
   /// Replaces any selected text with the pasted content.
   Future<void> paste() async {
     if (readOnly) return;
+
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     if (data?.text == null || data!.text!.isEmpty) return;
     final sel = selection;
@@ -1481,11 +1878,20 @@ class CodeForgeController implements DeltaTextInputClient {
   int findLineEnd(int offset) => _rope.findLineEnd(offset);
 
   set text(String newText) {
+    // Clear any active buffer state before setting new text
+    _bufferLineIndex = null;
+    _bufferLineText = null;
+    _bufferDirty = false;
+    _flushTimer?.cancel();
+    _flushTimer = null;
+
     _rope = Rope(newText);
     _currentVersion++;
+    _cachedText = null; // Invalidate cached text
     _selection = TextSelection.collapsed(offset: newText.length);
     dirtyRegion = TextRange(start: 0, end: newText.length);
     _isTyping = false;
+    _notifyCodeChanged();
     notifyListeners();
   }
 
@@ -1582,6 +1988,7 @@ class CodeForgeController implements DeltaTextInputClient {
   /// Notifies all registered listeners of a state change.
   void notifyListeners() {
     if (_isDisposed) return;
+
     for (final listener in _listeners) {
       listener();
     }
@@ -1681,6 +2088,11 @@ class CodeForgeController implements DeltaTextInputClient {
       replaceRange(lineEnd, lineEnd, '\n$lineText');
       setSelectionSilently(TextSelection.collapsed(offset: lineEnd + 1));
     }
+  }
+
+  /// Notifies the onCodeChanged callback if it's set.
+  void _notifyCodeChanged() {
+    _onCodeChanged?.call(text);
   }
 
   @protected
@@ -1831,6 +2243,8 @@ class CodeForgeController implements DeltaTextInputClient {
     if (readOnly) return;
     if (_undoController?.isUndoRedoInProgress ?? false) return;
 
+    _flushBuffer();
+
     final selectionBefore = _selection;
     final sel = _selection;
     String deletedText;
@@ -1922,8 +2336,15 @@ class CodeForgeController implements DeltaTextInputClient {
       _syncToConnection();
       notifyListeners();
       return;
-    }
+    } else if (sel.start > 0) {
+      deletedText = _rope.charAt(sel.start - 1);
+      _rope.delete(sel.start - 1, sel.start);
+      _currentVersion++;
+      _selection = TextSelection.collapsed(offset: sel.start - 1);
+      dirtyLine = _rope.getLineAtOffset(sel.start - 1);
 
+      _recordDeletion(sel.start - 1, deletedText, selectionBefore, _selection);
+    }
     if (sel.start <= 0) return;
 
     final deleteOffset = sel.start - 1;
@@ -1954,6 +2375,8 @@ class CodeForgeController implements DeltaTextInputClient {
       return;
     }
 
+    _syncToConnection();
+    _notifyCodeChanged();
     if (_bufferLineIndex != null && _bufferDirty) {
       final bufferEnd = _bufferLineRopeStart + _bufferLineText!.length;
 
@@ -2286,6 +2709,7 @@ class CodeForgeController implements DeltaTextInputClient {
       );
     }
     _selection = newSelection;
+
     dirtyLine = _rope.getLineAtOffset(safeStart);
     dirtyRegion = TextRange(
       start: safeStart,
@@ -2314,6 +2738,7 @@ class CodeForgeController implements DeltaTextInputClient {
       );
     }
 
+    _notifyCodeChanged();
     notifyListeners();
   }
 
@@ -2334,11 +2759,16 @@ class CodeForgeController implements DeltaTextInputClient {
   /// according to the provided options, appends a `SearchHighlight` for each
   /// match, sets `searchHighlightsChanged = true` and calls
   /// `notifyListeners()` to request a repaint/update.
+
   void findWord(
     String word, {
+    TextStyle? highlightStyle,
     bool matchCase = false,
     bool matchWholeWord = false,
   }) {
+    final style =
+        highlightStyle ?? const TextStyle(backgroundColor: Colors.amberAccent);
+
     searchHighlights.clear();
 
     if (word.isEmpty) {
@@ -2378,6 +2808,7 @@ class CodeForgeController implements DeltaTextInputClient {
           SearchHighlight(
             start: index,
             end: index + word.length,
+            style: style,
             isCurrentMatch: true,
           ),
         );
@@ -2403,7 +2834,11 @@ class CodeForgeController implements DeltaTextInputClient {
   /// Clears existing `searchHighlights`, applies [regex] to the document
   /// text, appends a `SearchHighlight` for every match and then sets
   /// `searchHighlightsChanged = true` and calls `notifyListeners()`.
-  void findRegex(RegExp regex) {
+
+  void findRegex(RegExp regex, TextStyle? highlightStyle) {
+    final style =
+        highlightStyle ?? const TextStyle(backgroundColor: Colors.amberAccent);
+
     searchHighlights.clear();
 
     final searchText = text;
@@ -2414,6 +2849,7 @@ class CodeForgeController implements DeltaTextInputClient {
         SearchHighlight(
           start: match.start,
           end: match.end,
+          style: style,
           isCurrentMatch: true,
         ),
       );
@@ -2742,6 +3178,29 @@ class CodeForgeController implements DeltaTextInputClient {
     if (_openedFile != null) {
       text = File(_openedFile!).readAsStringSync();
     }
+  }
+
+  /// Toggles a breakpoint at the specified line number.
+  ///
+  /// [line] is 1-indexed (1 for the first line), matching the displayed line number.
+  /// If a breakpoint exists at the line, it will be removed. Otherwise, a new
+  /// breakpoint will be added.
+  ///
+  /// This method will call [_onBreakpointsChanged] if it is set, and notify
+  /// all listeners to update the UI.
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.toggleBreakpoint(5); // Toggle breakpoint at line 5
+  /// ```
+  void toggleBreakpoint(int line) {
+    if (breakpoints.contains(line)) {
+      breakpoints.remove(line);
+    } else {
+      breakpoints.add(line);
+    }
+    _onBreakpointsChanged?.call(breakpoints);
+    notifyListeners();
   }
 
   /// Disposes of the controller and releases resources.
@@ -3244,6 +3703,7 @@ class CodeForgeController implements DeltaTextInputClient {
     }
 
     _syncToConnection();
+    _notifyCodeChanged();
     notifyListeners();
   }
 
@@ -3321,7 +3781,9 @@ class CodeForgeController implements DeltaTextInputClient {
     _flushTimer?.cancel();
     _flushTimer = null;
 
-    if (_bufferLineIndex == null || !_bufferDirty) return;
+    if (_bufferLineIndex == null || !_bufferDirty) {
+      return;
+    }
 
     final lineToInvalidate = _bufferLineIndex!;
 
@@ -3331,6 +3793,7 @@ class CodeForgeController implements DeltaTextInputClient {
     if (_bufferLineOriginalLength > 0) {
       _rope.delete(start, end);
     }
+
     if (_bufferLineText!.isNotEmpty) {
       _rope.insert(start, _bufferLineText!);
     }
@@ -3339,8 +3802,20 @@ class CodeForgeController implements DeltaTextInputClient {
     _bufferLineText = null;
     _bufferDirty = false;
 
+    // Invalidate cached text since rope content changed
+    _cachedText = null;
+    _currentVersion++;
+
     dirtyLine = lineToInvalidate;
+    _notifyCodeChanged();
     notifyListeners();
+  }
+
+  String _getCurrentWordPrefix(String text, int offset) {
+    final safeOffset = offset.clamp(0, text.length);
+    final beforeCursor = text.substring(0, safeOffset);
+    final match = RegExp(r'([a-zA-Z_][a-zA-Z0-9_]*)$').firstMatch(beforeCursor);
+    return match?.group(0) ?? '';
   }
 
   void clearDirtyRegion() {
@@ -3457,6 +3932,7 @@ class CodeForgeController implements DeltaTextInputClient {
         );
       }
 
+      _notifyCodeChanged();
       notifyListeners();
       return;
     }
@@ -3632,6 +4108,8 @@ class CodeForgeController implements DeltaTextInputClient {
               selectionBefore,
               newSelection,
             );
+            _notifyCodeChanged();
+            notifyListeners();
             return;
           }
 
@@ -3683,6 +4161,8 @@ class CodeForgeController implements DeltaTextInputClient {
       dirtyRegion = TextRange(start: range.start, end: range.start);
 
       _recordDeletion(range.start, deletedText, selectionBefore, newSelection);
+      _notifyCodeChanged();
+      notifyListeners();
       return;
     }
 
@@ -3737,6 +4217,9 @@ class CodeForgeController implements DeltaTextInputClient {
       selectionBefore,
       newSelection,
     );
+
+    _notifyCodeChanged();
+    notifyListeners();
   }
 
   void _initBuffer(int lineIndex) {

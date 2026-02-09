@@ -74,6 +74,7 @@ class LspStdioConfig extends LspConfig {
 
   LspStdioConfig._({
     required this.executable,
+    required super.filePath,
     required super.workspacePath,
     required super.languageId,
     this.args,
@@ -85,6 +86,7 @@ class LspStdioConfig extends LspConfig {
 
   static Future<LspStdioConfig> start({
     required String executable,
+    required String filePath,
     required String workspacePath,
     required String languageId,
     LspClientCapabilities capabilities = const LspClientCapabilities(),
@@ -95,6 +97,7 @@ class LspStdioConfig extends LspConfig {
   }) async {
     final config = LspStdioConfig._(
       executable: executable,
+      filePath: filePath,
       languageId: languageId,
       workspacePath: workspacePath,
       args: args,

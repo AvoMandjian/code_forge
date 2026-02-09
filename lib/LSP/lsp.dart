@@ -1,15 +1,18 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:universal_io/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 part 'lsp_socket.dart';
 part 'lsp_stdio.dart';
 
 sealed class LspConfig {
+  /// The file path of the document to be processed by the LSP.
+  final String filePath;
+
   /// The language ID of the language.
   ///
   /// languageId depends on the server you are using.
@@ -36,7 +39,12 @@ sealed class LspConfig {
       StreamController.broadcast();
   int _nextId = 1;
   final _openDocuments = <String, int>{};
+
+  /// The semantic token types legend from the server.
+  /// This is populated during initialization and used to decode token type indices.
   List<String>? _serverTokenTypes;
+
+  /// The semantic token modifiers legend from the server.
   List<String>? _serverTokenModifiers;
 
   bool isInitialized = false;
@@ -54,6 +62,7 @@ sealed class LspConfig {
   List<String>? get serverTokenModifiers => _serverTokenModifiers;
 
   LspConfig({
+    required this.filePath,
     required this.workspacePath,
     required this.languageId,
     this.capabilities = const LspClientCapabilities(),
@@ -448,7 +457,7 @@ sealed class LspConfig {
     commonParams.addAll({
       'context': {
         'triggerKind': triggerKind,
-        if (triggerCharacter != null) 'triggerCharacter': triggerCharacter,
+        'triggerCharacter': ?triggerCharacter,
         'isRetrigger': isRetrigger,
       },
     });
@@ -1120,7 +1129,10 @@ class CustomIcons {
   static const IconData method = IconData(0xe900, fontFamily: 'Method');
   static const IconData variable = IconData(0xe900, fontFamily: 'Variable');
   static const IconData class_ = IconData(0xe900, fontFamily: 'Class');
+  static const IconData enum_ = IconData(0x900, fontFamily: 'Enum');
+  static const IconData keyword = IconData(0x900, fontFamily: 'KeyWord');
   static const IconData reference = IconData(0x900, fontFamily: 'Reference');
+  static const IconData constant = IconData(0x900, fontFamily: 'Constant');
   static const IconData struct = IconData(0x900, fontFamily: 'Struct');
   static const IconData event = IconData(0x900, fontFamily: 'Event');
   static const IconData operator = IconData(0x900, fontFamily: 'Operator');
@@ -1136,7 +1148,10 @@ class CustomIcons {
       'Method': 'assets/icons/method.ttf',
       'Variable': 'assets/icons/variable.ttf',
       'Class': 'assets/icons/class.ttf',
+      'Enum': 'assets/icons/enum.ttf',
+      'KeyWord': 'assets/icons/keyword.ttf',
       'Reference': 'assets/icons/reference.ttf',
+      'Constant': 'assets/icons/constant.ttf',
       'Struct': 'assets/icons/struct.ttf',
       'Event': 'assets/icons/event.ttf',
       'Operator': 'assets/icons/operator.ttf',

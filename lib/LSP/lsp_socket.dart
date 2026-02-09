@@ -9,6 +9,7 @@ part of 'lsp.dart';
 ///
 ///```dart
 ///final lspConfig = LspSocketConfig(
+///    filePath: '/home/athul/Projects/lsp/example.py',
 ///    workspacePath: "/home/athul/Projects/lsp",
 ///    languageId: "python",
 ///    serverUrl: "ws://localhost:5656"
@@ -29,6 +30,7 @@ class LspSocketConfig extends LspConfig {
   final WebSocketChannel _channel;
 
   LspSocketConfig({
+    required super.filePath,
     required super.workspacePath,
     required super.languageId,
     required this.serverUrl,
