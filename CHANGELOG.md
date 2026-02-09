@@ -198,3 +198,126 @@ This release establishes **CodeForge** as a powerful, production-ready code edit
 - FIX: Highlight glitch in ccls LSP server.
 - FEATURE: Added `enableKeybordSuggestions` and `keyboardType` parameters as requested in [#20](https://github.com/heckmon/code_forge/issues/20)
 - ENHANCEMENT: Enahanced large text handling by caching fold ranges and bracket matches.
+
+## 6.1.0
+- FEATURE: Added more public API methods to the controller.<br>
+    • `duplicateLine()`<br>
+    • `moveLineDown()`<br>
+    • `moveLineUp()`<br>
+    • `callSignatureHelp()`<br>
+- ENHANCEMENT: LSP suggestions color
+
+## 7.0.0
+- FEATURE: Added `LspClientCapabilities` class to selectively enable/disable LSP features during initialization.<br>
+    • `semanticHighlighting` — Enable/disable semantic token highlighting<br>
+    • `codeCompletion` — Enable/disable code completion suggestions<br>
+    • `hoverInfo` — Enable/disable hover documentation<br>
+    • `codeAction` — Enable/disable code actions and quick fixes<br>
+    • `signatureHelp` — Enable/disable signature help<br>
+    • `documentColor` — Enable/disable document color detection<br>
+    • `documentHighlight` — Enable/disable document highlighting<br>
+    • `codeFolding` — Enable/disable code folding<br>
+    • `inlayHint` — Enable/disable inlay hints<br>
+    • `goToDefinition` — Enable/disable "go to definition"<br>
+    • `rename` — Enable/disable symbol renaming<br>
+- FEATURE: Added `deleteFoldRangeOnDeletingFirstLine` parameter to `CodeForge` widget as requested in [#24](https://github.com/heckmon/code_forge/issues/24). When set to `true`, deleting the entire first line of a folded block will delete the whole folded region.
+- ENHANCEMENT: Mobile context menu toolbar now persists after "Select All" action.
+- ENHANCEMENT: Repositioned code action bulb icon on mobile to avoid overlap with fold icons and gutter.
+- ENHANCEMENT: LSP methods now check capability flags before executing, returning early with appropriate empty values when features are disabled.
+- ENHANCEMENT: Dynamic capability building during LSP initialization — only enabled features are advertised to the language server.
+- FEATURE: Inlay hints and color picker:<br>
+    - Added LSP inlay hints and Colour picker as requested in [#22](https://github.com/heckmon/code_forge/issues/22).<br><br>
+    Inlay hint demo: https://github.com/user-attachments/assets/658fd76f-5650-4374-b44d-58db69813e66 <br>
+    Color pciker demo: https://github.com/user-attachments/assets/a7e1795c-83ca-411f-9c1d-81c8d4949926
+
+- FEATURE: Added doucment highlight as requested in [#22](https://github.com/heckmon/code_forge/issues/22).<br>
+  - demo: https://github.com/user-attachments/assets/593a524f-f5d7-45af-b5a5-d67cc1ed95fa
+
+- FEATURE: Added arrow key navigation for LSP suggestions in mobile as requested in [#21](https://github.com/heckmon/code_forge/issues/21).<br>
+   - demo: https://github.com/user-attachments/assets/8237dbdb-ba36-490d-9db2-4ffe1e24da8a
+
+- FIX: [#25](https://github.com/heckmon/code_forge/issues/25)
+- FIX: Fixed action icon misposition in mobile as requested in [#23](https://github.com/heckmon/code_forge/issues/23)
+
+## 8.0.0
+
+### ✨ Major Features
+
+#### 🌍 RTL (Right-to-Left) Language Support
+- FEATURE: Added comprehensive RTL support for right-to-left languages (Arabic, Hebrew, etc.)
+  - Added `textDirection` parameter to `CodeForge` widget to control text layout direction
+  - Gutter automatically positions on the right side for RTL mode
+  - Text rendering properly aligned for RTL languages with full visual direction support
+  - Caret positioning and movement follow visual direction (not logical) for intuitive editing
+  - Selection highlighting works correctly for RTL text
+  - All UI elements (fold icons, line numbers, indentation guides) properly mirrored for RTL
+  - Bracket pair highlighting supports RTL
+  - Scroll behavior adapted for RTL layout
+
+#### 🔤 RTL Text Input & Navigation
+- FEATURE: Arrow keys follow visual direction for RTL
+  - Left arrow visually moves left (logically moves right in RTL)
+  - Right arrow visually moves right (logically moves left in RTL)
+  - Home key moves to visual line start (line end in RTL)
+  - End key moves to visual line end (line start in RTL)
+  - Ctrl+Arrow word navigation follows visual direction for RTL
+- FEATURE: Arabic and Hebrew word detection for code completion
+  - Updated word pattern matching to include Arabic (U+0600-U+06FF), Extended Arabic (U+08A0-U+08FF), and Hebrew (U+0590-U+05FF) Unicode ranges
+  - LSP suggestions now work correctly for RTL languages
+  - Word cache includes RTL script characters
+  - Fold icons display correctly for RTL (< for folded, down arrow for unfolded)
+
+### 🎯 Hover Documentation Improvements
+- ENHANCEMENT: Improved hover popup positioning and visibility
+  - Hover documentation now positions above cursor if space is limited below
+  - Better width constraints and viewport-aware positioning
+  - Added hover content caching for improved performance
+  - Hover content is fetched asynchronously without blocking rendering
+  - Diagonal offset adjustment prevents hover from blocking cursor area
+- ENHANCEMENT: Hover triggered by tap on mobile/desktop now persists properly
+  - Added `onHoverSetByTap` callback for better tap-based hover handling
+  - Hover state properly managed to avoid flicker
+
+### 🔧 Code Improvements & Fixes
+- FIX: Auto-indentation now only triggers on single Enter key press
+  - Paste operations no longer re-indent pasted multi-line content incorrectly
+  - Only the first newline in pasted text triggers auto-indent
+- FIX: CCLS semantic highlighting refresh debouncing
+  - Added `_scheduleCclsRefresh` with 1 second debounce to avoid excessive document saves
+  - CCLS servers that use custom semantic token protocol now work more reliably
+- ENHANCEMENT: Better suggestion popup positioning
+  - Popup now positions above cursor when limited space below
+  - Horizontal alignment adjusted to stay within viewport
+  - Improved mobile responsiveness
+
+### 📊 Internal Changes
+- Modified paragraph style to respect textDirection property
+- Added RTL-aware cache invalidation for paragraph building
+- Improved caret info calculation for RTL text positioning
+- Enhanced text offset to line/char conversion for RTL
+- Selection handle positioning adapted for RTL layout
+- Ghost text (AI completion) positioning corrected for RTL
+- Inlay hints and document colors properly positioned for RTL
+
+## 8.0.1
+- FEATURE: Added `clearAllSuggestions()` API on controller to clear all suggestions.
+- Updated README.
+
+## 8.1.0
+- ENHANCEMENT: Enhanced RTL support
+
+## 8.1.1
+ - FEATURE: added a public API called `acceptSuggestion` in the controller to manually accept LSP suggestions.
+
+## 8.1.2
+- FIX: mobile scroll issue in RTL mode.
+
+## 8.2.0
+ - FIX: [#36](https://github.com/heckmon/code_forge/issues/36)
+ - FIX: [#35](https://github.com/heckmon/code_forge/issues/35)
+ - FEATURE: [#33](https://github.com/heckmon/code_forge/issues/33)
+
+## 8.3.0
+ - FIX: [#37](https://github.com/heckmon/code_forge/issues/37)
+ - FIX: [#36](https://github.com/heckmon/code_forge/issues/36)
+ - FEATURE: [#38](https://github.com/heckmon/code_forge/issues/38)

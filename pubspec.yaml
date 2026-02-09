@@ -1,10 +1,10 @@
 name: code_forge
 description: "A sophisticated code editor package with AI completion, LSP support, syntax highlighting, and advanced editing capabilities."
-version: 6.0.0
+version: 8.3.0
 homepage: https://github.com/heckmon/code_forge
 
 environment:
-  sdk: ^3.10.7
+  sdk: ^3.10.8
   flutter: ">=1.17.0"
 
 dependencies:
@@ -14,6 +14,8 @@ dependencies:
   re_highlight: ^0.0.3
   universal_io: ^2.3.1
   web_socket_channel: ^3.0.3
+  flutter_colorpicker: ^1.1.0
+  vector_math: ^2.1.4
 
 dev_dependencies:
   flutter_test:
@@ -31,18 +33,9 @@ flutter:
     - family: Class
       fonts:
         - asset: assets/icons/class.ttf
-    - family: Enum
-      fonts:
-        - asset: assets/icons/enum.ttf
-    - family: KeyWord
-      fonts:
-        - asset: assets/icons/keyword.ttf
     - family: Reference
       fonts:
         - asset: assets/icons/reference.ttf
-    - family: Constant
-      fonts:
-        - asset: assets/icons/constant.ttf
     - family: Struct
       fonts:
         - asset: assets/icons/struct.ttf
