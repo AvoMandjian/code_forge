@@ -314,6 +314,9 @@ class FindController extends ChangeNotifier {
           start: match.start,
           end: match.end,
           isCurrentMatch: isCurrent,
+          style: TextStyle(
+            backgroundColor: Colors.amberAccent.withOpacity(0.3),
+          ),
         ),
       );
     }
