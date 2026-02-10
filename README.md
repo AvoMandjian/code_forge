@@ -38,10 +38,9 @@
 > code_forge does **not** support Flutter web, as it relies on `dart:io` for core functionality. Use [code_forge_web](https://pub.dev/packages/code_forge_web) for web support.
 
 
-### What's new in 8.3.0
-  - FIX: [#37](https://github.com/heckmon/code_forge/issues/37)
-  - FIX: [#36](https://github.com/heckmon/code_forge/issues/36)
-  - FEATURE: [#38](https://github.com/heckmon/code_forge/issues/38)
+### What's new in 8.4.0
+ - FEATURE: [#39](https://github.com/heckmon/code_forge/issues/39)
+ - FIX: html/xml guide lines.
 
 ## Why CodeForge?
 **Feature demos:** [CodeForge Features Showcase](https://heckmon.github.io/code_forge_demo/)
@@ -76,35 +75,35 @@ To see working examples of all CodeForge features including AI Code Completion, 
 <summary><strong>📋 Complete Feature List</strong></summary>
 
 #### Editor Core
-- ⚡ **Rope Data Structure** — Optimized for large files
-- 🎨 **180+ Languages** — Via `re_highlight` package
-- 📁 **Code Folding** — Smart block detection
-- 📏 **Indentation Guides** — Visual code structure
-- 🔢 **Line Numbers** — With active line highlighting
-- ↩️ **Smart Undo/Redo** — Timestamp-based grouping
-- 🔍 **Search Highlighting** — Find and highlight matches
-- ✂️ **Line Operations** — Move, duplicate, delete lines
+- **Rope Data Structure** — Optimized for large files
+- **180+ Languages** — Via `re_highlight` package
+- **Code Folding** — Smart block detection
+- **Indentation Guides** — Visual code structure
+- **Line Numbers** — With active line highlighting
+- **Smart Undo/Redo** — Timestamp-based grouping
+- **Search Highlighting** — Find and highlight matches
+- **Line Operations** — Move, duplicate, delete lines
 
 #### LSP Features
-- 💡 **Intelligent Completions** — Context-aware code suggestions with auto-import
-- 📖 **Hover Documentation** — Rich markdown tooltips with type information
-- 🚨 **Real-time Diagnostics** — Errors and warnings with quick fixes
-- 🎨 **Semantic Highlighting** — Token-based coloring with modifiers
-- 💬 **Signature Help** — Function signatures and parameter hints
-- 🔧 **Code Actions** — Quick fixes and refactoring suggestions
-- ✨ **Inlay Hints** — Inline annotations for types and parameters
-- 🎯 **Document Highlight** — Highlight symbol occurrences
-- 🎨 **Document Colors** — Color value detection and picker
-- 📍 **Go to Definition** — Navigate to symbol definitions
-- ✏️ **Symbol Renaming** — Rename symbols across workspace
-- 📡 **Multiple Protocols** — Stdio and WebSocket support
-- ⚙️ **Capability Control** — Selectively enable/disable LSP features
+- **Intelligent Completions** — Context-aware code suggestions with auto-import
+- **Hover Documentation** — Rich markdown tooltips with type information
+- **Real-time Diagnostics** — Errors and warnings with quick fixes
+- **Semantic Highlighting** — Token-based coloring with modifiers
+- **Signature Help** — Function signatures and parameter hints
+- **Code Actions** — Quick fixes and refactoring suggestions
+- **Inlay Hints** — Inline annotations for types and parameters
+- **Document Highlight** — Highlight symbol occurrences
+- **Document Colors** — Color value detection and picker
+- **Go to Definition** — Navigate to symbol definitions
+- **Symbol Renaming** — Rename symbols across workspace
+- **Multiple Protocols** — Stdio and WebSocket support
+- **Capability Control** — Selectively enable/disable LSP features
 
 #### Customization
-- 🎨 **Full Theming** — Every element customizable
-- 📐 **Gutter Styling** — Colors, icons, sizes
-- ✨ **Selection Styling** — Cursor, selection, bubbles
-- 💬 **Popup Styling** — Suggestions, hover details
+- **Full Theming** — Every element customizable
+- **Gutter Styling** — Colors, icons, sizes
+- **Selection Styling** — Cursor, selection, bubbles
+- **Popup Styling** — Suggestions, hover details
 
 </details>
 
@@ -116,7 +115,7 @@ Add CodeForge to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  code_forge: ^8.3.0
+  code_forge: ^8.4.0
 ```
 
 Then run:

@@ -3773,7 +3773,6 @@ class CodeForgeController implements DeltaTextInputClient {
   }
 
   static Set<String> _extractWords(String text) {
-    // Include Arabic (\u0600-\u06FF), Extended Arabic (\u08A0-\u08FF), and Hebrew (\u0590-\u05FF)
     final regExp = RegExp(r'[\w\u0600-\u06FF\u08A0-\u08FF\u0590-\u05FF]+');
     final set = <String>{};
     for (final match in regExp.allMatches(text)) {
