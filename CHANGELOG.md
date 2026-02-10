@@ -321,3 +321,7 @@ This release establishes **CodeForge** as a powerful, production-ready code edit
  - FIX: [#37](https://github.com/heckmon/code_forge/issues/37)
  - FIX: [#36](https://github.com/heckmon/code_forge/issues/36)
  - FEATURE: [#38](https://github.com/heckmon/code_forge/issues/38)
+
+ ## 8.4.0
+ - FEATURE: [#39](https://github.com/heckmon/code_forge/issues/39)
+ - FIX: html/xml guide lines.
