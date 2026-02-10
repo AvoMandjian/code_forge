@@ -32,3 +32,6 @@ migrate_working_dir/
 
 /example/lib/little_code.dart
 /example/lib/big_code.dart
+
+# FVM Version Cache
+.fvm/

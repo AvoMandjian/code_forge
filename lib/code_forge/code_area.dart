@@ -423,10 +423,9 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
         registerCustomSuggestions: _controller.registerCustomSuggestions,
       );
     }
-    _suggestionNotifier = ValueNotifier(null);
+    // _suggestionNotifier = ValueNotifier(null);
     _hoverNotifier = ValueNotifier(null);
     _hoverContentNotifier = ValueNotifier(null);
-    _diagnosticsNotifier = ValueNotifier<List<LspErrors>>([]);
     _aiNotifier = ValueNotifier(null);
     _aiOffsetNotifier = ValueNotifier(null);
     _contextMenuOffsetNotifier = ValueNotifier(const Offset(-1, -1));
@@ -454,7 +453,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
       _readOnly = true;
     }
 
-    _updateStyles();
+    // _updateStyles();
 
     // Initialize search controller listener
     _searchController.addListener(() {
@@ -478,6 +477,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
         widget.suggestionStyle ??
         SuggestionStyle(
           elevation: 8,
+          highlightColor: Colors.red,
           textStyle: (() {
             TextStyle style = widget.textStyle ?? TextStyle();
             if (style.color == null) {
@@ -537,6 +537,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
     _hoverDetailsStyle =
         widget.hoverDetailsStyle ??
         HoverDetailsStyle(
+          highlightColor: Colors.red,
           shape: BeveledRectangleBorder(
             side: BorderSide(
               color: _editorTheme['root']!.color ?? Colors.grey[400]!,
@@ -735,7 +736,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
           }
           await lspConfig!.initialize();
           await Future.delayed(const Duration(milliseconds: 300));
-          await lspConfig.openDocument( _controller.text);
+          await lspConfig.openDocument(_controller.text);
           setState(() {
             _lspReady = true;
           });
@@ -827,7 +828,11 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
           final lspConfig = widget.lspConfig!;
           await lspConfig.updateDocument(_filePath!, text);
           _scheduleSemantictokenRefresh();
-          final suggestion = await lspConfig.getCompletions(_filePath,line, character);
+          final suggestion = await lspConfig.getCompletions(
+            _filePath,
+            line,
+            character,
+          );
           _suggestions = suggestion;
         })();
       }
@@ -2442,42 +2447,42 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                 _contextMenuOffsetNotifier.value =
                                     details.localPosition;
                               },
-                            child: MouseRegion(
-                              onEnter: (event) {
+                              child: MouseRegion(
+                                onEnter: (event) {
                                   if (mounted) {
                                     setState(() => _isHovering = true);
                                   }
-                              },
-                              onExit: (event) {
+                                },
+                                onExit: (event) {
                                   if (mounted) {
                                     setState(() => _isHovering = false);
                                   }
-                              },
-                              child: ValueListenableBuilder(
-                                valueListenable: _selectionActiveNotifier,
-                                builder: (context, selVal, child) {
-                                  return TwoDimensionalScrollable(
+                                },
+                                child: ValueListenableBuilder(
+                                  valueListenable: _selectionActiveNotifier,
+                                  builder: (context, selVal, child) {
+                                    return TwoDimensionalScrollable(
                                       horizontalDetails:
                                           ScrollableDetails.horizontal(
-                                      controller: _hscrollController,
-                                      physics: selVal
-                                          ? const NeverScrollableScrollPhysics()
+                                            controller: _hscrollController,
+                                            physics: selVal
+                                                ? const NeverScrollableScrollPhysics()
                                                 : RTLAwareScrollPhysics(
                                                     isRTL:
                                                         widget.textDirection ==
                                                         TextDirection.rtl,
                                                     isMobile: _isMobile,
                                                   ),
-                                    ),
-                                    verticalDetails: ScrollableDetails.vertical(
-                                      controller: _vscrollController,
-                                      physics: selVal
-                                          ? const NeverScrollableScrollPhysics()
-                                          : const ClampingScrollPhysics(),
-                                    ),
-                                    viewportBuilder: (_, voffset, hoffset) => CustomViewport(
-                                      verticalOffset: voffset,
-                                                                              verticalAxisDirection:
+                                          ),
+                                      verticalDetails: ScrollableDetails.vertical(
+                                        controller: _vscrollController,
+                                        physics: selVal
+                                            ? const NeverScrollableScrollPhysics()
+                                            : const ClampingScrollPhysics(),
+                                      ),
+                                      viewportBuilder: (_, voffset, hoffset) => CustomViewport(
+                                        verticalOffset: voffset,
+                                        verticalAxisDirection:
                                             AxisDirection.down,
                                         horizontalOffset: hoffset,
                                         horizontalAxisDirection:
@@ -2487,13 +2492,13 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                             : AxisDirection.right,
                                         mainAxis: Axis.vertical,
                                         lineWrap: widget.lineWrap,
-                                      delegate: TwoDimensionalChildBuilderDelegate(
-                                        maxXIndex: 0,
-                                        maxYIndex: 0,
-                                        builder: (_, vic) {
-                                          return Focus(
-                                            focusNode: _focusNode,
-                                            onKeyEvent: (node, event) {
+                                        delegate: TwoDimensionalChildBuilderDelegate(
+                                          maxXIndex: 0,
+                                          maxYIndex: 0,
+                                          builder: (_, vic) {
+                                            return Focus(
+                                              focusNode: _focusNode,
+                                              onKeyEvent: (node, event) {
                                                 final isCtrlAltPressed =
                                                     (HardwareKeyboard
                                                             .instance
@@ -2534,77 +2539,82 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                   }
                                                 }
 
-                                              if (event is KeyDownEvent ||
-                                                  event is KeyRepeatEvent) {
-                                                final isShiftPressed =
-                                                    HardwareKeyboard
-                                                        .instance
-                                                        .isShiftPressed;
-                                                final isCtrlPressed =
-                                                    HardwareKeyboard
-                                                        .instance
-                                                        .isControlPressed ||
-                                                    HardwareKeyboard
-                                                        .instance
-                                                        .isMetaPressed;
-                            
-                                                // Allow regular text input keys (like space) to pass through
-                                                // to the TextInputConnection, especially important on web.
-                                                // This ensures space and other printable characters are handled
-                                                // by the text input system rather than being intercepted.
-                                                // Using skipRemainingHandlers instead of ignored ensures the event
-                                                // bypasses other handlers in the widget tree and reaches the
-                                                // TextInputConnection directly, which is critical on web.
-                                                final key = event.logicalKey;
-                                                if (!isCtrlPressed &&
-                                                    !isShiftPressed) {
-                                                  // Space key should always pass through to text input
-                                                  if (key ==
-                                                      LogicalKeyboardKey.space) {
-                                                    return KeyEventResult
-                                                        .skipRemainingHandlers;
+                                                if (event is KeyDownEvent ||
+                                                    event is KeyRepeatEvent) {
+                                                  final isShiftPressed =
+                                                      HardwareKeyboard
+                                                          .instance
+                                                          .isShiftPressed;
+                                                  final isCtrlPressed =
+                                                      HardwareKeyboard
+                                                          .instance
+                                                          .isControlPressed ||
+                                                      HardwareKeyboard
+                                                          .instance
+                                                          .isMetaPressed;
+
+                                                  // Allow regular text input keys (like space) to pass through
+                                                  // to the TextInputConnection, especially important on web.
+                                                  // This ensures space and other printable characters are handled
+                                                  // by the text input system rather than being intercepted.
+                                                  // Using skipRemainingHandlers instead of ignored ensures the event
+                                                  // bypasses other handlers in the widget tree and reaches the
+                                                  // TextInputConnection directly, which is critical on web.
+                                                  final key = event.logicalKey;
+                                                  if (!isCtrlPressed &&
+                                                      !isShiftPressed) {
+                                                    // Space key should always pass through to text input
+                                                    if (key ==
+                                                        LogicalKeyboardKey
+                                                            .space) {
+                                                      return KeyEventResult
+                                                          .skipRemainingHandlers;
+                                                    }
+                                                    // Check if it's a character key (printable ASCII)
+                                                    // by checking if the key has a single character label
+                                                    final keyLabel =
+                                                        key.keyLabel;
+                                                    if (keyLabel.length == 1 &&
+                                                        keyLabel.codeUnitAt(
+                                                              0,
+                                                            ) >=
+                                                            32 &&
+                                                        keyLabel.codeUnitAt(
+                                                              0,
+                                                            ) <=
+                                                            126) {
+                                                      // Allow printable ASCII characters to pass through
+                                                      return KeyEventResult
+                                                          .skipRemainingHandlers;
+                                                    }
                                                   }
-                                                  // Check if it's a character key (printable ASCII)
-                                                  // by checking if the key has a single character label
-                                                  final keyLabel = key.keyLabel;
-                                                  if (keyLabel.length == 1 &&
-                                                      keyLabel.codeUnitAt(0) >=
-                                                          32 &&
-                                                      keyLabel.codeUnitAt(0) <=
-                                                          126) {
-                                                    // Allow printable ASCII characters to pass through
-                                                    return KeyEventResult
-                                                        .skipRemainingHandlers;
-                                                  }
-                                                }
-                                                
-                                                if(_suggestionNotifier
+                                                  if (_suggestionNotifier
                                                               .value !=
                                                           null &&
                                                       _suggestionNotifier
                                                           .value!
                                                           .isNotEmpty) {
-                                                                                                                final suggestions =
+                                                    final suggestions =
                                                         _suggestionNotifier
                                                             .value!;
-                                                  switch (event.logicalKey) {
-                                                    case LogicalKeyboardKey
-                                                        .arrowDown:
-                                                      if (mounted) {
-                                                        setState(() {
-                                                           _sugSelIndex =
+                                                    switch (event.logicalKey) {
+                                                      case LogicalKeyboardKey
+                                                          .arrowDown:
+                                                        if (mounted) {
+                                                          setState(() {
+                                                            _sugSelIndex =
                                                                 (_sugSelIndex +
                                                                     1) %
                                                                 suggestions
                                                                     .length;
-                                                          _scrollToSelectedSuggestion();
-                                                        });
-                                                      }
-                                                      return KeyEventResult
-                                                          .handled;
-                                                    case LogicalKeyboardKey
-                                                        .arrowUp:
-                                                      if (mounted) {
+                                                            _scrollToSelectedSuggestion();
+                                                          });
+                                                        }
+                                                        return KeyEventResult
+                                                            .handled;
+                                                      case LogicalKeyboardKey
+                                                          .arrowUp:
+                                                        if (mounted) {
                                                           setState(() {
                                                             _sugSelIndex =
                                                                 (_sugSelIndex -
@@ -2615,15 +2625,15 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                                     .length;
                                                             _scrollToSelectedSuggestion();
                                                           });
-                                                      }
-                                                      return KeyEventResult
-                                                          .handled;
+                                                        }
+                                                        return KeyEventResult
+                                                            .handled;
                                                       case LogicalKeyboardKey
                                                           .enter:
                                                       case LogicalKeyboardKey
                                                           .tab:
-                                                      _acceptSuggestion();
-                                                       if (_extraText
+                                                        _acceptSuggestion();
+                                                        if (_extraText
                                                             .isNotEmpty) {
                                                           _controller
                                                               .applyWorkspaceEdit(
@@ -2634,19 +2644,19 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                           _isSignatureInvoked =
                                                               true;
                                                         });
-                                                      return KeyEventResult
-                                                          .handled;
-                                                    case LogicalKeyboardKey
-                                                        .escape:
+                                                        return KeyEventResult
+                                                            .handled;
+                                                      case LogicalKeyboardKey
+                                                          .escape:
                                                         _suggestionNotifier
                                                                 .value =
-                                                          null;
-                                                      return KeyEventResult
-                                                          .handled;
-                                                    default:
-                                                      break;
+                                                            null;
+                                                        return KeyEventResult
+                                                            .handled;
+                                                      default:
+                                                        break;
+                                                    }
                                                   }
-                                                }
 
                                                   if (_lspActionNotifier
                                                               .value !=
@@ -2722,8 +2732,8 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                         break;
                                                     }
                                                   }
-                            
-                                                if (isCtrlPressed &&
+
+                                                  if (isCtrlPressed &&
                                                       isShiftPressed) {
                                                     switch (event.logicalKey) {
                                                       case LogicalKeyboardKey
@@ -2779,12 +2789,12 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                         break;
                                                     }
                                                   }
-                            
-                                                if (isCtrlPressed) {
-                                                  switch (event.logicalKey) {
+
+                                                  if (isCtrlPressed) {
+                                                    switch (event.logicalKey) {
                                                       case LogicalKeyboardKey
                                                           .keyF:
-                                                       final isAlt =
+                                                        final isAlt =
                                                             HardwareKeyboard
                                                                 .instance
                                                                 .isAltPressed;
@@ -2795,28 +2805,29 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                                 .isReplaceMode =
                                                             isAlt;
 
-                                                      if (!_isSearchVisible) {
-                                                        setState(() {
-                                                          _isSearchVisible = true;
-                                                        });
-                                                        _searchFocusNode
-                                                            .requestFocus();
-                                                        _searchController
-                                                                .selection =
-                                                            TextSelection(
-                                                              baseOffset: 0,
-                                                              extentOffset:
-                                                                  _searchController
-                                                                      .text
-                                                                      .length,
-                                                            );
-                                                      } else {
-                                                        _searchFocusNode
-                                                            .requestFocus();
-                                                      }
-                                                      return KeyEventResult
-                                                          .handled;
-                                                        case LogicalKeyboardKey
+                                                        if (!_isSearchVisible) {
+                                                          setState(() {
+                                                            _isSearchVisible =
+                                                                true;
+                                                          });
+                                                          _searchFocusNode
+                                                              .requestFocus();
+                                                          _searchController
+                                                                  .selection =
+                                                              TextSelection(
+                                                                baseOffset: 0,
+                                                                extentOffset:
+                                                                    _searchController
+                                                                        .text
+                                                                        .length,
+                                                              );
+                                                        } else {
+                                                          _searchFocusNode
+                                                              .requestFocus();
+                                                        }
+                                                        return KeyEventResult
+                                                            .handled;
+                                                      case LogicalKeyboardKey
                                                           .keyH:
                                                         if (!HardwareKeyboard
                                                             .instance
@@ -2835,19 +2846,21 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                       case LogicalKeyboardKey
                                                           .keyC:
                                                         _controller.copy();
-                                                    case LogicalKeyboardKey.keyS:
-                                                      if (widget.saveFile !=
-                                                          null) {
-                                                        widget.saveFile!();
+                                                      case LogicalKeyboardKey
+                                                          .keyS:
+                                                        if (widget.saveFile !=
+                                                            null) {
+                                                          widget.saveFile!();
+                                                          return KeyEventResult
+                                                              .handled;
+                                                        }
+                                                        break;
+                                                      case LogicalKeyboardKey
+                                                          .keyC:
+                                                        _controller.copy();
                                                         return KeyEventResult
                                                             .handled;
-                                                      }
-                                                      break;
-                                                    case LogicalKeyboardKey.keyC:
-                                                      _controller.copy();
-                                                      return KeyEventResult
-                                                          .handled;
-                                                                        case LogicalKeyboardKey
+                                                      case LogicalKeyboardKey
                                                           .keyX:
                                                         if (_readOnly) {
                                                           return KeyEventResult
@@ -2862,15 +2875,15 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                           return KeyEventResult
                                                               .handled;
                                                         }
-                                                      _controller.paste();
-                                                      return KeyEventResult
-                                                          .handled;
+                                                        _controller.paste();
+                                                        return KeyEventResult
+                                                            .handled;
                                                       case LogicalKeyboardKey
                                                           .keyA:
-                                                      _controller.selectAll();
-                                                      return KeyEventResult
-                                                          .handled;
-                                                    case LogicalKeyboardKey
+                                                        _controller.selectAll();
+                                                        return KeyEventResult
+                                                            .handled;
+                                                      case LogicalKeyboardKey
                                                           .keyD:
                                                         if (_readOnly) {
                                                           return KeyEventResult
@@ -2887,51 +2900,51 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                           return KeyEventResult
                                                               .handled;
                                                         }
-                                                      if (_undoRedoController
-                                                          .canUndo) {
-                                                        _undoRedoController
-                                                            .undo();
-                                                        _commonKeyFunctions();
-                                                      }
-                                                      return KeyEventResult
-                                                          .handled;
+                                                        if (_undoRedoController
+                                                            .canUndo) {
+                                                          _undoRedoController
+                                                              .undo();
+                                                          _commonKeyFunctions();
+                                                        }
+                                                        return KeyEventResult
+                                                            .handled;
                                                       case LogicalKeyboardKey
                                                           .keyY:
-                                                         if (_readOnly) {
+                                                        if (_readOnly) {
                                                           return KeyEventResult
                                                               .handled;
                                                         }
-                                                      if (_undoRedoController
-                                                          .canRedo) {
-                                                        _undoRedoController
-                                                            .redo();
+                                                        if (_undoRedoController
+                                                            .canRedo) {
+                                                          _undoRedoController
+                                                              .redo();
+                                                          _commonKeyFunctions();
+                                                        }
+                                                        return KeyEventResult
+                                                            .handled;
+                                                      case LogicalKeyboardKey
+                                                          .backspace:
+                                                        if (_readOnly) {
+                                                          return KeyEventResult
+                                                              .handled;
+                                                        }
+                                                        _deleteWordBackward();
                                                         _commonKeyFunctions();
-                                                      }
-                                                      return KeyEventResult
-                                                          .handled;
-                                                    case LogicalKeyboardKey
-                                                        .backspace:
-                                                               if (_readOnly) {
+                                                        return KeyEventResult
+                                                            .handled;
+                                                      case LogicalKeyboardKey
+                                                          .delete:
+                                                        if (_readOnly) {
                                                           return KeyEventResult
                                                               .handled;
                                                         }
-                                                      _deleteWordBackward();
-                                                      _commonKeyFunctions();
-                                                      return KeyEventResult
-                                                          .handled;
-                                                    case LogicalKeyboardKey
-                                                        .delete:
-                                                              if (_readOnly) {
-                                                          return KeyEventResult
-                                                              .handled;
-                                                        }
-                                                      _deleteWordForward();
-                                                      _commonKeyFunctions();
-                                                      return KeyEventResult
-                                                          .handled;
-                                                    case LogicalKeyboardKey
-                                                        .arrowLeft:
-    if (widget
+                                                        _deleteWordForward();
+                                                        _commonKeyFunctions();
+                                                        return KeyEventResult
+                                                            .handled;
+                                                      case LogicalKeyboardKey
+                                                          .arrowLeft:
+                                                        if (widget
                                                                 .textDirection ==
                                                             TextDirection.rtl) {
                                                           _moveWordRight(false);
@@ -2939,16 +2952,16 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                           _moveWordLeft(false);
                                                         }
                                                         _commonKeyFunctions();
-                                                      return KeyEventResult
-                                                          .handled;
-                                                    case LogicalKeyboardKey
-                                                        .arrowRight:
+                                                        return KeyEventResult
+                                                            .handled;
+                                                      case LogicalKeyboardKey
+                                                          .arrowRight:
                                                         if (widget
                                                                 .textDirection ==
                                                             TextDirection.rtl) {
                                                           _moveWordLeft(false);
                                                         } else {
-                                                      _moveWordRight(false);
+                                                          _moveWordRight(false);
                                                         }
                                                         _commonKeyFunctions();
                                                         return KeyEventResult
@@ -2980,17 +2993,17 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                               isShiftPressed:
                                                                   isShiftPressed,
                                                             );
-                                                      _commonKeyFunctions();
-                                                      return KeyEventResult
-                                                          .handled;
-                                                    default:
-                                                      break;
+                                                        _commonKeyFunctions();
+                                                        return KeyEventResult
+                                                            .handled;
+                                                      default:
+                                                        break;
+                                                    }
                                                   }
-                                                }
-                            
-                                                if (isShiftPressed &&
-                                                    !isCtrlPressed) {
-                                                  switch (event.logicalKey) {
+
+                                                  if (isShiftPressed &&
+                                                      !isCtrlPressed) {
+                                                    switch (event.logicalKey) {
                                                       case LogicalKeyboardKey
                                                           .tab:
                                                         if (_readOnly) {
@@ -2998,37 +3011,107 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                               .handled;
                                                         }
                                                         _controller.unindent();
-                                                      _commonKeyFunctions();
-                                                      return KeyEventResult
-                                                          .handled;
-                                                    case LogicalKeyboardKey
-                                                        .arrowLeft:
-                                                                                                                _handleArrowLeft(true);
+                                                        _commonKeyFunctions();
+                                                        return KeyEventResult
+                                                            .handled;
+                                                      case LogicalKeyboardKey
+                                                          .arrowLeft:
+                                                        _handleArrowLeft(true);
 
-                                                      _controller
-                                                          .pressLetfArrowKey(
-                                                            isShiftPressed:
-                                                                isShiftPressed,
-                                                          );
-                                                      _commonKeyFunctions();
-                                                      return KeyEventResult
-                                                          .handled;
-                                                    case LogicalKeyboardKey
-                                                        .arrowRight:
-                                                      _handleArrowRight(true);
-                                                      _commonKeyFunctions();
-                                                      return KeyEventResult
-                                                          .handled;
-                                                    case LogicalKeyboardKey
-                                                        .arrowUp:
+                                                        _controller
+                                                            .pressLetfArrowKey(
+                                                              isShiftPressed:
+                                                                  isShiftPressed,
+                                                            );
+                                                        _commonKeyFunctions();
+                                                        return KeyEventResult
+                                                            .handled;
+                                                      case LogicalKeyboardKey
+                                                          .arrowRight:
+                                                        _handleArrowRight(true);
+                                                        _commonKeyFunctions();
+                                                        return KeyEventResult
+                                                            .handled;
+                                                      case LogicalKeyboardKey
+                                                          .arrowUp:
                                                         _controller
                                                             .pressUpArrowKey(
-                                                        isShiftPressed:
-                                                            isShiftPressed,
-                                                      );
+                                                              isShiftPressed:
+                                                                  isShiftPressed,
+                                                            );
+                                                        _commonKeyFunctions();
+                                                        return KeyEventResult
+                                                            .handled;
+                                                      case LogicalKeyboardKey
+                                                          .arrowDown:
+                                                        _controller
+                                                            .pressDownArrowKey(
+                                                              isShiftPressed:
+                                                                  isShiftPressed,
+                                                            );
+                                                        _commonKeyFunctions();
+                                                        return KeyEventResult
+                                                            .handled;
+                                                      case LogicalKeyboardKey
+                                                          .home:
+                                                        _controller.pressHomeKey(
+                                                          isShiftPressed:
+                                                              isShiftPressed,
+                                                        );
+                                                        _commonKeyFunctions();
+                                                        return KeyEventResult
+                                                            .handled;
+                                                      case LogicalKeyboardKey
+                                                          .end:
+                                                        _controller.pressEndKey(
+                                                          isShiftPressed:
+                                                              isShiftPressed,
+                                                        );
+                                                        _commonKeyFunctions();
+                                                        return KeyEventResult
+                                                            .handled;
+                                                      default:
+                                                        break;
+                                                    }
+                                                  }
+
+                                                  switch (event.logicalKey) {
+                                                    case LogicalKeyboardKey
+                                                        .backspace:
+                                                      if (_readOnly) {
+                                                        return KeyEventResult
+                                                            .handled;
+                                                      }
+                                                      _controller.backspace();
+                                                      if (_suggestionNotifier
+                                                              .value !=
+                                                          null) {
+                                                        _suggestionNotifier
+                                                                .value =
+                                                            null;
+                                                      }
                                                       _commonKeyFunctions();
                                                       return KeyEventResult
                                                           .handled;
+
+                                                    case LogicalKeyboardKey
+                                                        .delete:
+                                                      if (_readOnly) {
+                                                        return KeyEventResult
+                                                            .handled;
+                                                      }
+                                                      _controller.delete();
+                                                      if (_suggestionNotifier
+                                                              .value !=
+                                                          null) {
+                                                        _suggestionNotifier
+                                                                .value =
+                                                            null;
+                                                      }
+                                                      _commonKeyFunctions();
+                                                      return KeyEventResult
+                                                          .handled;
+
                                                     case LogicalKeyboardKey
                                                         .arrowDown:
                                                       _controller
@@ -3039,8 +3122,50 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                       _commonKeyFunctions();
                                                       return KeyEventResult
                                                           .handled;
-                                                      case LogicalKeyboardKey
-                                                          .home:
+
+                                                    case LogicalKeyboardKey
+                                                        .arrowUp:
+                                                      _controller
+                                                          .pressUpArrowKey(
+                                                            isShiftPressed:
+                                                                isShiftPressed,
+                                                          );
+                                                      _commonKeyFunctions();
+                                                      return KeyEventResult
+                                                          .handled;
+
+                                                    case LogicalKeyboardKey
+                                                        .arrowRight:
+                                                      _handleArrowRight(
+                                                        isShiftPressed,
+                                                      );
+                                                      _commonKeyFunctions();
+                                                      return KeyEventResult
+                                                          .handled;
+
+                                                    case LogicalKeyboardKey
+                                                        .arrowLeft:
+                                                      _controller
+                                                          .pressLetfArrowKey(
+                                                            isShiftPressed:
+                                                                isShiftPressed,
+                                                          );
+                                                      _commonKeyFunctions();
+                                                      return KeyEventResult
+                                                          .handled;
+
+                                                    case LogicalKeyboardKey
+                                                        .home:
+                                                      _handleHomeKey(
+                                                        isShiftPressed,
+                                                      );
+                                                      if (_suggestionNotifier
+                                                              .value !=
+                                                          null) {
+                                                        _suggestionNotifier
+                                                                .value =
+                                                            null;
+                                                      }
                                                       _controller.pressHomeKey(
                                                         isShiftPressed:
                                                             isShiftPressed,
@@ -3048,8 +3173,18 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                       _commonKeyFunctions();
                                                       return KeyEventResult
                                                           .handled;
-                                                      case LogicalKeyboardKey
-                                                          .end:
+
+                                                    case LogicalKeyboardKey.end:
+                                                      _handleEndKey(
+                                                        isShiftPressed,
+                                                      );
+                                                      if (_suggestionNotifier
+                                                              .value !=
+                                                          null) {
+                                                        _suggestionNotifier
+                                                                .value =
+                                                            null;
+                                                      }
                                                       _controller.pressEndKey(
                                                         isShiftPressed:
                                                             isShiftPressed,
@@ -3057,131 +3192,28 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                       _commonKeyFunctions();
                                                       return KeyEventResult
                                                           .handled;
-                                                    default:
-                                                      break;
-                                                  }
-                                                }
-                            
-                                                switch (event.logicalKey) {
-                                                  case LogicalKeyboardKey
-                                                      .backspace:
-                                                        if (_readOnly) {
+
+                                                      if (_isSearchVisible) {
+                                                        // Close search on Escape
+                                                        setState(() {
+                                                          _isSearchVisible =
+                                                              false;
+                                                          _searchText = '';
+                                                          _currentMatchIndex =
+                                                              -1;
+                                                          _searchMatches = [];
+                                                        });
+                                                        _controller
+                                                            .clearSearchHighlights();
+                                                        _focusNode
+                                                            .requestFocus();
                                                         return KeyEventResult
                                                             .handled;
                                                       }
-                                                    _controller.backspace();
-                                                    if (_suggestionNotifier
-                                                            .value !=
-                                                        null) {
-                                                        _suggestionNotifier
-                                                                .value =
-                                                          null;
-                                                    }
-                                                    _commonKeyFunctions();
-                                                      return KeyEventResult
-                                                          .handled;
-                            
-                                                    case LogicalKeyboardKey
-                                                        .delete:
-                                                        if (_readOnly) {
-                                                        return KeyEventResult
-                                                            .handled;
-                                                      }
-                                                    _controller.delete();
-                                                    if (_suggestionNotifier
-                                                            .value !=
-                                                        null) {
-                                                      _suggestionNotifier.value =
-                                                          null;
-                                                    }
-                                                    _commonKeyFunctions();
-                                                    return KeyEventResult.handled;
-                            
-                                                  case LogicalKeyboardKey
-                                                      .arrowDown:
-                                                    _controller.pressDownArrowKey(
-                                                      isShiftPressed:
-                                                          isShiftPressed,
-                                                    );
-                                                    _commonKeyFunctions();
-                                                    return KeyEventResult.handled;
-                            
-                                                  case LogicalKeyboardKey.arrowUp:
-                                                    _controller.pressUpArrowKey(
-                                                      isShiftPressed:
-                                                          isShiftPressed,
-                                                    );
-                                                    _commonKeyFunctions();
-                                                    return KeyEventResult.handled;
-                            
-                                                  case LogicalKeyboardKey
-                                                      .arrowRight:
-                                                    _handleArrowRight(
-                                                      isShiftPressed,
-                                                    );
-                                                    _commonKeyFunctions();
-                                                    return KeyEventResult.handled;
-                            
-                                                  case LogicalKeyboardKey
-                                                      .arrowLeft:
-                                                    _controller.pressLetfArrowKey(
-                                                      isShiftPressed:
-                                                          isShiftPressed,
-                                                    );
-                                                    _commonKeyFunctions();
-                                                    return KeyEventResult.handled;
-                            
-                                                  case LogicalKeyboardKey.home:
-                                                                                                        _handleHomeKey(
-                                                        isShiftPressed,
-                                                      );
-                                                    if (_suggestionNotifier
-                                                            .value !=
-                                                        null) {
-                                                      _suggestionNotifier.value =
-                                                          null;
-                                                    }
-                                                    _controller.pressHomeKey(
-                                                      isShiftPressed:
-                                                          isShiftPressed,
-                                                    );
-                                                    _commonKeyFunctions();
-                                                    return KeyEventResult.handled;
-                            
-                                                  case LogicalKeyboardKey.end:
-                                                                                                        _handleEndKey(
-                                                        isShiftPressed,
-                                                      );
-                                                    if (_suggestionNotifier
-                                                            .value !=
-                                                        null) {
-                                                      _suggestionNotifier.value =
-                                                          null;
-                                                    }
-                                                    _controller.pressEndKey(
-                                                      isShiftPressed:
-                                                          isShiftPressed,
-                                                    );
-                                                    _commonKeyFunctions();
-                                                    return KeyEventResult.handled;
-                            
-                                                    if (_isSearchVisible) {
-                                                      // Close search on Escape
-                                                      setState(() {
-                                                        _isSearchVisible = false;
-                                                        _searchText = '';
-                                                        _currentMatchIndex = -1;
-                                                        _searchMatches = [];
-                                                      });
-                                                      _controller
-                                                          .clearSearchHighlights();
-                                                      _focusNode.requestFocus();
-                                                      return KeyEventResult
-                                                          .handled;
 
                                                     case LogicalKeyboardKey
                                                         .escape:
-                                                    _hoverTimer?.cancel();
+                                                      _hoverTimer?.cancel();
                                                       _lspSignatureNotifier
                                                               .value =
                                                           null;
@@ -3207,9 +3239,9 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                       });
                                                       return KeyEventResult
                                                           .handled;
-                            
-                                                  case LogicalKeyboardKey.tab:
-                                                    if (_readOnly) {
+
+                                                    case LogicalKeyboardKey.tab:
+                                                      if (_readOnly) {
                                                         return KeyEventResult
                                                             .handled;
                                                       }
@@ -3222,83 +3254,100 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                         return KeyEventResult
                                                             .handled;
                                                       }
-                                                    if (_aiNotifier.value !=
-                                                        null) {
-                                                      _acceptAiCompletion();
-                                                      _acceptGhostText();
-                                                    } else if (_suggestionNotifier
-                                                            .value ==
-                                                        null) {
-                                                      _controller.indent();
-                                                      _commonKeyFunctions();
-                                                    }
-                                                    return KeyEventResult.handled;
-                            
-                                                  case LogicalKeyboardKey.enter:
-                                                    if (_isSearchVisible &&
-                                                        _searchFocusNode
-                                                            .hasFocus) {
-                                                      _navigateToNextMatch();
+                                                      if (_aiNotifier.value !=
+                                                          null) {
+                                                        _acceptAiCompletion();
+                                                        _acceptGhostText();
+                                                      } else if (_suggestionNotifier
+                                                              .value ==
+                                                          null) {
+                                                        _controller.indent();
+                                                        _commonKeyFunctions();
+                                                      }
                                                       return KeyEventResult
                                                           .handled;
-                                                    }
-                                                    if (_aiNotifier.value !=
-                                                        null) {
-                                                      _aiNotifier.value = null;
-                                                    }
+
+                                                    case LogicalKeyboardKey
+                                                        .enter:
+                                                      if (_isSearchVisible &&
+                                                          _searchFocusNode
+                                                              .hasFocus) {
+                                                        _navigateToNextMatch();
+                                                        return KeyEventResult
+                                                            .handled;
+                                                      }
+                                                      if (_aiNotifier.value !=
+                                                          null) {
+                                                        _aiNotifier.value =
+                                                            null;
+                                                      }
                                                       if (_aiNotifier.value !=
                                                           null) {
                                                         _aiNotifier.value =
                                                             null;
                                                       }
                                                       break;
-                                                  default:
+                                                    default:
+                                                  }
                                                 }
-                                              }
-                                              return KeyEventResult.ignored;
-                                            },
-                                            child: _CodeField(
-                                              context: context,
-                                              controller: _controller,
-                                              editorTheme: _editorTheme,
-                                              language: _language,
-                                              languageId:
-                                                  widget.lspConfig?.languageId,
-                                              lspConfig: widget.lspConfig,
-                                              semanticTokens: _semanticTokens,
-                                              semanticTokensVersion:
-                                                  _semanticTokensVersion,
-                                              innerPadding: widget.innerPadding,
-                                              vscrollController:
-                                                  _vscrollController,
-                                              hscrollController:
-                                                  _hscrollController,
-                                              focusNode: _focusNode,
-                                              readOnly: widget.readOnly,
-                                              caretBlinkController:
-                                                  _caretBlinkController,
-                                              textStyle: widget.textStyle,
-                                              enableFolding: widget.enableFolding,
-                                              enableGuideLines:
-                                                  widget.enableGuideLines,
-                                              enableGutter: widget.enableGutter,
-                                              enableGutterDivider:
-                                                  widget.enableGutterDivider,
-                                              gutterStyle: _gutterStyle,
-                                              selectionStyle: _selectionStyle,
-                                              diagnostics:
-                                                  _diagnosticsNotifier.value,
-                                              isMobile: _isMobile,
-                                              selectionActiveNotifier:
-                                                  _selectionActiveNotifier,
-                                              contextMenuOffsetNotifier:
-                                                  _contextMenuOffsetNotifier,
-                                              hoverNotifier: _hoverNotifier,
-                                              lineWrap: widget.lineWrap,
-                                              offsetNotifier: _offsetNotifier,
-                                              aiNotifier: _aiNotifier,
-                                              aiOffsetNotifier: _aiOffsetNotifier,
-                                              isHoveringPopup: _isHoveringPopup,
+                                                return KeyEventResult.ignored;
+                                              },
+                                              child: _CodeField(
+                                                context: context,
+                                                controller: _controller,
+                                                editorTheme: _editorTheme,
+                                                lineHighlightController:
+                                                    AnimationController(
+                                                      vsync: this,
+                                                    ),
+                                                hoverContentNotifier:
+                                                    ValueNotifier<
+                                                      Map<String, dynamic>?
+                                                    >({}),
+                                                language: _language,
+                                                languageId: widget
+                                                    .lspConfig
+                                                    ?.languageId,
+                                                lspConfig: widget.lspConfig,
+                                                semanticTokens: _semanticTokens,
+                                                semanticTokensVersion:
+                                                    _semanticTokensVersion,
+                                                innerPadding:
+                                                    widget.innerPadding,
+                                                vscrollController:
+                                                    _vscrollController,
+                                                hscrollController:
+                                                    _hscrollController,
+                                                focusNode: _focusNode,
+                                                readOnly: widget.readOnly,
+                                                caretBlinkController:
+                                                    _caretBlinkController,
+                                                textStyle: widget.textStyle,
+                                                enableFolding:
+                                                    widget.enableFolding,
+                                                enableGuideLines:
+                                                    widget.enableGuideLines,
+                                                enableGutter:
+                                                    widget.enableGutter,
+                                                enableGutterDivider:
+                                                    widget.enableGutterDivider,
+                                                gutterStyle: _gutterStyle,
+                                                selectionStyle: _selectionStyle,
+                                                diagnostics:
+                                                    _diagnosticsNotifier.value,
+                                                isMobile: _isMobile,
+                                                selectionActiveNotifier:
+                                                    _selectionActiveNotifier,
+                                                contextMenuOffsetNotifier:
+                                                    _contextMenuOffsetNotifier,
+                                                hoverNotifier: _hoverNotifier,
+                                                lineWrap: widget.lineWrap,
+                                                offsetNotifier: _offsetNotifier,
+                                                aiNotifier: _aiNotifier,
+                                                aiOffsetNotifier:
+                                                    _aiOffsetNotifier,
+                                                isHoveringPopup:
+                                                    _isHoveringPopup,
                                                 ghostTextStyle:
                                                     widget.ghostTextStyle,
                                                 matchHighlightStyle:
@@ -3315,17 +3364,18 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                 onHoverSetByTap: () {
                                                   _hoverSetByTap = true;
                                                 },
-                                              suggestionNotifier:
-                                                  _suggestionNotifier,
-                                              aiCompletionTextStyle:
-                                                  widget.aiCompletionTextStyle,
-                                            );},
-                                          );
-                                        },
+                                                suggestionNotifier:
+                                                    _suggestionNotifier,
+                                                aiCompletionTextStyle: widget
+                                                    .aiCompletionTextStyle,
+                                              ),
+                                            );
+                                          },
+                                        ),
                                       ),
-                                    ),
-                                  );
-                                },
+                                    );
+                                  },
+                                ),
                               ),
                             ),
                           ),
@@ -3336,8 +3386,9 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                 ],
               ),
             ),
+
             _buildContextMenu(),
-            
+
             ValueListenableBuilder(
               valueListenable: _offsetNotifier,
               builder: (_, offset, _) {
@@ -3460,7 +3511,6 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                         ),
                       );
                     }
-                    
 
                     return Stack(
                       children: [
@@ -3872,9 +3922,9 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
             ValueListenableBuilder(
               valueListenable: _hoverNotifier,
               builder: (_, hov, c) {
-  if (hov == null ||
-                          _controller.lspConfig == null ||
-                          !widget.enableSuggestions) {
+                if (hov == null ||
+                    _controller.lspConfig == null ||
+                    !widget.enableSuggestions) {
                   return SizedBox.shrink();
                 }
                 final Offset position = hov.$1;
@@ -3883,49 +3933,49 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                     ? screenWidth * 0.63
                     : screenWidth * 0.3;
                 final maxHeight = _isMobile ? screenHeight * 0.4 : 550.0;
-                         double adjustedLeft = position.dx;
-                      if (adjustedLeft + width > screenWidth) {
-                        adjustedLeft = screenWidth - width;
-                      }
-                      if (adjustedLeft < 0) {
-                        adjustedLeft = 0;
-                      }
+                double adjustedLeft = position.dx;
+                if (adjustedLeft + width > screenWidth) {
+                  adjustedLeft = screenWidth - width;
+                }
+                if (adjustedLeft < 0) {
+                  adjustedLeft = 0;
+                }
 
-                      final spaceBelow = editorHeight - position.dy;
-                      final spaceAbove = position.dy - 10;
-                                            final shouldPositionAbove =
-                          maxHeight > spaceBelow && spaceAbove > maxHeight;
+                final spaceBelow = editorHeight - position.dy;
+                final spaceAbove = position.dy - 10;
+                final shouldPositionAbove =
+                    maxHeight > spaceBelow && spaceAbove > maxHeight;
 
-                      double? adjustedTop;
-                      double? adjustedBottom;
+                double? adjustedTop;
+                double? adjustedBottom;
 
-                      if (shouldPositionAbove) {
-                        adjustedBottom = editorHeight - position.dy + 10;
-                      } else {
-                        adjustedTop = position.dy;
-                      }
+                if (shouldPositionAbove) {
+                  adjustedBottom = editorHeight - position.dy + 10;
+                } else {
+                  adjustedTop = position.dy;
+                }
 
                 return Positioned(
-                    top: adjustedTop,
-                    bottom: adjustedBottom,
-                    left: adjustedLeft,
-                    width: width,
-                    child: MouseRegion(
+                  top: adjustedTop,
+                  bottom: adjustedBottom,
+                  left: adjustedLeft,
+                  width: width,
+                  child: MouseRegion(
                     onEnter: (_) => _isHoveringPopup.value = true,
                     onExit: (_) => _isHoveringPopup.value = false,
                     child: ValueListenableBuilder(
-                            valueListenable: _hoverContentNotifier,
+                      valueListenable: _hoverContentNotifier,
                       builder: (_, value, _) {
                         return FutureBuilder<Map<String, dynamic>>(
                           future: (() async {
                             final lspConfig = widget.lspConfig;
                             final line = lineChar['line']!;
                             final character = lineChar['character']!;
-                        
+
                             String diagnosticMessage = '';
                             int severity = 0;
                             String hoverMessage = '';
-                        
+
                             final diagnostic = _diagnosticsNotifier.value
                                 .firstWhere(
                                   (diag) {
@@ -3937,12 +3987,12 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                         diag.range['start']['character'] as int;
                                     final diagEndChar =
                                         diag.range['end']['character'] as int;
-                        
+
                                     if (line < diagStartLine ||
                                         line > diagEndLine) {
                                       return false;
                                     }
-                        
+
                                     if (line == diagStartLine &&
                                         line == diagEndLine) {
                                       return character >= diagStartChar &&
@@ -3961,19 +4011,20 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                     message: '',
                                   ),
                                 );
-                        
+
                             if (diagnostic.message.isNotEmpty) {
                               diagnosticMessage = diagnostic.message;
                               severity = diagnostic.severity;
                             }
-                        
+
                             if (lspConfig != null) {
                               hoverMessage = await lspConfig.getHover(
+                                "",
                                 line,
                                 character,
                               );
                             }
-                        
+
                             return {
                               'diagnostic': diagnosticMessage,
                               'severity': severity,
@@ -3984,7 +4035,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                             if (snapShot.hasError) {
                               return SizedBox.shrink();
                             }
-                        
+
                             if (snapShot.connectionState ==
                                 ConnectionState.waiting) {
                               return ConstrainedBox(
@@ -4005,23 +4056,24 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                 ),
                               );
                             }
-                        
+
                             final data = snapShot.data;
                             if (data == null) {
                               return SizedBox.shrink();
                             }
-                        
+
                             final diagnosticMessage = data['diagnostic'] ?? '';
                             final severity = data['severity'] ?? 0;
                             final hoverMessage = data['hover'] ?? '';
-                        
-                            if (diagnosticMessage.isEmpty && hoverMessage.isEmpty) {
+
+                            if (diagnosticMessage.isEmpty &&
+                                hoverMessage.isEmpty) {
                               return SizedBox.shrink();
                             }
-                        
+
                             IconData diagnosticIcon;
                             Color diagnosticColor;
-                        
+
                             switch (severity) {
                               case 1:
                                 diagnosticIcon = Icons.error_outline;
@@ -4043,10 +4095,10 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                 diagnosticIcon = Icons.info_outline;
                                 diagnosticColor = Colors.grey;
                             }
-                        
+
                             final hoverScrollController = ScrollController();
                             final errorSCrollController = ScrollController();
-                        
+
                             return ConstrainedBox(
                               constraints: BoxConstraints(
                                 maxWidth: width,
@@ -4074,7 +4126,8 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                         child: RawScrollbar(
                                           controller: errorSCrollController,
                                           thumbVisibility: true,
-                                          thumbColor: _editorTheme['root']!.color!
+                                          thumbColor: _editorTheme['root']!
+                                              .color!
                                               .withAlpha(100),
                                           child: SingleChildScrollView(
                                             scrollDirection: Axis.horizontal,
@@ -4092,8 +4145,8 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                 SizedBox(width: 8),
                                                 Text(
                                                   diagnosticMessage,
-                                                  style:
-                                                      _hoverDetailsStyle.textStyle,
+                                                  style: _hoverDetailsStyle
+                                                      .textStyle,
                                                 ),
                                               ],
                                             ),
@@ -4101,18 +4154,20 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                         ),
                                       ),
                                     ),
-                        
+
                                   if (hoverMessage.isNotEmpty)
                                     Flexible(
                                       child: Card(
-                                        color: _hoverDetailsStyle.backgroundColor,
+                                        color:
+                                            _hoverDetailsStyle.backgroundColor,
                                         shape: _hoverDetailsStyle.shape,
                                         child: Padding(
                                           padding: const EdgeInsets.all(8.0),
                                           child: RawScrollbar(
                                             controller: hoverScrollController,
                                             thumbVisibility: true,
-                                            thumbColor: _editorTheme['root']!.color!
+                                            thumbColor: _editorTheme['root']!
+                                                .color!
                                                 .withAlpha(100),
                                             child: SingleChildScrollView(
                                               controller: hoverScrollController,
@@ -4129,9 +4184,10 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                     color: _hoverDetailsStyle
                                                         .textStyle
                                                         .color,
-                                                    fontWeight: _hoverDetailsStyle
-                                                        .textStyle
-                                                        .fontWeight,
+                                                    fontWeight:
+                                                        _hoverDetailsStyle
+                                                            .textStyle
+                                                            .fontWeight,
                                                   ),
                                                   "pre": Style(
                                                     fontSize: FontSize(
@@ -4140,12 +4196,14 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                               .fontSize ??
                                                           14,
                                                     ),
-                                                    color:
-                                                        _editorTheme['root']!.color,
+                                                    color: _editorTheme['root']!
+                                                        .color,
                                                     backgroundColor:
                                                         _editorTheme['root']!
                                                             .backgroundColor!,
-                                                    padding: HtmlPaddings.all(8),
+                                                    padding: HtmlPaddings.all(
+                                                      8,
+                                                    ),
                                                     border: Border.all(
                                                       width: 0.2,
                                                       color:
@@ -4161,8 +4219,8 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                               .fontSize ??
                                                           14,
                                                     ),
-                                                    color:
-                                                        _editorTheme['root']!.color,
+                                                    color: _editorTheme['root']!
+                                                        .color,
                                                   ),
                                                 },
                                               ),
@@ -4176,7 +4234,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                             );
                           },
                         );
-                      }
+                      },
                     ),
                   ),
                 );
@@ -4257,147 +4315,131 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                     : SizedBox.shrink();
               },
             ),
-                              ValueListenableBuilder(
-                    valueListenable: _lspActionOffsetNotifier,
-                    builder: (_, offset, child) {
-                      if (offset == null ||
-                          _lspActionNotifier.value == null ||
-                          _controller.lspConfig == null ||
-                          !widget.enableSuggestions) {
-                        return SizedBox.shrink();
-                      }
+            ValueListenableBuilder(
+              valueListenable: _lspActionOffsetNotifier,
+              builder: (_, offset, child) {
+                if (offset == null ||
+                    _lspActionNotifier.value == null ||
+                    _controller.lspConfig == null ||
+                    !widget.enableSuggestions) {
+                  return SizedBox.shrink();
+                }
 
-                      return Positioned(
-                        width: screenWidth < 700
-                            ? screenWidth * 0.63
-                            : screenWidth * 0.3,
-                        top:
-                            offset.dy + (widget.textStyle?.fontSize ?? 14) + 10,
-                        left: offset.dx,
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxHeight: 400,
-                            maxWidth: 400,
-                            minWidth: 70,
-                          ),
-                          child: Card(
-                            shape: _suggestionStyle.shape,
-                            elevation: _suggestionStyle.elevation,
-                            color: _suggestionStyle.backgroundColor,
-                            margin: EdgeInsets.zero,
-                            child: RawScrollbar(
-                              controller: _actionScrollController,
-                              thumbVisibility: true,
-                              thumbColor: _editorTheme['root']!.color!
-                                  .withAlpha(80),
-                              child: ListView.builder(
-                                shrinkWrap: true,
-                                controller: _actionScrollController,
-                                itemExtent: _suggestionStyle.itemHeight ?? 24.0,
-                                itemCount: _lspActionNotifier.value!.length,
-                                itemBuilder: (_, indx) {
-                                  final actionData = _lspActionNotifier.value!
-                                      .cast<Map<String, dynamic>>();
-                                  return Tooltip(
-                                    message: actionData[indx]['title'],
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: indx == _actionSelIndex
-                                            ? (_suggestionStyle
-                                                      .selectedBackgroundColor ??
-                                                  _suggestionStyle.focusColor)
-                                            : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(3),
-                                      ),
-                                      height: _suggestionStyle.itemHeight,
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 2,
-                                      ),
-                                      child: InkWell(
-                                        hoverColor: _suggestionStyle.hoverColor,
-                                        splashColor:
-                                            _suggestionStyle.splashColor,
-                                        borderRadius: BorderRadius.circular(3),
-                                        onTap: () {
-                                          try {
-                                            (() async {
-                                              await _controller
-                                                  .applyWorkspaceEdit(
-                                                    actionData[indx],
-                                                  );
-                                            })();
-                                          } catch (e, st) {
-                                            debugPrint(
-                                              'Code action failed: $e\n$st',
-                                            );
-                                          } finally {
-                                            _lspActionNotifier.value = null;
-                                            _lspActionOffsetNotifier.value =
-                                                null;
-                                          }
-                                        },
-                                        child: Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.center,
-                                          children: [
-                                            SizedBox(
-                                              width:
-                                                  _suggestionStyle.iconSize ??
-                                                  16,
-                                              height:
-                                                  _suggestionStyle.iconSize ??
-                                                  16,
-                                              child: Icon(
-                                                Icons.lightbulb_outline,
-                                                color: Colors.yellowAccent,
-                                                size:
-                                                    _suggestionStyle.iconSize ??
-                                                    16,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: Text(
-                                                actionData[indx]['title'],
-                                                style:
-                                                    _suggestionStyle
-                                                        .labelTextStyle
-                                                        ?.copyWith(
-                                                          color:
-                                                              indx ==
-                                                                  _actionSelIndex
-                                                              ? Colors.white
-                                                              : _suggestionStyle
-                                                                    .labelTextStyle
-                                                                    ?.color,
-                                                        ) ??
-                                                    _suggestionStyle.textStyle
-                                                        .copyWith(
-                                                          color:
-                                                              indx ==
-                                                                  _actionSelIndex
-                                                              ? Colors.white
-                                                              : _suggestionStyle
-                                                                    .textStyle
-                                                                    .color,
-                                                        ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                          ],
+                return Positioned(
+                  width: screenWidth < 700
+                      ? screenWidth * 0.63
+                      : screenWidth * 0.3,
+                  top: offset.dy + (widget.textStyle?.fontSize ?? 14) + 10,
+                  left: offset.dx,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: 400,
+                      maxWidth: 400,
+                      minWidth: 70,
+                    ),
+                    child: Card(
+                      shape: _suggestionStyle.shape,
+                      elevation: _suggestionStyle.elevation,
+                      color: _suggestionStyle.backgroundColor,
+                      margin: EdgeInsets.zero,
+                      child: RawScrollbar(
+                        controller: _actionScrollController,
+                        thumbVisibility: true,
+                        thumbColor: _editorTheme['root']!.color!.withAlpha(80),
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          controller: _actionScrollController,
+                          itemExtent: _suggestionStyle.itemHeight ?? 24.0,
+                          itemCount: _lspActionNotifier.value!.length,
+                          itemBuilder: (_, indx) {
+                            final actionData = _lspActionNotifier.value!
+                                .cast<Map<String, dynamic>>();
+                            return Tooltip(
+                              message: actionData[indx]['title'],
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: indx == _actionSelIndex
+                                      ? (_suggestionStyle
+                                                .selectedBackgroundColor ??
+                                            _suggestionStyle.focusColor)
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                                height: _suggestionStyle.itemHeight,
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                child: InkWell(
+                                  hoverColor: _suggestionStyle.hoverColor,
+                                  splashColor: _suggestionStyle.splashColor,
+                                  borderRadius: BorderRadius.circular(3),
+                                  onTap: () {
+                                    try {
+                                      (() async {
+                                        await _controller.applyWorkspaceEdit(
+                                          actionData[indx],
+                                        );
+                                      })();
+                                    } catch (e, st) {
+                                      debugPrint('Code action failed: $e\n$st');
+                                    } finally {
+                                      _lspActionNotifier.value = null;
+                                      _lspActionOffsetNotifier.value = null;
+                                    }
+                                  },
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
+                                    children: [
+                                      SizedBox(
+                                        width: _suggestionStyle.iconSize ?? 16,
+                                        height: _suggestionStyle.iconSize ?? 16,
+                                        child: Icon(
+                                          Icons.lightbulb_outline,
+                                          color: Colors.yellowAccent,
+                                          size: _suggestionStyle.iconSize ?? 16,
                                         ),
                                       ),
-                                    ),
-                                  );
-                                },
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          actionData[indx]['title'],
+                                          style:
+                                              _suggestionStyle.labelTextStyle
+                                                  ?.copyWith(
+                                                    color:
+                                                        indx == _actionSelIndex
+                                                        ? Colors.white
+                                                        : _suggestionStyle
+                                                              .labelTextStyle
+                                                              ?.color,
+                                                  ) ??
+                                              _suggestionStyle.textStyle
+                                                  .copyWith(
+                                                    color:
+                                                        indx == _actionSelIndex
+                                                        ? Colors.white
+                                                        : _suggestionStyle
+                                                              .textStyle
+                                                              .color,
+                                                  ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
+                            );
+                          },
                         ),
-                      );
-                    },
+                      ),
+                    ),
                   ),
+                );
+              },
+            ),
             // Search overlay
             if (_isSearchVisible) _buildSearchOverlay(),
           ],
@@ -4666,6 +4708,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
     _controller.searchHighlightsChanged = true;
     _controller.notifyListeners();
   }
+
   void _acceptGhostText() {
     final ghostText = _aiNotifier.value;
     if (ghostText == null || ghostText.isEmpty) return;
@@ -4673,14 +4716,16 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
     _aiNotifier.value = null;
     _aiOffsetNotifier.value = null;
   }
-    void _acceptControllerGhostText() {
+
+  void _acceptControllerGhostText() {
     final ghost = _controller.ghostText;
     if (ghost == null || ghost.text.isEmpty) return;
     _controller.insertAtCurrentCursor(ghost.text);
     _controller.clearGhostText();
   }
+
   void _acceptSuggestion() {
-        _controller.acceptSuggestion(selectedIndex: _sugSelIndex);
+    _controller.acceptSuggestion(selectedIndex: _sugSelIndex);
 
     final suggestions = _suggestionNotifier.value;
     if (suggestions == null || suggestions.isEmpty) return;
@@ -4902,22 +4947,21 @@ class _CodeField extends LeafRenderObjectWidget {
   final List<LspErrors> diagnostics;
   final ValueNotifier<bool> selectionActiveNotifier, isHoveringPopup;
   final ValueNotifier<Offset> contextMenuOffsetNotifier, offsetNotifier;
-    final ValueNotifier<(Offset, Map<String, int>)?> hoverNotifier;
+  final ValueNotifier<(Offset, Map<String, int>)?> hoverNotifier;
   final ValueNotifier<Map<String, dynamic>?> hoverContentNotifier;
   final ValueNotifier<List<dynamic>?> lspActionNotifier, suggestionNotifier;
 
   final ValueNotifier<String?> aiNotifier;
-    final ValueNotifier<LspSignatureHelps?> signatureNotifier;
+  final ValueNotifier<LspSignatureHelps?> signatureNotifier;
   final ValueNotifier<Offset?> aiOffsetNotifier, lspActionOffsetNotifier;
 
   final BuildContext context;
   final TextStyle? aiCompletionTextStyle;
-    final TextStyle? ghostTextStyle;
+  final TextStyle? ghostTextStyle;
   final String? filePath;
   final MatchHighlightStyle? matchHighlightStyle;
   final VoidCallback? onHoverSetByTap;
   final TextDirection textDirection;
-
 
   const _CodeField({
     required this.controller,
@@ -4963,7 +5007,6 @@ class _CodeField extends LeafRenderObjectWidget {
     this.ghostTextStyle,
     this.matchHighlightStyle,
     this.onHoverSetByTap,
-
   });
 
   @override
@@ -5003,14 +5046,13 @@ class _CodeField extends LeafRenderObjectWidget {
       isHoveringPopup: isHoveringPopup,
       suggestionNotifier: suggestionNotifier,
       aiCompletionTextStyle: aiCompletionTextStyle,
-            lspActionNotifier: lspActionNotifier,
+      lspActionNotifier: lspActionNotifier,
       lspActionOffsetNotifier: lspActionOffsetNotifier,
       signatureNotifier: signatureNotifier,
       ghostTextStyle: ghostTextStyle,
       filePath: filePath,
       onHoverSetByTap: onHoverSetByTap,
       textDirection: textDirection,
-
     );
   }
 
@@ -5025,7 +5067,8 @@ class _CodeField extends LeafRenderObjectWidget {
           semanticTokens!,
           semanticTokensVersion,
         );
-      });    }
+      });
+    }
     renderObject
       ..updateDiagnostics(diagnostics)
       ..editorTheme = editorTheme
@@ -5041,7 +5084,7 @@ class _CodeField extends LeafRenderObjectWidget {
       ..gutterStyle = gutterStyle
       ..selectionStyle = selectionStyle
       ..ghostTextStyle = ghostTextStyle
-      ..textDirection = textDirection
+      // ..textDirection = textDirection
       ..aiCompletionTextStyle = aiCompletionTextStyle
       ..rulers = controller.rulers;
   }
@@ -5049,120 +5092,13 @@ class _CodeField extends LeafRenderObjectWidget {
 
 class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   final CodeForgeController controller;
-    final String? languageId, filePath;
-
   final String? languageId;
-  final ScrollController vscrollController, hscrollController;
-  final FocusNode focusNode;
-  final AnimationController caretBlinkController;
-    final AnimationController lineHighlightController;
-
-  final bool isMobile;
-  final ValueNotifier<bool> selectionActiveNotifier, isHoveringPopup;
-  final ValueNotifier<Offset> contextMenuOffsetNotifier, offsetNotifier;
-    final ValueNotifier<(Offset, Map<String, int>)?> hoverNotifier;
-  final ValueNotifier<Map<String, dynamic>?> hoverContentNotifier;
-  final ValueNotifier<List<dynamic>?> lspActionNotifier, suggestionNotifier;
-  final ValueNotifier<Offset?> aiOffsetNotifier, lspActionOffsetNotifier;
-
-  final ValueNotifier<String?> aiNotifier;
-    final ValueNotifier<LspSignatureHelps?> signatureNotifier;
-
-  final BuildContext context;
-  final LspConfig? lspConfig;
-    final VoidCallback? onHoverSetByTap;
-
-  final Map<int, double> _lineWidthCache = {};
-  final Map<int, String> _lineTextCache = {};
-  final Map<int, Rect> _actionBulbRects = {};
-  final Map<Rect, DocumentColor> _colorBoxHitAreas = {};
-  final Map<int, ui.Paragraph> _paragraphCache = {};
-  final Map<int, double> _lineHeightCache = {};
-  final Map<int, FoldRange?> _foldRanges = {};
-  final Map<int, int?> _bracketCache = {};
-  final Map<
-    int,
-    List<({int startLine, int endLine, int indentLevel, double guideX})>
-  >
-  _indentGuideCache = {};
-  final Map<String, int> _indentEndLineCache = {};
-  final Map<String, List<ui.TextBox>> _diagnosticPathCache = {};
-  final Map<String, List<ui.TextBox>> _searchHighlightCache = {};
-  final Map<String, double> _lineOffsetCache = {};
-  final Map<
-    int,
-    ({int lineIndex, int columnIndex, Offset offset, double height})
-  >
-  _caretInfoCache = {};
-  final Map<int, int> _lineIndentCache = {};
-  final MatchHighlightStyle? _matchHighlightStyle;
-  final MatchHighlightStyle? matchHighlightStyle;
-  late double _lineHeight;
-  final _dtap = DoubleTapGestureRecognizer();
-  final _onetap = TapGestureRecognizer();
-  late final double _gutterPadding;
-  late final Paint _caretPainter;
-  late final Paint _bracketHighlightPainter;
-  late  ui.ParagraphStyle _paragraphStyle;
-  late final ui.TextStyle _uiTextStyle;
-  late SyntaxHighlighter _syntaxHighlighter;
-  late double _gutterWidth;
-     TextStyle? _ghostTextStyle;
-
-  TextStyle? _aiCompletionTextStyle;
-  Map<String, TextStyle> _editorTheme;
-  Mode _language;
-  EdgeInsets? _innerPadding;
-    double _rightPaddingWidth = 0, _bottomPaddingHeight = 0;
-
-  TextStyle? _textStyle;
-  GutterStyle _gutterStyle;
-  CodeSelectionStyle _selectionStyle;
-  List<LspErrors> _diagnostics;
-  int _cachedCaretOffset = -1, _cachedCaretLine = 0, _cachedCaretLineStart = 0;
-  int? _dragStartOffset;
-  Timer? _selectionTimer, _hoverTimer;
-  Offset? _pointerDownPosition;
-  final Offset _currentPosition = Offset.zero;
-  int? _hoveredBreakpointLine;
-  bool _enableFolding, _enableGuideLines, _enableGutter, _enableGutterDivider;
-  bool _isFoldToggleInProgress = false, _lineWrap;
-    final bool _foldRangesNeedsClear = false;
-
-  final bool _insertingPlaceholder = false;
-  bool _selectionActive = false, _isDragging = false;
-  bool _draggingStartHandle = false, _draggingEndHandle = false;
-  bool _showBubble = false, _draggingCHandle = false, _readOnly;
-   bool _isDeferringLayout = false, _hasCachedHeight = false;
-  final TextDirection _textDirection;
-  Map<int, FoldRange>? _lastLspFoldRanges;
-  Rect? _startHandleRect, _endHandleRect, _normalHandle;
-  double _longLineWidth = 0.0, _wrapWidth = double.infinity;
-  double? _cachedCharacterWidth;
-  List<int>? _rulers;
-  int _extraSpaceToAdd = 0, _cachedLineCount = 0;
-   final double _cachedRtlContentWidth = 0.0;
-  Timer? _resizeTimer, _layoutDebounceTimer;
-  final double _cachedTotalHeight = 0.0;
-  String? _aiResponse, _lastProcessedText;
-  TextSelection? _lastSelectionForAi;
-  ui.Paragraph? _cachedMagnifiedParagraph;
-  
-  int? _placeholderInsertOffset, _cachedMagnifiedLine, _cachedMagnifiedOffset;
-   final int _placeholderLineCount = 0;
-  List<ui.Paragraph>? _cachedSelectionMagnifierParagraphs;
-  int? _cachedSelectionMagnifierStartLine, _cachedSelectionMagnifierEndLine;
-  int? _ghostTextAnchorLine, _highlightedLine;
-  int _lastAppliedSemanticVersion = -1, _lastDocumentVersion = -1;
-   final int _previousLineCount = 0;
-   int _ghostTextLineCount = 0;
-  Animation<double>? _lineHighlightAnimation;
-  final CodeForgeController controller;
-  final String? languageId, filePath;
+  final String? filePath;
   final ScrollController vscrollController, hscrollController;
   final FocusNode focusNode;
   final AnimationController caretBlinkController;
   final AnimationController lineHighlightController;
+
   final bool isMobile;
   final ValueNotifier<bool> selectionActiveNotifier, isHoveringPopup;
   final ValueNotifier<Offset> contextMenuOffsetNotifier, offsetNotifier;
@@ -5170,11 +5106,14 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   final ValueNotifier<Map<String, dynamic>?> hoverContentNotifier;
   final ValueNotifier<List<dynamic>?> lspActionNotifier, suggestionNotifier;
   final ValueNotifier<Offset?> aiOffsetNotifier, lspActionOffsetNotifier;
+
   final ValueNotifier<String?> aiNotifier;
   final ValueNotifier<LspSignatureHelps?> signatureNotifier;
+
   final BuildContext context;
   final LspConfig? lspConfig;
   final VoidCallback? onHoverSetByTap;
+
   final Map<int, double> _lineWidthCache = {};
   final Map<int, String> _lineTextCache = {};
   final Map<int, Rect> _actionBulbRects = {};
@@ -5211,10 +5150,13 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   late SyntaxHighlighter _syntaxHighlighter;
   late double _gutterWidth;
   TextStyle? _ghostTextStyle;
+
+  TextStyle? _aiCompletionTextStyle;
   Map<String, TextStyle> _editorTheme;
   Mode _language;
   EdgeInsets? _innerPadding;
   double _rightPaddingWidth = 0, _bottomPaddingHeight = 0;
+
   TextStyle? _textStyle;
   GutterStyle _gutterStyle;
   CodeSelectionStyle _selectionStyle;
@@ -5223,43 +5165,50 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   int? _dragStartOffset;
   Timer? _selectionTimer, _hoverTimer;
   Offset? _pointerDownPosition;
-  final Offset _currentPosition = Offset.zero;
+  Offset _currentPosition = Offset.zero;
+  int? _hoveredBreakpointLine;
   bool _enableFolding, _enableGuideLines, _enableGutter, _enableGutterDivider;
   bool _isFoldToggleInProgress = false, _lineWrap;
-  final bool _foldRangesNeedsClear = false;
+  bool _foldRangesNeedsClear = false;
+
+  final bool _insertingPlaceholder = false;
   bool _selectionActive = false, _isDragging = false;
   bool _draggingStartHandle = false, _draggingEndHandle = false;
   bool _showBubble = false, _draggingCHandle = false, _readOnly;
   bool _isDeferringLayout = false, _hasCachedHeight = false;
-  TextDirection _textDirection;
+  final TextDirection _textDirection;
   Map<int, FoldRange>? _lastLspFoldRanges;
   Rect? _startHandleRect, _endHandleRect, _normalHandle;
   double _longLineWidth = 0.0, _wrapWidth = double.infinity;
-  final double _cachedRtlContentWidth = 0.0;
+  double? _cachedCharacterWidth;
+  List<int>? _rulers;
+  int _extraSpaceToAdd = 0, _cachedLineCount = 0;
+  double _cachedRtlContentWidth = 0.0;
   Timer? _resizeTimer, _layoutDebounceTimer;
-  final double _cachedTotalHeight = 0.0;
+  double _cachedTotalHeight = 0.0;
   String? _aiResponse, _lastProcessedText;
   TextSelection? _lastSelectionForAi;
   ui.Paragraph? _cachedMagnifiedParagraph;
-  int? _cachedMagnifiedLine, _cachedMagnifiedOffset;
+
+  int? _placeholderInsertOffset, _cachedMagnifiedLine, _cachedMagnifiedOffset;
+  final int _placeholderLineCount = 0;
   List<ui.Paragraph>? _cachedSelectionMagnifierParagraphs;
   int? _cachedSelectionMagnifierStartLine, _cachedSelectionMagnifierEndLine;
   int? _ghostTextAnchorLine, _highlightedLine;
   int _lastAppliedSemanticVersion = -1, _lastDocumentVersion = -1;
-  final int _previousLineCount = 0;
-  int _ghostTextLineCount = 0, _cachedLineCount = 0;
+  int _previousLineCount = 0;
+  int _ghostTextLineCount = 0;
   Animation<double>? _lineHighlightAnimation;
-  
 
   void updateSemanticTokens(List<LspSemanticToken> tokens, int version) {
-        if (version < _lastAppliedSemanticVersion) return;
+    if (version < _lastAppliedSemanticVersion) return;
 
     if (version <= _lastAppliedSemanticVersion) return;
     _lastAppliedSemanticVersion = version;
     _syntaxHighlighter.updateSemanticTokens(tokens, controller.text);
     _paragraphCache.clear();
     markNeedsPaint();
-      _bracketCache.clear();
+    _bracketCache.clear();
     _indentGuideCache.clear();
     _indentEndLineCache.clear();
     _diagnosticPathCache.clear();
@@ -5277,7 +5226,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       _lineTextCache.clear();
       _lineWidthCache.clear();
       _lineHeightCache.clear();
-         _bracketCache.clear();
+      _bracketCache.clear();
       _indentGuideCache.clear();
       _indentEndLineCache.clear();
       _diagnosticPathCache.clear();
@@ -5330,7 +5279,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     required this.focusNode,
     required bool readOnly,
     required this.caretBlinkController,
-        required this.lineHighlightController,
+    required this.lineHighlightController,
 
     required bool enableFolding,
     required bool enableGuideLines,
@@ -5344,31 +5293,30 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     required this.contextMenuOffsetNotifier,
     required this.offsetNotifier,
     required this.hoverNotifier,
-        required this.hoverContentNotifier,
+    required this.hoverContentNotifier,
     required this.suggestionNotifier,
     required this.lspActionNotifier,
     required this.lspActionOffsetNotifier,
     required this.aiNotifier,
     required this.aiOffsetNotifier,
-        required this.signatureNotifier,
+    required this.signatureNotifier,
     required this.isHoveringPopup,
     required this.context,
     required bool lineWrap,
-    
 
     this.languageId,
     this.lspConfig,
-     this.filePath,
+    this.filePath,
     this.matchHighlightStyle,
     this.onHoverSetByTap,
     EdgeInsets? innerPadding,
     TextStyle? textStyle,
     TextStyle? aiCompletionTextStyle,
-     TextStyle? ghostTextStyle,
+    TextStyle? ghostTextStyle,
     TextDirection textDirection = TextDirection.ltr,
   }) : _editorTheme = editorTheme,
        _aiCompletionTextStyle = aiCompletionTextStyle,
-              _ghostTextStyle = ghostTextStyle,
+       _ghostTextStyle = ghostTextStyle,
 
        _language = language,
        _readOnly = readOnly,
@@ -5381,10 +5329,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
        _lineWrap = lineWrap,
        _innerPadding = innerPadding,
        _textStyle = textStyle,
-      _diagnostics = diagnostics,
+       _diagnostics = diagnostics,
 
-        _matchHighlightStyle = matchHighlightStyle,
-               _textDirection = textDirection {
+       _matchHighlightStyle = matchHighlightStyle,
+       _textDirection = textDirection {
     final fontSize = _textStyle?.fontSize ?? 14.0;
     final fontFamily = _textStyle?.fontFamily;
     final color =
@@ -5569,7 +5517,6 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     });
   }
 
-
   Map<String, TextStyle> get editorTheme => _editorTheme;
   Mode get language => _language;
   TextStyle? get textStyle => _textStyle;
@@ -5587,12 +5534,14 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     _ghostTextStyle = value;
     markNeedsPaint();
   }
+
   TextStyle? get aiCompletionTextStyle => _aiCompletionTextStyle;
   set aiCompletionTextStyle(TextStyle? value) {
     if (_aiCompletionTextStyle == value) return;
     _aiCompletionTextStyle = value;
     markNeedsPaint();
   }
+
   bool get isRTL => _textDirection == TextDirection.rtl;
 
   double get _effectiveHScroll {
@@ -5602,6 +5551,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   }
 
   CodeSelectionStyle get selectionStyle => _selectionStyle;
+
+  double _getLineYOffset(int line, bool hasActivateFolds) {
+    return 10;
+  }
 
   set editorTheme(Map<String, TextStyle> theme) {
     if (identical(theme, _editorTheme)) return;
@@ -5652,7 +5605,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
     try {
       _syntaxHighlighter.dispose();
-     } catch (_) {}
+    } catch (_) {}
 
     _syntaxHighlighter = SyntaxHighlighter(
       language: language,
@@ -5680,7 +5633,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   set innerPadding(EdgeInsets? padding) {
     if (identical(padding, _innerPadding)) return;
     _innerPadding = padding;
-        _rightPaddingWidth = padding?.right ?? 0;
+    _rightPaddingWidth = padding?.right ?? 0;
     _bottomPaddingHeight = padding?.bottom ?? 0;
     markNeedsLayout();
     markNeedsPaint();
@@ -5697,7 +5650,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     _lineWrap = value;
     _paragraphCache.clear();
     _lineHeightCache.clear();
-        _bracketCache.clear();
+    _bracketCache.clear();
     _indentGuideCache.clear();
     _indentEndLineCache.clear();
     _diagnosticPathCache.clear();
@@ -5793,7 +5746,6 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       );
     }
 
-   
     if (isRTL) {
       final maxScroll = hscrollController.position.maxScrollExtent;
       final effectiveScroll = _effectiveHScroll;
@@ -5807,17 +5759,17 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         final rawOffset = -targetEffective;
         hscrollController.jumpTo(rawOffset.clamp(0, maxScroll));
       }
-    } else  if (caretX < hScrollOffset + (innerPadding?.left ?? 0) + _gutterWidth) {
+    } else if (caretX <
+        hScrollOffset + (innerPadding?.left ?? 0) + _gutterWidth) {
       final targetOffset = caretX - (innerPadding?.left ?? 0) - _gutterWidth;
       hscrollController.jumpTo(
         targetOffset.clamp(0, hscrollController.position.maxScrollExtent),
       );
     } else if (caretX + 1.5 > hScrollOffset + viewportWidth) {
-              final targetOffset = caretX + 1.5 - viewportWidth;
+      final targetOffset = caretX + 1.5 - viewportWidth;
       hscrollController.jumpTo(
         targetOffset.clamp(0, hscrollController.position.maxScrollExtent),
       );
-    }
     }
   }
 
@@ -6010,7 +5962,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       _searchHighlightCache.clear();
       _lineOffsetCache.clear();
       _caretInfoCache.clear();
-      _lineIndentCache.clear();    }
+      _lineIndentCache.clear();
+    }
 
     final newLineCount = controller.lineCount;
     final lineCountChanged = newLineCount != _cachedLineCount;
@@ -6056,8 +6009,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         _gutterWidth = digitWidth + foldIconSpace + _gutterPadding;
       }
 
-            if (enableFolding) {
-              _foldRangesNeedsClear = true;
+      if (enableFolding) {
+        _foldRangesNeedsClear = true;
         final editLine = insertionLine;
 
         final adjustedFoldRanges = <int, FoldRange?>{};
@@ -6108,7 +6061,6 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
       markNeedsLayout();
       _deferLayout();
-
     } else if (affectedLine != null) {
       final newLineWidth = _getLineWidth(affectedLine);
       final currentContentWidth =
@@ -6137,11 +6089,10 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         !_insertingPlaceholder) {
       aiNotifier.value = null;
       aiOffsetNotifier.value = null;
-            _ghostTextAnchorLine = null;
+      _ghostTextAnchorLine = null;
       _ghostTextLineCount = 0;
-
     }
-        final ghost = controller.ghostText;
+    final ghost = controller.ghostText;
     if (_lastProcessedText == newText &&
         ghost != null &&
         !ghost.shouldPersist &&
@@ -6244,7 +6195,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     if (!enableFolding) return null;
 
     final line = controller.getLineText(lineIndex);
-        if (folds.keys.any((k) => line.contains(k))) {
+    if (folds.keys.any((k) => line.contains(k))) {
       final List<String> stack = [];
 
       final checkLine = controller.getLineText(lineIndex);
@@ -6453,12 +6404,12 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
     _foldRanges[lineIndex] = fold;
     try {
-      return _foldRanges.firstWhere((f) => f.startIndex == lineIndex);
+      return _foldRanges.values.firstWhere((f) => f?.startIndex == lineIndex);
     } catch (_) {
       final fold = _computeFoldRangeForLine(lineIndex);
       if (fold != null) {
-        _foldRanges.add(fold);
-        _foldRanges.sort((a, b) => a.startIndex.compareTo(b.startIndex));
+        _foldRanges.addAll({lineIndex: fold});
+        // _foldRanges.sort((a, b) => a.startIndex.compareTo(b.startIndex));
       }
       return fold;
     }
@@ -6466,13 +6417,12 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
   void _toggleFold(FoldRange fold) {
     try {
-
-    _isFoldToggleInProgress = true;
-    if (fold.isFolded) {
-      _unfoldWithChildren(fold);
-    } else {
-      _foldWithChildren(fold);
-    }
+      _isFoldToggleInProgress = true;
+      if (fold.isFolded) {
+        _unfoldWithChildren(fold);
+      } else {
+        _foldWithChildren(fold);
+      }
 
       controller.foldings = {
         for (var f in _foldRanges.values.where((f) => f != null))
@@ -6483,11 +6433,11 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       _paragraphCache.clear();
       _lineTextCache.clear();
       markNeedsLayout();
-    markNeedsPaint();
+      markNeedsPaint();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _isFoldToggleInProgress = false;
-    }); 
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _isFoldToggleInProgress = false;
+      });
     } catch (e) {
       debugPrint('Error toggling fold: $e');
       _isFoldToggleInProgress = false;
@@ -6526,11 +6476,11 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       }
     }
 
-controller.foldings = {
+    controller.foldings = {
       for (var f in _foldRanges.values.where((f) => f != null))
         f!.startIndex: f,
     };
-        markNeedsLayout();
+    markNeedsLayout();
     markNeedsPaint();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _isFoldToggleInProgress = false;
@@ -6551,13 +6501,15 @@ controller.foldings = {
     controller.foldings = {
       for (var f in _foldRanges.values.where((f) => f != null))
         f!.startIndex: f,
-    };    markNeedsLayout();
+    };
+    markNeedsLayout();
     markNeedsPaint();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _isFoldToggleInProgress = false;
     });
   }
-    void _scrollToLine(int line) {
+
+  void _scrollToLine(int line) {
     if (line < 0 || line >= controller.lineCount) return;
 
     for (final fold in _foldRanges.values.where((f) => f != null)) {
@@ -6599,7 +6551,7 @@ controller.foldings = {
   ({int startLine, int endLine, int indentLevel})?
   _getIndicatorBlockForFoldRange(int foldStartLine, int foldEndLine) {
     final tabSize = 4;
-    final hasActiveFolds = _foldRanges.any((f) => f.isFolded);
+    final hasActiveFolds = _foldRanges.values.any((f) => f?.isFolded == true);
 
     // Start from the fold start line to find the block that begins there
     int i = foldStartLine;
@@ -6681,7 +6633,9 @@ controller.foldings = {
         // If block boundaries differ from fold range boundaries, replace the fold range
         if (blockStartLine != startLine || blockEndLine != endLine) {
           // Find and replace the fold range in the list
-          final index = _foldRanges.indexOf(parentFold);
+          final index = _foldRanges.keys.toList().indexWhere(
+            (element) => _foldRanges[element] == parentFold,
+          );
           if (index != -1) {
             // Preserve originally folded children before clearing
             final preservedChildren = List<FoldRange>.from(
@@ -6694,7 +6648,7 @@ controller.foldings = {
             }
             _foldRanges[index] = actualFold;
             // Update controller foldings to reflect the change
-            controller.foldings = List.from(_foldRanges);
+            controller.foldings = Map.from(_foldRanges);
           }
         }
       }
@@ -6702,8 +6656,8 @@ controller.foldings = {
 
     actualFold.clearOriginallyFoldedChildren();
 
-    for (final childFold in _foldRanges) {
-      if (childFold.isFolded &&
+    for (final childFold in _foldRanges.values) {
+      if (childFold!.isFolded &&
           childFold != actualFold &&
           childFold.startIndex > actualFold.startIndex &&
           childFold.endIndex <= actualFold.endIndex) {
@@ -6807,7 +6761,7 @@ controller.foldings = {
           fold.isFolded &&
           lineIndex > fold.startIndex &&
           lineIndex <= fold.endIndex,
-    )
+    );
   }
 
   int? _findMatchingBracket(String text, int pos) {
@@ -7010,13 +6964,17 @@ controller.foldings = {
     return _getOrComputeFoldRange(lineIndex);
   }
 
+  double _getWrappedLineHeight(int i) {
+    return 100;
+  }
+
   int _findVisibleLineByYPosition(double y) {
     final lineCount = controller.lineCount;
     if (lineCount == 0) return 0;
 
     final hasActiveFolds = _foldRanges.values.any(
       (f) => f != null && f.isFolded,
-    )
+    );
     if (!lineWrap && !hasActiveFolds) {
       return (y / _lineHeight).floor().clamp(0, lineCount - 1);
     }
@@ -7232,7 +7190,8 @@ controller.foldings = {
     _caretInfoCache[cursorOffset] = result;
     return result;
   }
-    double _getColorBoxOffsetForLine(int line, int column) {
+
+  double _getColorBoxOffsetForLine(int line, int column) {
     final colors = controller.documentColors;
     if (colors.isEmpty) return 0;
 
@@ -7291,7 +7250,7 @@ controller.foldings = {
       final paragraphOffset = contentWidth - paragraphWidth;
       localX = localX - paragraphOffset;
     }
-     final colors =
+    final colors =
         controller.documentColors
             .where((c) => c.line == tappedLineIndex)
             .toList()
@@ -7328,12 +7287,9 @@ controller.foldings = {
       }
       localX -= totalAdjustment;
     }
-        final hasActiveFolds = _foldRanges.values.any(
+    final hasActiveFolds = _foldRanges.values.any(
       (f) => f != null && f.isFolded,
     );
-    final localX = position.dx;
-
-    final hasActiveFolds = _foldRanges.any((f) => f.isFolded);
     final lineStartY = _getLineYOffset(tappedLineIndex, hasActiveFolds);
     final localY = position.dy - lineStartY;
 
@@ -7369,12 +7325,14 @@ controller.foldings = {
     _layoutDebounceTimer?.cancel();
     super.detach();
   }
+
   double get _ghostTextExtraHeight => _ghostTextLineCount * _lineHeight;
-double _getGhostTextVisualOffset(int lineIndex) {
+  double _getGhostTextVisualOffset(int lineIndex) {
     if (_ghostTextAnchorLine == null || _ghostTextLineCount <= 0) return 0;
     if (lineIndex <= _ghostTextAnchorLine!) return 0;
     return _ghostTextExtraHeight;
   }
+
   /// Calculates the width of a single character for ruler positioning.
   ///
   /// Uses TextPainter to measure a sample character (typically 'M' for monospace
@@ -7427,7 +7385,7 @@ double _getGhostTextVisualOffset(int lineIndex) {
         _lineIndentCache.clear();
       }
     }
-        if (_isDeferringLayout && _hasCachedHeight) {
+    if (_isDeferringLayout && _hasCachedHeight) {
       final contentHeight =
           _cachedTotalHeight + (innerPadding?.top ?? 0) + _ghostTextExtraHeight;
       final computedWidth = lineWrap
@@ -7447,7 +7405,8 @@ double _getGhostTextVisualOffset(int lineIndex) {
     }
     final hasActiveFolds = _foldRanges.values.any(
       (f) => f != null && f.isFolded,
-    );    double visibleHeight = 0;
+    );
+    double visibleHeight = 0;
     double maxLineWidth = _longLineWidth;
 
     if (lineWrap) {
@@ -7459,13 +7418,12 @@ double _getGhostTextVisualOffset(int lineIndex) {
       final clampedWrapWidth = newWrapWidth < 100 ? 100.0 : newWrapWidth;
 
       if ((_wrapWidth - clampedWrapWidth).abs() > 1) {
-                _resizeTimer?.cancel();
+        _resizeTimer?.cancel();
         _resizeTimer = Timer(const Duration(milliseconds: 150), () {
-
-        _wrapWidth = clampedWrapWidth;
-        _paragraphCache.clear();
-        _lineHeightCache.clear();
-            _bracketCache.clear();
+          _wrapWidth = clampedWrapWidth;
+          _paragraphCache.clear();
+          _lineHeightCache.clear();
+          _bracketCache.clear();
           _indentGuideCache.clear();
           _diagnosticPathCache.clear();
           _searchHighlightCache.clear();
@@ -7473,108 +7431,109 @@ double _getGhostTextVisualOffset(int lineIndex) {
           _caretInfoCache.clear();
           _lineIndentCache.clear();
           markNeedsLayout();
-            if (_wrapWidth == double.infinity) {
-          _wrapWidth = clampedWrapWidth;
-        }
-      });
-  if (hasActiveFolds) {
-        for (int i = 0; i < lineCount; i++) {
-          if (_isLineFolded(i)) continue;
-          visibleHeight += getWrappedLineHeight(i);
+          if (_wrapWidth == double.infinity) {
+            _wrapWidth = clampedWrapWidth;
+          }
+        });
+        if (hasActiveFolds) {
+          for (int i = 0; i < lineCount; i++) {
+            if (_isLineFolded(i)) continue;
+            visibleHeight += getWrappedLineHeight(i);
+          }
+        } else {
+          double cachedHeight = 0;
+          int cachedCount = 0;
+          for (final entry in _lineHeightCache.entries) {
+            if (entry.key < lineCount) {
+              cachedHeight += entry.value;
+              cachedCount++;
+            }
+          }
+          final uncachedCount = lineCount - cachedCount;
+          final avgHeight = cachedCount > 0
+              ? cachedHeight / cachedCount
+              : _lineHeight;
+          visibleHeight = cachedHeight + (uncachedCount * avgHeight);
         }
       } else {
-        double cachedHeight = 0;
-        int cachedCount = 0;
-        for (final entry in _lineHeightCache.entries) {
-          if (entry.key < lineCount) {
-            cachedHeight += entry.value;
-            cachedCount++;
+        _wrapWidth = double.infinity;
+        if (hasActiveFolds) {
+          int visibleLines = 0;
+          for (int i = 0; i < lineCount; i++) {
+            if (!_isLineFolded(i)) visibleLines++;
+          }
+          visibleHeight = visibleLines * _lineHeight;
+        } else {
+          visibleHeight = lineCount * _lineHeight;
+        }
+        if (_longLineWidth == 0 && lineCount > 0) {
+          final viewTop = vscrollController.hasClients
+              ? vscrollController.offset
+              : 0.0;
+          final viewBottom =
+              viewTop +
+              (vscrollController.hasClients
+                  ? vscrollController.position.viewportDimension
+                  : MediaQuery.of(context).size.height);
+          final firstVisible = (viewTop / _lineHeight).floor().clamp(
+            0,
+            lineCount - 1,
+          );
+          final lastVisible = (viewBottom / _lineHeight).ceil().clamp(
+            0,
+            lineCount - 1,
+          );
+          final buffer = 50;
+          final start = (firstVisible - buffer).clamp(0, lineCount - 1);
+          final end = (lastVisible + buffer).clamp(0, lineCount - 1);
+
+          for (int i = start; i <= end; i++) {
+            final width = _getLineWidth(i);
+            if (width > maxLineWidth) {
+              maxLineWidth = width;
+            }
           }
         }
-        final uncachedCount = lineCount - cachedCount;
-        final avgHeight = cachedCount > 0
-            ? cachedHeight / cachedCount
-            : _lineHeight;
-        visibleHeight = cachedHeight + (uncachedCount * avgHeight);
       }
-    } else {
-      _wrapWidth = double.infinity;
-            if (hasActiveFolds) {
-        int visibleLines = 0;
-        for (int i = 0; i < lineCount; i++) {
-          if (!_isLineFolded(i)) visibleLines++;
-        }
-        visibleHeight = visibleLines * _lineHeight;
-      } else {
-        visibleHeight = lineCount * _lineHeight;
-      }
-            if (_longLineWidth == 0 && lineCount > 0) {
-        final viewTop = vscrollController.hasClients
-            ? vscrollController.offset
-            : 0.0;
-        final viewBottom =
-            viewTop +
-            (vscrollController.hasClients
-                ? vscrollController.position.viewportDimension
-                : MediaQuery.of(context).size.height);
-        final firstVisible = (viewTop / _lineHeight).floor().clamp(
-          0,
-          lineCount - 1,
-        );
-        final lastVisible = (viewBottom / _lineHeight).ceil().clamp(
-          0,
-          lineCount - 1,
-        );
-        final buffer = 50;
-        final start = (firstVisible - buffer).clamp(0, lineCount - 1);
-        final end = (lastVisible + buffer).clamp(0, lineCount - 1);
 
-        for (int i = start; i <= end; i++) {
+      for (int i = 0; i < lineCount; i++) {
+        if (hasActiveFolds && _isLineFolded(i)) continue;
+
+        if (lineWrap) {
+          final lineHeight = getWrappedLineHeight(i);
+          visibleHeight += lineHeight;
+        } else {
+          visibleHeight += _lineHeight;
           final width = _getLineWidth(i);
           if (width > maxLineWidth) {
             maxLineWidth = width;
           }
         }
       }
+
+      _longLineWidth = maxLineWidth;
+      _cachedTotalHeight = visibleHeight;
+      _hasCachedHeight = true;
+      _previousLineCount = lineCount;
+
+      final contentHeight =
+          visibleHeight + (innerPadding?.top ?? 0) + _ghostTextExtraHeight;
+      final computedWidth = lineWrap
+          ? (constraints.maxWidth.isFinite
+                ? constraints.maxWidth
+                : MediaQuery.of(context).size.width)
+          : maxLineWidth + (innerPadding?.left ?? 0) + _gutterWidth;
+
+      final minWidth = lineWrap ? 0.0 : MediaQuery.of(context).size.width;
+      final contentWidth = max(computedWidth, minWidth);
+
+      size = constraints.constrain(
+        Size(
+          contentWidth + (innerPadding?.right ?? 0),
+          contentHeight + (innerPadding?.bottom ?? 0),
+        ),
+      );
     }
-
-    for (int i = 0; i < lineCount; i++) {
-      if (hasActiveFolds && _isLineFolded(i)) continue;
-
-      if (lineWrap) {
-        final lineHeight = getWrappedLineHeight(i);
-        visibleHeight += lineHeight;
-      } else {
-        visibleHeight += _lineHeight;
-        final width = _getLineWidth(i);
-        if (width > maxLineWidth) {
-          maxLineWidth = width;
-        }
-      }
-    }
-
-    _longLineWidth = maxLineWidth;
-        _cachedTotalHeight = visibleHeight;
-    _hasCachedHeight = true;
-    _previousLineCount = lineCount;
-
-   final contentHeight =
-        visibleHeight + (innerPadding?.top ?? 0) + _ghostTextExtraHeight;
-    final computedWidth = lineWrap
-        ? (constraints.maxWidth.isFinite
-              ? constraints.maxWidth
-              : MediaQuery.of(context).size.width)
-        : maxLineWidth + (innerPadding?.left ?? 0) + _gutterWidth;
-
-    final minWidth = lineWrap ? 0.0 : MediaQuery.of(context).size.width;
-    final contentWidth = max(computedWidth, minWidth);
-
-    size = constraints.constrain(
-      Size(
-        contentWidth + (innerPadding?.right ?? 0),
-        contentHeight + (innerPadding?.bottom ?? 0),
-      ),
-    );
   }
 
   double getWrappedLineHeight(int lineIndex) {
@@ -7724,7 +7683,7 @@ double _getGhostTextVisualOffset(int lineIndex) {
         textColor,
       );
     }
-        if (controller.documentHighlights.isNotEmpty) {
+    if (controller.documentHighlights.isNotEmpty) {
       drawDocumentHighlights(
         canvas,
         offset,
@@ -7734,7 +7693,6 @@ double _getGhostTextVisualOffset(int lineIndex) {
         hasActiveFolds,
       );
     }
-    
 
     // Draw rulers (vertical lines at specific column positions)
     if (_rulers != null && _rulers!.isNotEmpty) {
@@ -7749,25 +7707,25 @@ double _getGhostTextVisualOffset(int lineIndex) {
       );
     }
 
-    _drawSelection(
-      canvas,
-      offset,
-      firstVisibleLine,
-      lastVisibleLine,
-      firstVisibleLineY,
-      hasActiveFolds,
-    );
+    // _drawSelection(
+    //   canvas,
+    //   offset,
+    //   firstVisibleLine,
+    //   lastVisibleLine,
+    //   firstVisibleLineY,
+    //   hasActiveFolds,
+    // );
 
     if (enableGuideLines && (lastVisibleLine - firstVisibleLine) < 200) {
-      _drawIndentGuides(
-        canvas,
-        offset,
-        firstVisibleLine,
-        lastVisibleLine,
-        firstVisibleLineY,
-        hasActiveFolds,
-        textColor,
-      );
+      // _drawIndentGuides(
+      //   canvas,
+      //   offset,
+      //   firstVisibleLine,
+      //   lastVisibleLine,
+      //   firstVisibleLineY,
+      //   hasActiveFolds,
+      //   textColor,
+      // );
     }
     double currentY = firstVisibleLineY;
     for (int i = firstVisibleLine; i <= lastVisibleLine && i < lineCount; i++) {
@@ -7793,7 +7751,7 @@ double _getGhostTextVisualOffset(int lineIndex) {
           bufferLineText,
           width: lineWrap ? _wrapWidth : paragraphWidth,
         );
-           if (isRTL && lineWrap) {
+        if (isRTL && lineWrap) {
           lineHeight = paragraph.height;
         }
       } else {
@@ -7812,22 +7770,22 @@ double _getGhostTextVisualOffset(int lineIndex) {
             lineText,
             width: lineWrap ? _wrapWidth : paragraphWidth,
           );
-     if (!isRTL) {
+          if (!isRTL) {
             _paragraphCache[i] = paragraph;
           }
+        }
+        if (lineWrap) {
+          _lineHeightCache[i] = paragraph.height;
+          if (isRTL) {
+            lineHeight = paragraph.height;
           }
-                    if (lineWrap) {
-            _lineHeightCache[i] = paragraph.height;
-            if (isRTL) {
-              lineHeight = paragraph.height;
-            }
-          }
+        }
       }
 
       final foldRange = _getFoldRangeAtLine(i);
       final isFoldStart = foldRange != null;
 
-        final textX = isRTL
+      final textX = isRTL
           ? (lineWrap
                 ? (innerPadding?.left ?? 0)
                 : (innerPadding?.left ?? 0) +
@@ -7851,7 +7809,7 @@ double _getGhostTextVisualOffset(int lineIndex) {
       if (isFoldStart && foldRange.isFolded) {
         final foldIndicator = _buildParagraph(' ...');
         final paraWidth = paragraph.longestLine;
-                final foldX = isRTL
+        final foldX = isRTL
             ? (innerPadding?.left ?? 0) +
                   contentWidth -
                   paraWidth -
@@ -7909,7 +7867,7 @@ double _getGhostTextVisualOffset(int lineIndex) {
         hasActiveFolds,
       );
     }
-    
+
     if (controller.ghostText != null) {
       _drawGhostText(
         canvas,
@@ -7994,7 +7952,7 @@ double _getGhostTextVisualOffset(int lineIndex) {
           caretInfo.offset.dx -
           (lineWrap ? 0 : hscrollController.offset);
       final caretScreenY =
-      offset.dy +
+          offset.dy +
           (innerPadding?.top ?? 0) +
           caretInfo.offset.dy -
           vscrollController.offset;
@@ -8023,7 +7981,7 @@ double _getGhostTextVisualOffset(int lineIndex) {
           final textX = isRTL
               ? (innerPadding?.left ?? 0) - scroll
               : _gutterWidth + (innerPadding?.left ?? 0) - scroll;
-          final handleX = offset.dx + textX + caretInfo.offset.dx;
+          // final handleX = offset.dx + textX + caretInfo.offset.dx;
 
           final handleX =
               offset.dx +
@@ -8168,161 +8126,160 @@ double _getGhostTextVisualOffset(int lineIndex) {
           );
         }
       }
-     if (_draggingStartHandle ||
-            _draggingEndHandle ||
-            (_selectionActive && _isDragging)) {
-          final selection = controller.selection;
-          final dragOffset = _draggingStartHandle
-              ? selection.start
-              : selection.end;
-          final dragLine = controller.getLineAtOffset(dragOffset);
-          final startLine = max(0, dragLine - 1);
-          final endLine = min(controller.lineCount - 1, dragLine + 1);
+      if (_draggingStartHandle ||
+          _draggingEndHandle ||
+          (_selectionActive && _isDragging)) {
+        final selection = controller.selection;
+        final dragOffset = _draggingStartHandle
+            ? selection.start
+            : selection.end;
+        final dragLine = controller.getLineAtOffset(dragOffset);
+        final startLine = max(0, dragLine - 1);
+        final endLine = min(controller.lineCount - 1, dragLine + 1);
 
-          List<ui.Paragraph> zoomParagraphs;
-          if (_cachedSelectionMagnifierParagraphs != null &&
-              _cachedSelectionMagnifierStartLine == startLine &&
-              _cachedSelectionMagnifierEndLine == endLine) {
-            zoomParagraphs = _cachedSelectionMagnifierParagraphs!;
-          } else {
-            zoomParagraphs = [];
-            final zoomFontSize = (textStyle?.fontSize ?? 14) * 1.4;
-            final fontFamily = textStyle?.fontFamily;
+        List<ui.Paragraph> zoomParagraphs;
+        if (_cachedSelectionMagnifierParagraphs != null &&
+            _cachedSelectionMagnifierStartLine == startLine &&
+            _cachedSelectionMagnifierEndLine == endLine) {
+          zoomParagraphs = _cachedSelectionMagnifierParagraphs!;
+        } else {
+          zoomParagraphs = [];
+          final zoomFontSize = (textStyle?.fontSize ?? 14) * 1.4;
+          final fontFamily = textStyle?.fontFamily;
 
-            for (int line = startLine; line <= endLine; line++) {
-              final lineText = controller.getLineText(line);
-              final lineStartOffset = controller.getLineStartOffset(line);
+          for (int line = startLine; line <= endLine; line++) {
+            final lineText = controller.getLineText(line);
+            final lineStartOffset = controller.getLineStartOffset(line);
 
-              String displayText;
-              if (line == dragLine) {
-                final colInLine = dragOffset - lineStartOffset;
-                final previewStart = max(0, colInLine - 15);
-                final previewEnd = min(lineText.length, colInLine + 15);
-                displayText = lineText.substring(previewStart, previewEnd);
-              } else {
-                displayText = lineText.length > 30
-                    ? lineText.substring(0, 30)
-                    : lineText;
-              }
-
-              if (displayText.isEmpty) displayText = ' ';
-
-              final para = _syntaxHighlighter.buildHighlightedParagraph(
-                line,
-                displayText,
-                _paragraphStyle,
-                zoomFontSize,
-                fontFamily,
-              );
-              zoomParagraphs.add(para);
-            }
-            _cachedSelectionMagnifierParagraphs = zoomParagraphs;
-            _cachedSelectionMagnifierStartLine = startLine;
-            _cachedSelectionMagnifierEndLine = endLine;
-          }
-
-          double maxWidth = 0;
-          double totalHeight = 0;
-          for (final para in zoomParagraphs) {
-            maxWidth = max(maxWidth, para.longestLine);
-            totalHeight += para.height;
-          }
-
-          final zoomBoxWidth = min(maxWidth + 24, size.width * 0.7);
-          final zoomBoxHeight = totalHeight + 18;
-          double handleCenterX;
-          double handleTopY;
-          Rect? activeHandleRect;
-
-          if (_draggingStartHandle && _startHandleRect != null) {
-            handleCenterX = _startHandleRect!.center.dx;
-            handleTopY = _startHandleRect!.top;
-            activeHandleRect = _startHandleRect;
-          } else if (_draggingEndHandle && _endHandleRect != null) {
-            handleCenterX = _endHandleRect!.center.dx;
-            handleTopY = _endHandleRect!.top;
-            activeHandleRect = _endHandleRect;
-          } else {
-            handleCenterX = _currentPosition.dx;
-            handleTopY = _currentPosition.dy;
-            activeHandleRect = null;
-          }
-
-          final fingerOffsetY = 60.0;
-          final fingerOffsetX = _draggingStartHandle
-              ? 30.0
-              : (_draggingEndHandle ? -30.0 : 0.0);
-          var zoomBoxX = (handleCenterX + fingerOffsetX - zoomBoxWidth / 2)
-              .clamp(4.0, size.width - zoomBoxWidth - 4);
-          var zoomBoxY = handleTopY - zoomBoxHeight - fingerOffsetY;
-          final viewportTop = 0.0;
-          final viewportBottom = size.height;
-
-          if (zoomBoxY < viewportTop + 4) {
-            final handleBottom = activeHandleRect?.bottom ?? (handleTopY + 40);
-            zoomBoxY = handleBottom + fingerOffsetY;
-
-            if (zoomBoxY + zoomBoxHeight > viewportBottom - 4) {
-              zoomBoxY = viewportBottom - zoomBoxHeight - 4;
-            }
-          }
-
-          zoomBoxY = zoomBoxY.clamp(
-            viewportTop + 4,
-            viewportBottom - zoomBoxHeight - 4,
-          );
-
-          final rrect = RRect.fromRectAndRadius(
-            Rect.fromLTWH(zoomBoxX, zoomBoxY, zoomBoxWidth, zoomBoxHeight),
-            Radius.circular(12),
-          );
-
-          canvas.drawRRect(
-            rrect,
-            Paint()
-              ..color = editorTheme['root']?.backgroundColor ?? Colors.black
-              ..style = PaintingStyle.fill,
-          );
-
-          canvas.drawRRect(
-            rrect,
-            Paint()
-              ..color = editorTheme['root']?.color ?? Colors.grey
-              ..strokeWidth = 0.5
-              ..style = PaintingStyle.stroke,
-          );
-
-          canvas.save();
-          canvas.clipRect(rrect.outerRect);
-
-          double yOffset = zoomBoxY + 9;
-          for (int i = 0; i < zoomParagraphs.length; i++) {
-            final para = zoomParagraphs[i];
-            final lineIndex = startLine + i;
-
-            if (lineIndex == dragLine) {
-              canvas.drawRect(
-                Rect.fromLTWH(
-                  zoomBoxX,
-                  yOffset - 2,
-                  zoomBoxWidth,
-                  para.height + 4,
-                ),
-                Paint()
-                  ..color = (selectionStyle.selectionColor).withValues(
-                    alpha: 0.3,
-                  )
-                  ..style = PaintingStyle.fill,
-              );
+            String displayText;
+            if (line == dragLine) {
+              final colInLine = dragOffset - lineStartOffset;
+              final previewStart = max(0, colInLine - 15);
+              final previewEnd = min(lineText.length, colInLine + 15);
+              displayText = lineText.substring(previewStart, previewEnd);
+            } else {
+              displayText = lineText.length > 30
+                  ? lineText.substring(0, 30)
+                  : lineText;
             }
 
-            canvas.drawParagraph(para, Offset(zoomBoxX + 12, yOffset));
-            yOffset += para.height;
-          }
-                    canvas.restore();
+            if (displayText.isEmpty) displayText = ' ';
 
+            final para = _syntaxHighlighter.buildHighlightedParagraph(
+              line,
+              displayText,
+              _paragraphStyle,
+              zoomFontSize,
+              fontFamily,
+            );
+            zoomParagraphs.add(para);
           }
+          _cachedSelectionMagnifierParagraphs = zoomParagraphs;
+          _cachedSelectionMagnifierStartLine = startLine;
+          _cachedSelectionMagnifierEndLine = endLine;
+        }
+
+        double maxWidth = 0;
+        double totalHeight = 0;
+        for (final para in zoomParagraphs) {
+          maxWidth = max(maxWidth, para.longestLine);
+          totalHeight += para.height;
+        }
+
+        final zoomBoxWidth = min(maxWidth + 24, size.width * 0.7);
+        final zoomBoxHeight = totalHeight + 18;
+        double handleCenterX;
+        double handleTopY;
+        Rect? activeHandleRect;
+
+        if (_draggingStartHandle && _startHandleRect != null) {
+          handleCenterX = _startHandleRect!.center.dx;
+          handleTopY = _startHandleRect!.top;
+          activeHandleRect = _startHandleRect;
+        } else if (_draggingEndHandle && _endHandleRect != null) {
+          handleCenterX = _endHandleRect!.center.dx;
+          handleTopY = _endHandleRect!.top;
+          activeHandleRect = _endHandleRect;
+        } else {
+          handleCenterX = _currentPosition.dx;
+          handleTopY = _currentPosition.dy;
+          activeHandleRect = null;
+        }
+
+        final fingerOffsetY = 60.0;
+        final fingerOffsetX = _draggingStartHandle
+            ? 30.0
+            : (_draggingEndHandle ? -30.0 : 0.0);
+        var zoomBoxX = (handleCenterX + fingerOffsetX - zoomBoxWidth / 2).clamp(
+          4.0,
+          size.width - zoomBoxWidth - 4,
+        );
+        var zoomBoxY = handleTopY - zoomBoxHeight - fingerOffsetY;
+        final viewportTop = 0.0;
+        final viewportBottom = size.height;
+
+        if (zoomBoxY < viewportTop + 4) {
+          final handleBottom = activeHandleRect?.bottom ?? (handleTopY + 40);
+          zoomBoxY = handleBottom + fingerOffsetY;
+
+          if (zoomBoxY + zoomBoxHeight > viewportBottom - 4) {
+            zoomBoxY = viewportBottom - zoomBoxHeight - 4;
           }
+        }
+
+        zoomBoxY = zoomBoxY.clamp(
+          viewportTop + 4,
+          viewportBottom - zoomBoxHeight - 4,
+        );
+
+        final rrect = RRect.fromRectAndRadius(
+          Rect.fromLTWH(zoomBoxX, zoomBoxY, zoomBoxWidth, zoomBoxHeight),
+          Radius.circular(12),
+        );
+
+        canvas.drawRRect(
+          rrect,
+          Paint()
+            ..color = editorTheme['root']?.backgroundColor ?? Colors.black
+            ..style = PaintingStyle.fill,
+        );
+
+        canvas.drawRRect(
+          rrect,
+          Paint()
+            ..color = editorTheme['root']?.color ?? Colors.grey
+            ..strokeWidth = 0.5
+            ..style = PaintingStyle.stroke,
+        );
+
+        canvas.save();
+        canvas.clipRect(rrect.outerRect);
+
+        double yOffset = zoomBoxY + 9;
+        for (int i = 0; i < zoomParagraphs.length; i++) {
+          final para = zoomParagraphs[i];
+          final lineIndex = startLine + i;
+
+          if (lineIndex == dragLine) {
+            canvas.drawRect(
+              Rect.fromLTWH(
+                zoomBoxX,
+                yOffset - 2,
+                zoomBoxWidth,
+                para.height + 4,
+              ),
+              Paint()
+                ..color = (selectionStyle.selectionColor).withValues(alpha: 0.3)
+                ..style = PaintingStyle.fill,
+            );
+          }
+
+          canvas.drawParagraph(para, Offset(zoomBoxX + 12, yOffset));
+          yOffset += para.height;
+        }
+        canvas.restore();
+      }
+    }
 
     canvas.restore();
   }
@@ -8339,7 +8296,7 @@ double _getGhostTextVisualOffset(int lineIndex) {
     final viewportHeight = vscrollController.position.viewportDimension;
 
     final gutterBgColor = gutterStyle.backgroundColor ?? bgColor;
-        final gutterX = isRTL ? offset.dx + size.width - _gutterWidth : offset.dx;
+    final gutterX = isRTL ? offset.dx + size.width - _gutterWidth : offset.dx;
 
     canvas.drawRect(
       Rect.fromLTWH(gutterX, offset.dy, _gutterWidth, viewportHeight),
@@ -8350,7 +8307,7 @@ double _getGhostTextVisualOffset(int lineIndex) {
       final dividerPaint = Paint()
         ..color = (editorTheme['root']?.color ?? Colors.grey).withAlpha(150)
         ..strokeWidth = 1;
-              final dividerX = isRTL ? gutterX : gutterX + _gutterWidth - 1;
+      final dividerX = isRTL ? gutterX : gutterX + _gutterWidth - 1;
 
       canvas.drawLine(
         Offset(dividerX, offset.dy),
@@ -8380,7 +8337,8 @@ double _getGhostTextVisualOffset(int lineIndex) {
 
     final hasActiveFolds = _foldRanges.values.any(
       (f) => f != null && f.isFolded,
-    );    final cursorOffset = controller.selection.extentOffset;
+    );
+    final cursorOffset = controller.selection.extentOffset;
     final currentLine = controller.getLineAtOffset(cursorOffset);
     final selection = controller.selection;
     int? selectionStartLine;
@@ -8450,7 +8408,6 @@ double _getGhostTextVisualOffset(int lineIndex) {
     }
     _actionBulbRects.clear();
 
-
     double currentY = firstVisibleLineY;
     for (int i = firstVisibleLine; i < lineCount; i++) {
       if (hasActiveFolds && _isLineFolded(i)) continue;
@@ -8463,229 +8420,232 @@ double _getGhostTextVisualOffset(int lineIndex) {
       if (contentTop + visualYOffset > viewBottom) break;
 
       if (contentTop + visualYOffset + lineHeight >= viewTop) {
+        if (contentTop > viewBottom) break;
 
-      if (contentTop > viewBottom) break;
+        if (contentTop + lineHeight >= viewTop) {
+          _drawGutterDecorations(
+            canvas,
+            offset,
+            i,
+            contentTop + visualYOffset,
+            lineHeight,
+          );
+          Color lineNumberColor;
+          final severity = lineSeverityMap[i];
+          if (severity == 1) {
+            lineNumberColor = errorColor;
+          } else if (severity == 2) {
+            lineNumberColor = warningColor;
+          } else if (i == currentLine) {
+            lineNumberColor = activeLineColor;
+          } else if (selectionStartLine != null &&
+              selectionEndLine != null &&
+              i >= selectionStartLine &&
+              i <= selectionEndLine) {
+            lineNumberColor = activeLineColor;
+          } else {
+            lineNumberColor = inactiveLineColor;
+          }
 
-      if (contentTop + lineHeight >= viewTop) {
-           _drawGutterDecorations(
-          canvas,
-          offset,
-          i,
-          contentTop + visualYOffset,
-          lineHeight,
-        );
-        Color lineNumberColor;
-        final severity = lineSeverityMap[i];
-        if (severity == 1) {
-          lineNumberColor = errorColor;
-        } else if (severity == 2) {
-          lineNumberColor = warningColor;
-        } else if (i == currentLine) {
-          lineNumberColor = activeLineColor;
-        } else if (selectionStartLine != null &&
-            selectionEndLine != null &&
-            i >= selectionStartLine &&
-            i <= selectionEndLine) {
-          lineNumberColor = activeLineColor;
-        } else {
-          lineNumberColor = inactiveLineColor;
-        }
-
-        final lineNumberStyle = baseLineNumberStyle!.copyWith(
-          color: lineNumberColor,
-        );
-        final lineNumPara = _buildLineNumberParagraph(
-          (i + 1).toString(),
-          lineNumberStyle,
-        );
-        final numWidth = lineNumPara.longestLine;
-                canvas.drawParagraph(
-          lineNumPara,
-          offset +
-              Offset(
-                (isRTL ? size.width - _gutterWidth : 0) +
-                    (_gutterWidth - numWidth) / 2 -
-                    (enableFolding ? (lineNumberStyle.fontSize ?? 14) / 2 : 0),
-                (innerPadding?.top ?? 0) +
-                    contentTop +
-                    visualYOffset -
-                    vscrollController.offset,
-              ),
-        );
-        if (lspActionNotifier.value != null && lspConfig != null) {
-          final actions = lspActionNotifier.value!.cast<Map<String, dynamic>>();
-          if (actions.any((item) {
-            try {
-              return (item['arguments'][0]['range']['start']['line'] as int) ==
-                  i;
-            } on NoSuchMethodError {
+          final lineNumberStyle = baseLineNumberStyle!.copyWith(
+            color: lineNumberColor,
+          );
+          // final lineNumPara =
+          // _buildLineNumberParagraph(
+          //   (i + 1).toString(),
+          //   lineNumberStyle,
+          // );
+          // final numWidth = lineNumPara.longestLine;
+          //         canvas.drawParagraph(
+          //   lineNumPara,
+          //   offset +
+          //       Offset(
+          //         (isRTL ? size.width - _gutterWidth : 0) +
+          //             (_gutterWidth - numWidth) / 2 -
+          //             (enableFolding ? (lineNumberStyle.fontSize ?? 14) / 2 : 0),
+          //         (innerPadding?.top ?? 0) +
+          //             contentTop +
+          //             visualYOffset -
+          //             vscrollController.offset,
+          //       ),
+          // );
+          if (lspActionNotifier.value != null && lspConfig != null) {
+            final actions = lspActionNotifier.value!
+                .cast<Map<String, dynamic>>();
+            if (actions.any((item) {
               try {
-                final fileUri = Uri.file(filePath!).toString();
-                return (item['edit']['changes'][fileUri][0]['range']['start']['line']
+                return (item['arguments'][0]['range']['start']['line']
                         as int) ==
                     i;
+              } on NoSuchMethodError {
+                try {
+                  final fileUri = Uri.file(filePath!).toString();
+                  return (item['edit']['changes'][fileUri][0]['range']['start']['line']
+                          as int) ==
+                      i;
+                } catch (e) {
+                  return false;
+                }
               } catch (e) {
                 return false;
               }
-            } catch (e) {
-              return false;
-            }
-          })) {
-            final icon = Icons.lightbulb_outline;
-            final actionBulbPainter = TextPainter(
-              text: TextSpan(
-                text: String.fromCharCode(icon.codePoint),
-                style: TextStyle(
-                  fontSize: textStyle?.fontSize ?? 14,
-                  color: Colors.yellowAccent,
-                  fontFamily: icon.fontFamily,
-                  package: icon.fontPackage,
+            })) {
+              final icon = Icons.lightbulb_outline;
+              final actionBulbPainter = TextPainter(
+                text: TextSpan(
+                  text: String.fromCharCode(icon.codePoint),
+                  style: TextStyle(
+                    fontSize: textStyle?.fontSize ?? 14,
+                    color: Colors.yellowAccent,
+                    fontFamily: icon.fontFamily,
+                    package: icon.fontPackage,
+                  ),
                 ),
-              ),
-              textDirection: _textDirection,
-            );
-            actionBulbPainter.layout();
+                textDirection: _textDirection,
+              );
+              actionBulbPainter.layout();
 
-            final bulbX = isRTL
-                ? (isMobile
-                      ? offset.dx + size.width - actionBulbPainter.width - 4
-                      : offset.dx + size.width - _gutterWidth + 4)
-                : (isMobile
-                      ? offset.dx +
-                            _gutterWidth -
-                            actionBulbPainter.width -
-                            (baseLineNumberStyle.fontSize ?? 14) +
-                            4
-                      : offset.dx + 4);
-            final bulbY =
+              final bulbX = isRTL
+                  ? (isMobile
+                        ? offset.dx + size.width - actionBulbPainter.width - 4
+                        : offset.dx + size.width - _gutterWidth + 4)
+                  : (isMobile
+                        ? offset.dx +
+                              _gutterWidth -
+                              actionBulbPainter.width -
+                              (baseLineNumberStyle.fontSize ?? 14) +
+                              4
+                        : offset.dx + 4);
+              final bulbY =
+                  offset.dy +
+                  (innerPadding?.top ?? 0) +
+                  contentTop +
+                  visualYOffset -
+                  vscrollController.offset +
+                  (_lineHeight - actionBulbPainter.height) / 2;
+
+              _actionBulbRects[i] = Rect.fromLTWH(
+                bulbX,
+                bulbY,
+                actionBulbPainter.width,
+                actionBulbPainter.height,
+              );
+
+              actionBulbPainter.paint(canvas, Offset(bulbX, bulbY));
+            }
+          }
+          // Draw breakpoint indicator if enabled and breakpoint exists for this line
+          final fontSize = _textStyle?.fontSize ?? 14.0;
+          final breakpointColumnWidth = (_gutterStyle.showBreakpoints)
+              ? fontSize * 1.5
+              : 0;
+          if (_gutterStyle.showBreakpoints &&
+              controller.breakpoints.contains(i + 1)) {
+            final isHovered = _hoveredBreakpointLine == i + 1;
+            final breakpointPaint = Paint()
+              ..color = _gutterStyle.breakpointColor
+              ..style = PaintingStyle.fill;
+            final breakpointRadius = 4.0;
+            final breakpointCenterX = offset.dx + breakpointColumnWidth / 2;
+            final breakpointCenterY =
                 offset.dy +
                 (innerPadding?.top ?? 0) +
-                contentTop +
-                visualYOffset -
+                contentTop -
                 vscrollController.offset +
-                (_lineHeight - actionBulbPainter.height) / 2;
+                lineHeight / 2;
 
-            _actionBulbRects[i] = Rect.fromLTWH(
-              bulbX,
-              bulbY,
-              actionBulbPainter.width,
-              actionBulbPainter.height,
+            // Draw hover highlight (semi-transparent circle) if hovering
+            if (isHovered) {
+              final hoverPaint = Paint()
+                ..color = _gutterStyle.breakpointColor.withValues(alpha: 0.3)
+                ..style = PaintingStyle.fill;
+              canvas.drawCircle(
+                Offset(breakpointCenterX, breakpointCenterY),
+                breakpointRadius + 2,
+                hoverPaint,
+              );
+            }
+
+            canvas.drawCircle(
+              Offset(breakpointCenterX, breakpointCenterY),
+              breakpointRadius,
+              breakpointPaint,
             );
-
-            actionBulbPainter.paint(canvas, Offset(bulbX, bulbY));
-          }
-        }
-        // Draw breakpoint indicator if enabled and breakpoint exists for this line
-        final fontSize = _textStyle?.fontSize ?? 14.0;
-        final breakpointColumnWidth = (_gutterStyle.showBreakpoints)
-            ? fontSize * 1.5
-            : 0;
-        if (_gutterStyle.showBreakpoints &&
-            controller.breakpoints.contains(i + 1)) {
-          final isHovered = _hoveredBreakpointLine == i + 1;
-          final breakpointPaint = Paint()
-            ..color = _gutterStyle.breakpointColor
-            ..style = PaintingStyle.fill;
-          final breakpointRadius = 4.0;
-          final breakpointCenterX = offset.dx + breakpointColumnWidth / 2;
-          final breakpointCenterY =
-              offset.dy +
-              (innerPadding?.top ?? 0) +
-              contentTop -
-              vscrollController.offset +
-              lineHeight / 2;
-
-          // Draw hover highlight (semi-transparent circle) if hovering
-          if (isHovered) {
+          } else if (_gutterStyle.showBreakpoints &&
+              _hoveredBreakpointLine == i + 1) {
+            // Show semi-transparent breakpoint on hover even if not set
+            final breakpointRadius = 4.0;
+            final breakpointCenterX = offset.dx + breakpointColumnWidth / 2;
+            final breakpointCenterY =
+                offset.dy +
+                (innerPadding?.top ?? 0) +
+                contentTop -
+                vscrollController.offset +
+                lineHeight / 2;
             final hoverPaint = Paint()
-              ..color = _gutterStyle.breakpointColor.withValues(alpha: 0.3)
+              ..color = _gutterStyle.breakpointColor.withOpacity(0.5)
               ..style = PaintingStyle.fill;
             canvas.drawCircle(
               Offset(breakpointCenterX, breakpointCenterY),
-              breakpointRadius + 2,
+              breakpointRadius,
               hoverPaint,
             );
           }
 
-          canvas.drawCircle(
-            Offset(breakpointCenterX, breakpointCenterY),
-            breakpointRadius,
-            breakpointPaint,
+          final lineNumPara = buildLineNumberParagraph(
+            (i + 1).toString(),
+            lineNumberStyle,
           );
-        } else if (_gutterStyle.showBreakpoints &&
-            _hoveredBreakpointLine == i + 1) {
-          // Show semi-transparent breakpoint on hover even if not set
-          final breakpointRadius = 4.0;
-          final breakpointCenterX = offset.dx + breakpointColumnWidth / 2;
-          final breakpointCenterY =
-              offset.dy +
-              (innerPadding?.top ?? 0) +
-              contentTop -
-              vscrollController.offset +
-              lineHeight / 2;
-          final hoverPaint = Paint()
-            ..color = _gutterStyle.breakpointColor.withOpacity(0.5)
-            ..style = PaintingStyle.fill;
-          canvas.drawCircle(
-            Offset(breakpointCenterX, breakpointCenterY),
-            breakpointRadius,
-            hoverPaint,
+          final numWidth = lineNumPara.longestLine;
+
+          // Adjust line number position to account for breakpoint column
+          final lineNumberXOffset =
+              breakpointColumnWidth +
+              ((_gutterWidth - breakpointColumnWidth - numWidth) / 2) -
+              (enableFolding ? (lineNumberStyle.fontSize ?? 14) / 2 : 0);
+
+          canvas.drawParagraph(
+            lineNumPara,
+            offset +
+                Offset(
+                  lineNumberXOffset,
+                  (innerPadding?.top ?? 0) +
+                      contentTop -
+                      vscrollController.offset,
+                ),
           );
-        }
 
-        final lineNumPara = buildLineNumberParagraph(
-          (i + 1).toString(),
-          lineNumberStyle,
-        );
-        final numWidth = lineNumPara.longestLine;
-
-        // Adjust line number position to account for breakpoint column
-        final lineNumberXOffset =
-            breakpointColumnWidth +
-            ((_gutterWidth - breakpointColumnWidth - numWidth) / 2) -
-            (enableFolding ? (lineNumberStyle.fontSize ?? 14) / 2 : 0);
-
-        canvas.drawParagraph(
-          lineNumPara,
-          offset +
-              Offset(
-                lineNumberXOffset,
-                (innerPadding?.top ?? 0) +
-                    contentTop -
-                    vscrollController.offset,
-              ),
-        );
-
-        if (enableFolding) {
-          final foldRange = _getFoldRangeAtLine(i);
-          if (foldRange != null) {
-                        final isInsideFoldedParent = _foldRanges.values.any(
-              (parent) =>
-                  parent != null &&
-                  parent.isFolded &&
-                  parent.startIndex < i &&
-                  parent.endIndex >= i,
-            );
-
-if (!isInsideFoldedParent) {
-              final icon = foldRange.isFolded
-                  ? (isRTL
-                        ? Icons.chevron_left_outlined
-                        : gutterStyle.foldedIcon)
-                  : gutterStyle.unfoldedIcon;
-              final iconColor = foldRange.isFolded
-                  ? (gutterStyle.foldedIconColor ?? lineNumberStyle.color)
-                  : (gutterStyle.unfoldedIconColor ?? lineNumberStyle.color);
-
-              drawFoldIcon(
-                canvas,
-                offset,
-                icon,
-                iconColor!,
-                lineNumberStyle.fontSize ?? 14,
-                contentTop + visualYOffset - vscrollController.offset,
+          if (enableFolding) {
+            final foldRange = _getFoldRangeAtLine(i);
+            if (foldRange != null) {
+              final isInsideFoldedParent = _foldRanges.values.any(
+                (parent) =>
+                    parent != null &&
+                    parent.isFolded &&
+                    parent.startIndex < i &&
+                    parent.endIndex >= i,
               );
-}}
+
+              if (!isInsideFoldedParent) {
+                final icon = foldRange.isFolded
+                    ? (isRTL
+                          ? Icons.chevron_left_outlined
+                          : gutterStyle.foldedIcon)
+                    : gutterStyle.unfoldedIcon;
+                final iconColor = foldRange.isFolded
+                    ? (gutterStyle.foldedIconColor ?? lineNumberStyle.color)
+                    : (gutterStyle.unfoldedIconColor ?? lineNumberStyle.color);
+
+                drawFoldIcon(
+                  canvas,
+                  offset,
+                  icon,
+                  iconColor!,
+                  lineNumberStyle.fontSize ?? 14,
+                  contentTop + visualYOffset - vscrollController.offset,
+                );
+              }
+            }
           }
         }
       }
@@ -8736,7 +8696,7 @@ if (!isInsideFoldedParent) {
       textDirection: _textDirection,
     );
     iconPainter.layout();
-        final iconX = isRTL
+    final iconX = isRTL
         ? offset.dx + size.width - iconPainter.width - 2
         : offset.dx + _gutterWidth - iconPainter.width - 2;
 
@@ -8744,9 +8704,9 @@ if (!isInsideFoldedParent) {
       canvas,
       offset +
           Offset(
-        iconX,
-        offset.dy +
-            (innerPadding?.top ?? 0) +
+            iconX,
+            offset.dy +
+                (innerPadding?.top ?? 0) +
                 y +
                 (_lineHeight - iconPainter.height) / 2,
           ),
@@ -8758,7 +8718,7 @@ if (!isInsideFoldedParent) {
     int leadingSpaces,
     bool hasActiveFolds,
   ) {
-        final key = '$startLine-$leadingSpaces-${hasActiveFolds ? 1 : 0}';
+    final key = '$startLine-$leadingSpaces-${hasActiveFolds ? 1 : 0}';
     if (_indentEndLineCache.containsKey(key)) {
       return _indentEndLineCache[key]!;
     }
@@ -8852,7 +8812,6 @@ if (!isInsideFoldedParent) {
           trimmed.endsWith('[') ||
           trimmed.endsWith(':');
       if (!endsWithBracket) return;
-
 
       // Skip if neither Jinja tag, HTML tag, nor bracket/colon
       if (jinjaEndLine == null && htmlEndLine == null && !endsWithBracket) {
@@ -9158,9 +9117,6 @@ if (!isInsideFoldedParent) {
     canvas.drawRect(bracketRect, _bracketHighlightPainter);
   }
 
-  
-
-  
   void drawDiagnostics(
     Canvas canvas,
     Offset offset,
@@ -9282,7 +9238,7 @@ if (!isInsideFoldedParent) {
               vscrollController.offset;
 
           final width = box.right - box.left;
-          _drawSquigglyLine(canvas, screenX, screenY, width, paint);
+          // _drawSquigglyLine(canvas, screenX, screenY, width, paint);
         }
       }
     }
@@ -9395,11 +9351,10 @@ if (!isInsideFoldedParent) {
         }
 
         final lineY = getLineYOffset(lineIndex, hasActiveFolds);
-                final scroll = lineWrap ? 0.0 : _effectiveHScroll;
+        final scroll = lineWrap ? 0.0 : _effectiveHScroll;
         final textX = isRTL
             ? (innerPadding?.left ?? 0) - scroll
             : _gutterWidth + (innerPadding?.left ?? 0) - scroll;
-
 
         if (lineText.isNotEmpty) {
           final boxKey = '$lineIndex-$lineSelStart-$lineSelEnd';
@@ -9455,10 +9410,10 @@ if (!isInsideFoldedParent) {
       ..color = highlightColor
       ..style = PaintingStyle.fill;
 
-    for (final foldRange in _foldRanges) {
-      if (!foldRange.isFolded) continue;
+    for (final foldRange in _foldRanges.values) {
+      if (!(foldRange?.isFolded ?? false)) continue;
 
-      final foldStartLine = foldRange.startIndex;
+      final foldStartLine = foldRange!.startIndex;
 
       if (foldStartLine < firstVisibleLine || foldStartLine > lastVisibleLine) {
         continue;
@@ -9567,7 +9522,6 @@ if (!isInsideFoldedParent) {
           ? (innerPadding?.left ?? 0) - scroll
           : _gutterWidth + (innerPadding?.left ?? 0) - scroll;
 
-
       if (lineSelStart < lineSelEnd && lineText.isNotEmpty) {
         final boxes = para.getBoxesForRange(
           lineSelStart.clamp(0, lineText.length),
@@ -9621,8 +9575,9 @@ if (!isInsideFoldedParent) {
       startLine,
       endLine,
       hasActiveFolds,
+      canvas,
     );
-  } 
+  }
 
   void drawDocumentHighlights(
     Canvas canvas,
@@ -9734,6 +9689,7 @@ if (!isInsideFoldedParent) {
     int startLine,
     int endLine,
     bool hasActiveFolds,
+    Canvas canvas,
   ) {
     final handleRadius = (_lineHeight / 2).clamp(6.0, 12.0);
     final contentWidth =
@@ -9849,7 +9805,6 @@ if (!isInsideFoldedParent) {
       width: handleRadius * 2 * 1.2,
       height: handleRadius * 2 * 1.2,
     );
-  }
 
     if (_aiResponse == null || _aiResponse!.isEmpty) return;
     if (_ghostTextAnchorLine == null) return;
@@ -9920,7 +9875,7 @@ if (!isInsideFoldedParent) {
                 fontFamily: textStyle?.fontFamily,
                 fontSize: textStyle?.fontSize ?? 14.0,
                 height: textStyle?.height ?? 1.2,
-                textDirection: textDirection,
+                // textDirection: textDirection,
               ),
             )
             ..pushStyle(ghostStyle)
@@ -10004,7 +9959,7 @@ if (!isInsideFoldedParent) {
                 fontFamily: textStyle?.fontFamily,
                 fontSize: textStyle?.fontSize ?? 14.0,
                 height: textStyle?.height ?? 1.2,
-                textDirection: textDirection,
+                // textDirection: textDirection,
               ),
             )
             ..pushStyle(ghostStyle)
@@ -10073,7 +10028,7 @@ if (!isInsideFoldedParent) {
                   fontFamily: textStyle?.fontFamily,
                   fontSize: textStyle?.fontSize ?? 14.0,
                   height: textStyle?.height ?? 1.2,
-                  textDirection: textDirection,
+                  // textDirection: textDirection,
                 ),
               )
               ..pushStyle(ghostStyle)
@@ -11095,15 +11050,16 @@ if (!isInsideFoldedParent) {
         return AlertDialog(
           title: const Text('Pick a color'),
           content: SingleChildScrollView(
-            child: ColorPicker(
-              pickerColor: pickerColor,
-              onColorChanged: (color) {
-                pickerColor = color;
-              },
-              enableAlpha: true,
-              displayThumbColor: true,
-              pickerAreaHeightPercent: 0.8,
-            ),
+            child: Container(),
+            //  ColorPicker(
+            //   pickerColor: pickerColor,
+            //   onColorChanged: (color) {
+            //     pickerColor = color;
+            //   },
+            //   enableAlpha: true,
+            //   displayThumbColor: true,
+            //   pickerAreaHeightPercent: 0.8,
+            // ),
           ),
           actions: [
             TextButton(
@@ -11228,228 +11184,6 @@ if (!isInsideFoldedParent) {
         rulerPaint,
       );
     }
-  }
-
-  void drawBracketHighlight(
-    Canvas canvas,
-    Offset offset,
-    double viewTop,
-    double viewBottom,
-    int firstVisibleLine,
-    int lastVisibleLine,
-    double firstVisibleLineY,
-    bool hasActiveFolds,
-    Color textColor,
-  ) {
-    final (bracket1, bracket2) = _getBracketPairAtCursor();
-    if (bracket1 == null || bracket2 == null) return;
-
-    final line1 = controller.getLineAtOffset(bracket1);
-    final line2 = controller.getLineAtOffset(bracket2);
-
-    if (line1 >= firstVisibleLine &&
-        line1 <= lastVisibleLine &&
-        (!hasActiveFolds || !_isLineFolded(line1))) {
-      drawBracketBox(
-        canvas,
-        offset,
-        bracket1,
-        line1,
-        hasActiveFolds,
-        textColor,
-      );
-    }
-
-    if (line2 >= firstVisibleLine &&
-        line2 <= lastVisibleLine &&
-        (!hasActiveFolds || !_isLineFolded(line2))) {
-      drawBracketBox(
-        canvas,
-        offset,
-        bracket2,
-        line2,
-        hasActiveFolds,
-        textColor,
-      );
-    }
-  }
-
-  void drawBracketBox(
-    Canvas canvas,
-    Offset offset,
-    int bracketOffset,
-    int lineIndex,
-    bool hasActiveFolds,
-    Color textColor,
-  ) {
-    final lineStartOffset = controller.getLineStartOffset(lineIndex);
-    final columnIndex = bracketOffset - lineStartOffset;
-
-    String lineText;
-    if (_lineTextCache.containsKey(lineIndex)) {
-      lineText = _lineTextCache[lineIndex]!;
-    } else {
-      lineText = controller.getLineText(lineIndex);
-      _lineTextCache[lineIndex] = lineText;
-    }
-
-    if (columnIndex < 0 || columnIndex >= lineText.length) return;
-
-    ui.Paragraph para;
-    if (_paragraphCache.containsKey(lineIndex)) {
-      para = _paragraphCache[lineIndex]!;
-    } else {
-      para = _buildHighlightedParagraph(
-        lineIndex,
-        lineText,
-        width: lineWrap ? _wrapWidth : null,
-      );
-      _paragraphCache[lineIndex] = para;
-    }
-
-    final boxes = para.getBoxesForRange(columnIndex, columnIndex + 1);
-    if (boxes.isEmpty) return;
-
-    final box = boxes.first;
-
-    final lineY = getLineYOffset(lineIndex, hasActiveFolds);
-    final boxY = lineY + box.top;
-
-    final screenX =
-        offset.dx +
-        _gutterWidth +
-        (innerPadding?.left ?? 0) +
-        box.left -
-        (lineWrap ? 0 : hscrollController.offset);
-    final screenY =
-        offset.dy + (innerPadding?.top ?? 0) + boxY - vscrollController.offset;
-
-    final bracketRect = Rect.fromLTWH(
-      screenX - 1,
-      screenY,
-      box.right - box.left + 2,
-      _lineHeight,
-    );
-
-    _bracketHighlightPainter.color = textColor;
-    canvas.drawRect(bracketRect, _bracketHighlightPainter);
-  }
-
-  void updateSelectionHandleRects(
-    Offset offset,
-    int start,
-    int end,
-    int startLine,
-    int endLine,
-    bool hasActiveFolds,
-  ) {
-    final handleRadius = (_lineHeight / 2).clamp(6.0, 12.0);
-
-    final startLineOffset = controller.getLineStartOffset(startLine);
-    final startLineText =
-        _lineTextCache[startLine] ?? controller.getLineText(startLine);
-    final startCol = start - startLineOffset;
-
-    final startY = getLineYOffset(startLine, hasActiveFolds);
-
-    double startX;
-    double startYInLine = 0;
-    if (startLineText.isNotEmpty && startCol > 0) {
-      final para =
-          _paragraphCache[startLine] ??
-          _buildHighlightedParagraph(
-            startLine,
-            startLineText,
-            width: lineWrap ? _wrapWidth : null,
-          );
-      final boxes = para.getBoxesForRange(
-        0,
-        startCol.clamp(0, startLineText.length),
-      );
-      if (boxes.isNotEmpty) {
-        startX = boxes.last.right;
-        startYInLine = boxes.last.top;
-      } else {
-        startX = 0;
-      }
-    } else {
-      startX = 0;
-    }
-
-    final startScreenX =
-        offset.dx +
-        _gutterWidth +
-        (innerPadding?.left ?? 0) +
-        startX -
-        (lineWrap ? 0 : hscrollController.offset);
-    final startScreenY =
-        offset.dy +
-        (innerPadding?.top ?? 0) +
-        startY +
-        startYInLine -
-        vscrollController.offset;
-
-    _startHandleRect = Rect.fromCenter(
-      center: Offset(
-        startScreenX - (textStyle?.fontSize ?? 14) / 2,
-        startScreenY + _lineHeight + handleRadius,
-      ),
-      width: handleRadius * 2 * 1.2,
-      height: handleRadius * 2 * 1.2,
-    );
-
-    final endLineOffset = controller.getLineStartOffset(endLine);
-    final endLineText =
-        _lineTextCache[endLine] ?? controller.getLineText(endLine);
-    final endCol = end - endLineOffset;
-
-    final endY = getLineYOffset(endLine, hasActiveFolds);
-
-    double endX;
-    double endYInLine = 0;
-    if (endLineText.isNotEmpty && endCol > 0) {
-      final para =
-          _paragraphCache[endLine] ??
-          _buildHighlightedParagraph(
-            endLine,
-            endLineText,
-            width: lineWrap ? _wrapWidth : null,
-          );
-      final boxes = para.getBoxesForRange(
-        0,
-        endCol.clamp(0, endLineText.length),
-      );
-      if (boxes.isNotEmpty) {
-        endX = boxes.last.right;
-        endYInLine = boxes.last.top;
-      } else {
-        endX = 0;
-      }
-    } else {
-      endX = 0;
-    }
-
-    final endScreenX =
-        offset.dx +
-        _gutterWidth +
-        (innerPadding?.left ?? 0) +
-        endX -
-        (lineWrap ? 0 : hscrollController.offset);
-    final endScreenY =
-        offset.dy +
-        (innerPadding?.top ?? 0) +
-        endY +
-        endYInLine -
-        vscrollController.offset;
-
-    _endHandleRect = Rect.fromCenter(
-      center: Offset(
-        endScreenX + (textStyle?.fontSize ?? 14) / 2,
-        endScreenY + _lineHeight + handleRadius,
-      ),
-      width: handleRadius * 2 * 1.2,
-      height: handleRadius * 2 * 1.2,
-    );
   }
 
   void drawAiGhostText(
@@ -11583,11 +11317,11 @@ if (!isInsideFoldedParent) {
   @override
   void handleEvent(PointerEvent event, BoxHitTestEntry entry) {
     final localPosition = event.localPosition;
-        final clickY =
+    final clickY =
         localPosition.dy + vscrollController.offset - (innerPadding?.top ?? 0);
 
     _currentPosition = localPosition;
-        final contentX = isRTL
+    final contentX = isRTL
         ? localPosition.dx -
               (innerPadding?.left ?? 0) -
               (lineWrap ? 0 : _effectiveHScroll)
@@ -11596,7 +11330,7 @@ if (!isInsideFoldedParent) {
               (innerPadding?.left ?? 0) +
               (lineWrap ? 0 : _effectiveHScroll);
 
-        final contentPosition = Offset(
+    final contentPosition = Offset(
       contentX,
       localPosition.dy - (innerPadding?.top ?? 0) + vscrollController.offset,
     );
@@ -11644,11 +11378,11 @@ if (!isInsideFoldedParent) {
       }
 
       if ((hoverNotifier.value == null || !isHoveringPopup.value) &&
-          isOffsetOverWord(textOffset)) {
+          _isOffsetOverWord(textOffset)) {
         _hoverTimer?.cancel();
         _hoverTimer = Timer(Duration(milliseconds: 1500), () {
-          final lineChar = offsetToLineChar(textOffset);
-          hoverNotifier.value = [event.localPosition, lineChar];
+          final lineChar = _offsetToLineChar(textOffset);
+          hoverNotifier.value = (event.localPosition, lineChar);
         });
       } else {
         _hoverTimer?.cancel();
@@ -11661,7 +11395,7 @@ if (!isInsideFoldedParent) {
             isMobile &&
             _selectionActive &&
             controller.selection.start != controller.selection.end)) {
-                    _draggingStartHandle = false;
+      _draggingStartHandle = false;
       _draggingEndHandle = false;
       _draggingCHandle = false;
       _isDragging = false;
@@ -11680,17 +11414,16 @@ if (!isInsideFoldedParent) {
     if (event is PointerDownEvent && event.buttons == kPrimaryButton) {
       try {
         focusNode.requestFocus();
-            suggestionNotifier.value = null;
+        suggestionNotifier.value = null;
         signatureNotifier.value = null;
       } catch (e) {
         debugPrint(e.toString());
-
       }
       if (contextMenuOffsetNotifier.value.dx >= 0) {
         contextMenuOffsetNotifier.value = const Offset(-1, -1);
       }
 
-if (lspActionNotifier.value != null && _actionBulbRects.isNotEmpty) {
+      if (lspActionNotifier.value != null && _actionBulbRects.isNotEmpty) {
         for (final entry in _actionBulbRects.entries) {
           if (entry.value.contains(localPosition)) {
             suggestionNotifier.value = null;
@@ -11699,7 +11432,7 @@ if (lspActionNotifier.value != null && _actionBulbRects.isNotEmpty) {
           }
         }
       }
-            if (_colorBoxHitAreas.isNotEmpty) {
+      if (_colorBoxHitAreas.isNotEmpty) {
         for (final entry in _colorBoxHitAreas.entries) {
           if (entry.key.contains(localPosition)) {
             _showColorPicker(entry.value);
@@ -11707,10 +11440,10 @@ if (lspActionNotifier.value != null && _actionBulbRects.isNotEmpty) {
           }
         }
       }
-         final gutterClickArea = isRTL
+      final gutterClickArea = isRTL
           ? localPosition.dx > size.width - _gutterWidth
           : localPosition.dx < _gutterWidth;
-                if (enableFolding && enableGutter && gutterClickArea) {
+      if (enableFolding && enableGutter && gutterClickArea) {
         if (clickY < 0) return;
         final clickedLine = _findVisibleLineByYPosition(clickY);
 
@@ -11721,129 +11454,129 @@ if (lspActionNotifier.value != null && _actionBulbRects.isNotEmpty) {
         }
         return;
       }
-      if (enableGutter && localPosition.dx < _gutterWidth) {
-        final clickY =
-            localPosition.dy -
-            (innerPadding?.top ?? 0) +
-            vscrollController.offset;
-        final clickedLine = _findVisibleLineByYPosition(clickY);
+    }
+    if (enableGutter && localPosition.dx < _gutterWidth) {
+      final clickY =
+          localPosition.dy -
+          (innerPadding?.top ?? 0) +
+          vscrollController.offset;
+      final clickedLine = _findVisibleLineByYPosition(clickY);
 
-        // Check if click is in breakpoint column area
-        final fontSize = _textStyle?.fontSize ?? 14.0;
-        final breakpointColumnWidth = (_gutterStyle.showBreakpoints)
-            ? fontSize * 1.5
-            : 0;
-        if (_gutterStyle.showBreakpoints &&
-            localPosition.dx < breakpointColumnWidth) {
-          // Toggle breakpoint for this line (convert 0-indexed to 1-indexed)
-          controller.toggleBreakpoint(clickedLine + 1);
-          return;
-        }
-
-        if (enableFolding) {
-          final foldRange = _getFoldRangeAtLine(clickedLine);
-          if (foldRange != null) {
-            _toggleFold(foldRange);
-            return;
-          }
-        }
-
-        // Handle gutter clicks for line selection
-        final lineStartOffset = controller.getLineStartOffset(clickedLine);
-        controller.selection = TextSelection.collapsed(offset: lineStartOffset);
+      // Check if click is in breakpoint column area
+      final fontSize = _textStyle?.fontSize ?? 14.0;
+      final breakpointColumnWidth = (_gutterStyle.showBreakpoints)
+          ? fontSize * 1.5
+          : 0;
+      if (_gutterStyle.showBreakpoints &&
+          localPosition.dx < breakpointColumnWidth) {
+        // Toggle breakpoint for this line (convert 0-indexed to 1-indexed)
+        controller.toggleBreakpoint(clickedLine + 1);
         return;
       }
 
-      _onetap.addPointer(event);
-      if (isMobile) {
-        _dtap.addPointer(event);
-        _draggingCHandle = false;
-        _draggingStartHandle = false;
-        _draggingEndHandle = false;
+      if (enableFolding) {
+        final foldRange = _getFoldRangeAtLine(clickedLine);
+        if (foldRange != null) {
+          _toggleFold(foldRange);
+          return;
+        }
+      }
 
-        _dtap.onDoubleTap = () {
-          selectWordAtOffset(textOffset);
-          contextMenuOffsetNotifier.value = localPosition;
-        };
+      // Handle gutter clicks for line selection
+      final lineStartOffset = controller.getLineStartOffset(clickedLine);
+      controller.selection = TextSelection.collapsed(offset: lineStartOffset);
+      return;
+    }
 
-                _onetap.onTap = () {
-          if (hoverNotifier.value != null && !isHoveringPopup.value) {
-            hoverNotifier.value = null;
-            hoverContentNotifier.value = null;
-          } else if (_isOffsetOverWord(textOffset)) {
-            final lineChar = _offsetToLineChar(textOffset);
-            hoverNotifier.value = (localPosition, lineChar);
-            onHoverSetByTap?.call();
-          }
+    _onetap.addPointer(event as PointerDownEvent);
+    if (isMobile) {
+      _dtap.addPointer(event);
+      _draggingCHandle = false;
+      _draggingStartHandle = false;
+      _draggingEndHandle = false;
 
-          if (lspActionNotifier.value != null ||
-              lspActionOffsetNotifier.value != null) {
-            lspActionNotifier.value = null;
-            lspActionOffsetNotifier.value = null;
-          }
-        };
+      _dtap.onDoubleTap = () {
+        _selectWordAtOffset(textOffset);
+        contextMenuOffsetNotifier.value = localPosition;
+      };
 
-        if (controller.selection.start != controller.selection.end) {
-          if (_startHandleRect?.contains(localPosition) ?? false) {
-            _draggingStartHandle = true;
-            _selectionActive = selectionActiveNotifier.value = true;
-            _pointerDownPosition = localPosition;
-            _dragStartOffset = controller.selection.start;
-            markNeedsPaint();
-            return;
-          }
-          if (_endHandleRect?.contains(localPosition) ?? false) {
-            _draggingEndHandle = true;
-            _selectionActive = selectionActiveNotifier.value = true;
-            _pointerDownPosition = localPosition;
-            _dragStartOffset = controller.selection.end;
-            markNeedsPaint();
-            return;
-          }
-        } else if (controller.selection.isCollapsed && _normalHandle != null) {
-          final handleRadius = (_lineHeight / 2).clamp(6.0, 12.0);
-          final expandedHandle = _normalHandle!.inflate(handleRadius * 1.5);
-          if (expandedHandle.contains(localPosition)) {
-            _draggingCHandle = true;
-            _selectionActive = selectionActiveNotifier.value = true;
-            _dragStartOffset = textOffset;
-            controller.selection = TextSelection.collapsed(offset: textOffset);
-            _pointerDownPosition = localPosition;
-            return;
-          }
+      _onetap.onTap = () {
+        if (hoverNotifier.value != null && !isHoveringPopup.value) {
+          hoverNotifier.value = null;
+          hoverContentNotifier.value = null;
+        } else if (_isOffsetOverWord(textOffset)) {
+          final lineChar = _offsetToLineChar(textOffset);
+          hoverNotifier.value = (localPosition, lineChar);
+          onHoverSetByTap?.call();
         }
 
-        _dragStartOffset = textOffset;
-        _isDragging = false;
-        _pointerDownPosition = localPosition;
-        _selectionActive = false;
-        selectionActiveNotifier.value = false;
+        if (lspActionNotifier.value != null ||
+            lspActionOffsetNotifier.value != null) {
+          lspActionNotifier.value = null;
+          lspActionOffsetNotifier.value = null;
+        }
+      };
 
-        _selectionTimer?.cancel();
-        _selectionTimer = Timer(const Duration(milliseconds: 500), () {
-          selectWordAtOffset(textOffset);
-        });
-      } else {
-        _dtap.addPointer(event);
-        _dtap.onDoubleTap = () {
-          _selectWordAtOffset(textOffset);
-        };
-
-        _dragStartOffset = textOffset;
-        _onetap.onTap = () {
-          if (suggestionNotifier.value != null) {
-            suggestionNotifier.value = null;
-          }
-          if (signatureNotifier.value != null) {
-            signatureNotifier.value = null;
-          }
-          if (lspActionNotifier.value != null) {
-            lspActionNotifier.value = null;
-            lspActionOffsetNotifier.value = null;
-          }
-        };
-        controller.selection = TextSelection.collapsed(offset: textOffset);
+      if (controller.selection.start != controller.selection.end) {
+        if (_startHandleRect?.contains(localPosition) ?? false) {
+          _draggingStartHandle = true;
+          _selectionActive = selectionActiveNotifier.value = true;
+          _pointerDownPosition = localPosition;
+          _dragStartOffset = controller.selection.start;
+          markNeedsPaint();
+          return;
+        }
+        if (_endHandleRect?.contains(localPosition) ?? false) {
+          _draggingEndHandle = true;
+          _selectionActive = selectionActiveNotifier.value = true;
+          _pointerDownPosition = localPosition;
+          _dragStartOffset = controller.selection.end;
+          markNeedsPaint();
+          return;
+        }
+      } else if (controller.selection.isCollapsed && _normalHandle != null) {
+        final handleRadius = (_lineHeight / 2).clamp(6.0, 12.0);
+        final expandedHandle = _normalHandle!.inflate(handleRadius * 1.5);
+        if (expandedHandle.contains(localPosition)) {
+          _draggingCHandle = true;
+          _selectionActive = selectionActiveNotifier.value = true;
+          _dragStartOffset = textOffset;
+          controller.selection = TextSelection.collapsed(offset: textOffset);
+          _pointerDownPosition = localPosition;
+          return;
+        }
       }
+
+      _dragStartOffset = textOffset;
+      _isDragging = false;
+      _pointerDownPosition = localPosition;
+      _selectionActive = false;
+      selectionActiveNotifier.value = false;
+
+      _selectionTimer?.cancel();
+      _selectionTimer = Timer(const Duration(milliseconds: 500), () {
+        _selectWordAtOffset(textOffset);
+      });
+    } else {
+      _dtap.addPointer(event);
+      _dtap.onDoubleTap = () {
+        _selectWordAtOffset(textOffset);
+      };
+
+      _dragStartOffset = textOffset;
+      _onetap.onTap = () {
+        if (suggestionNotifier.value != null) {
+          suggestionNotifier.value = null;
+        }
+        if (signatureNotifier.value != null) {
+          signatureNotifier.value = null;
+        }
+        if (lspActionNotifier.value != null) {
+          lspActionNotifier.value = null;
+          lspActionOffsetNotifier.value = null;
+        }
+      };
+      controller.selection = TextSelection.collapsed(offset: textOffset);
     }
 
     if (event is PointerMoveEvent && _dragStartOffset != null) {
@@ -11973,7 +11706,7 @@ if (lspActionNotifier.value != null && _actionBulbRects.isNotEmpty) {
 
   void _selectWordAtOffset(int offset) {
     if (isMobile) {
-    _selectionActive = selectionActiveNotifier.value = true;
+      _selectionActive = selectionActiveNotifier.value = true;
     }
 
     final text = controller.text;
@@ -12079,7 +11812,7 @@ if (lspActionNotifier.value != null && _actionBulbRects.isNotEmpty) {
 
   @override
   bool get validForMouseTracker => true;
-
+}
 
 /// Represents a foldable code region in the editor.
 ///
