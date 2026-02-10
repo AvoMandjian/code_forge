@@ -2,34 +2,31 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui;
 
+import 'package:code_forge/code_forge/suggestion_model.dart';
+import 'package:code_forge/code_forge/suggestions/initialize_language_specific_suggestions.dart';
+import 'package:code_forge/code_forge/tag_completion.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:markdown_widget/markdown_widget.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:flutter_html/flutter_html.dart';
+import 'package:jinja_app_widgets_catalog/jinja_app_widgets_catalog.dart';
+// import 'package:markdown_widget/markdown_widget.dart';
 import 'package:re_highlight/languages/dart.dart';
 import 'package:re_highlight/re_highlight.dart';
 import 'package:re_highlight/styles/vs2015.dart';
 import 'package:universal_io/io.dart';
+import 'package:vector_math/vector_math_64.dart' show Vector3;
 
 import '../LSP/lsp.dart';
+import 'code_formatter.dart';
 import 'controller.dart';
 import 'find_controller.dart';
 import 'scroll.dart';
 import 'styling.dart';
 import 'syntax_highlighter.dart';
 import 'undo_redo.dart';
-
-import 'package:re_highlight/re_highlight.dart';
-import 'package:re_highlight/styles/vs2015.dart';
-import 'package:re_highlight/languages/dart.dart';
-import 'package:markdown_widget/markdown_widget.dart';
-import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_colorpicker/flutter_colorpicker.dart';
-import 'package:vector_math/vector_math_64.dart' show Vector3;
 
 const String _wordCharPattern = r'[\w\u0600-\u06FF\u08A0-\u08FF\u0590-\u05FF]';
 
@@ -115,6 +112,29 @@ class CodeForge extends StatefulWidget {
   /// ```
   final TextStyle? ghostTextStyle;
 
+  /// The text style for AI completion ghost text.
+  ///
+  /// This style is applied to the semi-transparent AI suggestion text
+  /// that appears inline as the user types. If not specified, defaults
+  /// to the editor's base text style with reduced opacity.
+  ///
+  /// Example:
+  /// ```dart
+  /// CodeForge(
+  ///   aiCompletionTextStyle: TextStyle(
+  ///     color: Colors.grey.withOpacity(0.5),
+  ///     fontStyle: FontStyle.italic,
+  ///   ),
+  /// )
+  /// ```
+  final TextStyle? aiCompletionTextStyle;
+
+  /// Configuration for Language Server Protocol integration.
+  ///
+  /// Enables advanced features like hover documentation, diagnostics,
+  /// and semantic highlighting.
+  final LspConfig? lspConfig;
+
   /// Padding inside the editor content area.
   final EdgeInsets? innerPadding;
 
@@ -132,6 +152,9 @@ class CodeForge extends StatefulWidget {
 
   /// Styling options for the autocomplete suggestion popup.
   final SuggestionStyle? suggestionStyle;
+
+  /// Styling options for the autocomplete suggestion description popup.
+  final SuggestionStyle? suggestionDescriptionStyle;
 
   /// Styling options for hover documentation popup.
   final HoverDetailsStyle? hoverDetailsStyle;
@@ -222,6 +245,25 @@ class CodeForge extends StatefulWidget {
   )?
   finderBuilder;
 
+  /// Callback function called when Command+S (or Ctrl+S) is pressed.
+  ///
+  /// This callback is invoked when the user presses the save shortcut.
+  /// Typically used to save the current file content.
+  final VoidCallback? saveFile;
+
+  /// Callback function called when Command+Shift+F (or Ctrl+Shift+F) is pressed.
+  ///
+  /// This callback is invoked when the user presses the format shortcut.
+  /// If not provided, automatic formatting will be attempted based on the
+  /// current language (supports JSON, HTML, SQL, Jinja).
+  final String Function(String)? formatCode;
+
+  /// Callback function called when breakpoints are added or removed.
+  ///
+  /// This callback receives a [Set<int>] containing all current breakpoint
+  /// line numbers (1-indexed). Called whenever a breakpoint is toggled.
+  final void Function(Set<int> breakpoints)? onBreakpointsChanged;
+
   /// Creates a [CodeForge] code editor widget.
   const CodeForge({
     super.key,
@@ -230,6 +272,8 @@ class CodeForge extends StatefulWidget {
     this.editorTheme,
     this.language,
     this.ghostTextStyle,
+    this.aiCompletionTextStyle,
+    this.lspConfig,
     this.filePath,
     this.initialText,
     this.focusNode,
@@ -252,10 +296,14 @@ class CodeForge extends StatefulWidget {
     this.selectionStyle,
     this.gutterStyle,
     this.suggestionStyle,
+    this.suggestionDescriptionStyle,
     this.hoverDetailsStyle,
     this.matchHighlightStyle,
     this.finderBuilder,
     this.findController,
+    this.saveFile,
+    this.formatCode,
+    this.onBreakpointsChanged,
   });
 
   @override
@@ -273,6 +321,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
   late final CodeSelectionStyle _selectionStyle;
   late final GutterStyle _gutterStyle;
   late final SuggestionStyle _suggestionStyle;
+  late SuggestionStyle _suggestionDescriptionStyle;
   late final HoverDetailsStyle _hoverDetailsStyle;
   late final ValueNotifier<List<dynamic>?> _suggestionNotifier;
   late final ValueNotifier<(Offset, Map<String, int>)?> _hoverNotifier;
@@ -295,18 +344,18 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
   final _isMobile = Platform.isAndroid || Platform.isIOS;
   final _suggScrollController = ScrollController();
   final _actionScrollController = ScrollController();
-  final Map<String, String> _suggestionDetailsCache = {};
+  // final Map<String, String> _suggestionDetailsCache = {};
   final Map<String, Map<String, dynamic>> _hoverCache = {};
   late bool _readOnly;
   TextInputConnection? _connection;
   StreamSubscription? _lspResponsesSubscription;
   bool _isHovering = false, _isSignatureInvoked = false;
-  bool _isMobileSuggActive = false;
+  // bool _isMobileSuggActive = false;
   List<LspSemanticToken>? _semanticTokens;
-  List<Map<String, dynamic>> _extraText = [];
+  final List<Map<String, dynamic>> _extraText = [];
   int _semanticTokensVersion = 0;
   int _sugSelIndex = 0, _actionSelIndex = 0;
-  String? _selectedSuggestionMd;
+  // String? _selectedSuggestionMd;
   Timer? _hoverTimer;
   bool _hoverSetByTap = false;
   late final VoidCallback _signatureListener;
@@ -325,6 +374,21 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
     _vscrollController = widget.verticalScrollController ?? ScrollController();
     _editorTheme = widget.editorTheme ?? vs2015Theme;
     _language = widget.language ?? langDart;
+    // Sync widget language back to controller if controller doesn't have one
+    if (_controller.currentLanguage == null && widget.language != null) {
+      _controller.currentLanguage = widget.language;
+      // Initialize language-specific suggestions
+      initializeLanguageSpecificSuggestions(
+        currentLanguage: _language,
+        registerCustomSuggestions: _controller.registerCustomSuggestions,
+      );
+    } else if (_controller.currentLanguage != null) {
+      // Initialize suggestions if language is already set
+      initializeLanguageSpecificSuggestions(
+        currentLanguage: _language,
+        registerCustomSuggestions: _controller.registerCustomSuggestions,
+      );
+    }
     _suggestionNotifier = _controller.suggestionsNotifier;
     _diagnosticsNotifier = _controller.diagnosticsNotifier;
     _lspActionNotifier = _controller.codeActionsNotifier;
@@ -337,6 +401,10 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
     _selectionActiveNotifier = ValueNotifier(false);
     _isHoveringPopup = ValueNotifier<bool>(false);
     _controller.userCodeAction = _fetchCodeActionsForCurrentPosition;
+    _controller.saveFileCallback = widget.saveFile;
+    if (widget.onBreakpointsChanged != null) {
+      _controller.onBreakpointsChanged(widget.onBreakpointsChanged!);
+    }
     _selectionStyle = widget.selectionStyle ?? CodeSelectionStyle();
     _undoRedoController = widget.undoController ?? UndoRedoController();
     _filePath = widget.filePath;
@@ -384,6 +452,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
             return hsl.withLightness(newLightness).toColor();
           })(),
           focusColor: ui.Color.fromARGB(108, 2, 66, 129),
+          highlightColor: ui.Color.fromARGB(108, 2, 66, 129),
           hoverColor: Colors.grey.withAlpha(15),
           splashColor: Colors.blueAccent.withAlpha(50),
           selectedBackgroundColor: Color(0xFF094771),
@@ -422,6 +491,31 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
           ),
         );
 
+    _suggestionDescriptionStyle =
+        widget.suggestionDescriptionStyle ??
+        SuggestionStyle(
+          elevation: 6,
+          highlightColor: Colors.blueAccent.withAlpha(50),
+          textStyle: (() {
+            TextStyle style = widget.textStyle ?? TextStyle();
+            if (style.color == null) {
+              style = style.copyWith(color: _editorTheme['root']!.color);
+            }
+            return style;
+          })(),
+          backgroundColor:
+              _editorTheme['root']?.backgroundColor ?? Colors.white,
+          focusColor: Colors.blueAccent.withAlpha(50),
+          hoverColor: Colors.grey.withAlpha(15),
+          splashColor: Colors.blueAccent.withAlpha(50),
+          shape: BeveledRectangleBorder(
+            side: BorderSide(
+              color: _editorTheme['root']!.color ?? Colors.grey[400]!,
+              width: 0.2,
+            ),
+          ),
+        );
+
     _hoverDetailsStyle =
         widget.hoverDetailsStyle ??
         HoverDetailsStyle(
@@ -442,6 +536,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
             return hsl.withLightness(newLightness).toColor();
           })(),
           focusColor: Colors.blueAccent.withAlpha(50),
+          highlightColor: Colors.blueAccent.withAlpha(50),
           hoverColor: Colors.grey.withAlpha(15),
           splashColor: Colors.blueAccent.withAlpha(50),
           textStyle: (() {
@@ -526,7 +621,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
     _controllerListener = () {
       _resetCursorBlink();
 
-      _isMobileSuggActive = _controller.currentlySelectedSuggestion != null;
+      // _isMobileSuggActive = _controller.currentlySelectedSuggestion != null;
 
       if (_readOnly != _controller.readOnly) {
         setState(() {
@@ -667,20 +762,20 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
     }
   }
 
-  String _getSuggestionCacheKey(dynamic item) {
-    if (item is LspCompletion) {
-      final map = item.completionItem;
-      final id = map['id']?.toString() ?? '';
-      final sort = map['sortText']?.toString() ?? '';
-      final source = map['source']?.toString() ?? '';
-      final label = item.label;
-      final importUri = (item.importUri != null && item.importUri!.isNotEmpty)
-          ? item.importUri![0]
-          : '';
-      return 'lsp|$label|$id|$sort|$source|$importUri';
-    }
-    return 'str|${item.toString()}';
-  }
+  // String _getSuggestionCacheKey(dynamic item) {
+  //   if (item is LspCompletion) {
+  //     final map = item.completionItem;
+  //     final id = map['id']?.toString() ?? '';
+  //     final sort = map['sortText']?.toString() ?? '';
+  //     final source = map['source']?.toString() ?? '';
+  //     final label = item.label;
+  //     final importUri = (item.importUri != null && item.importUri!.isNotEmpty)
+  //         ? item.importUri![0]
+  //         : '';
+  //     return 'lsp|$label|$id|$sort|$source|$importUri';
+  //   }
+  //   return 'str|${item.toString()}';
+  // }
 
   Future<void> _fetchCodeActionsForCurrentPosition() async {
     if (_controller.lspConfig == null) return;
@@ -891,6 +986,34 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
     }
 
     _controller.pressEndKey(isShiftPressed: withShift);
+  }
+
+  void handleFormatCode() {
+    final currentText = _controller.text;
+    String? formattedText;
+
+    // Use custom formatter callback if provided
+    if (widget.formatCode != null) {
+      formattedText = widget.formatCode!(currentText);
+    } else {
+      // Auto-format based on language
+      final languageName = _language.name;
+      formattedText = CodeFormatter.formatCode(currentText, languageName);
+    }
+
+    // Apply formatting if successful
+    if (formattedText != null && formattedText != currentText) {
+      final selection = _controller.selection;
+      _controller.text = formattedText;
+
+      // Try to preserve cursor position
+      final newLength = formattedText.length;
+      if (selection.extentOffset <= newLength) {
+        _controller.selection = selection;
+      } else {
+        _controller.selection = TextSelection.collapsed(offset: newLength);
+      }
+    }
   }
 
   Widget _buildContextMenu() {
@@ -1625,6 +1748,13 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                     switch (event.logicalKey) {
                                                       case LogicalKeyboardKey
                                                           .keyF:
+                                                        // Check for format shortcut: Command+Shift+F (or Ctrl+Shift+F)
+                                                        if (isShiftPressed) {
+                                                          handleFormatCode();
+                                                          return KeyEventResult
+                                                              .handled;
+                                                        }
+                                                        // Otherwise, handle as find shortcut
                                                         final isAlt =
                                                             HardwareKeyboard
                                                                 .instance
@@ -1649,6 +1779,15 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                                   .isReplaceMode =
                                                               true;
 
+                                                          return KeyEventResult
+                                                              .handled;
+                                                        }
+                                                        break;
+                                                      case LogicalKeyboardKey
+                                                          .keyS:
+                                                        if (widget.saveFile !=
+                                                            null) {
+                                                          widget.saveFile!();
                                                           return KeyEventResult
                                                               .handled;
                                                         }
@@ -2086,6 +2225,8 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                     _suggestionNotifier,
                                                 ghostTextStyle:
                                                     widget.ghostTextStyle,
+                                                aiCompletionTextStyle: widget
+                                                    .aiCompletionTextStyle,
                                                 matchHighlightStyle:
                                                     widget.matchHighlightStyle,
                                                 lspActionNotifier:
@@ -2118,754 +2259,1090 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                   _buildContextMenu(),
                   ValueListenableBuilder(
                     valueListenable: _offsetNotifier,
-                    builder: (_, offset, __) {
+                    builder: (context, offset, child) {
+                      if (offset.dy < 0 || offset.dx < 0)
+                        return SizedBox.shrink();
                       return ValueListenableBuilder(
-                        valueListenable: _lspSignatureNotifier,
-                        builder: (_, signature, __) {
-                          if (signature == null ||
-                              signature.activeParameter < 0 ||
-                              signature.parameters.isEmpty) {
+                        valueListenable: _suggestionNotifier,
+                        builder: (_, sugg, child) {
+                          if (_aiNotifier.value != null)
+                            return SizedBox.shrink();
+                          if (sugg == null) {
+                            _sugSelIndex = 0;
                             return SizedBox.shrink();
                           }
-                          final sigScrollCtrl = ScrollController();
+                          // Get the selected suggestion to check for description
+                          final selectedSuggestion = _sugSelIndex < sugg.length
+                              ? sugg[_sugSelIndex]
+                              : null;
+                          final hasDescription =
+                              selectedSuggestion is SuggestionModel &&
+                              selectedSuggestion.description != null &&
+                              selectedSuggestion.description!.isNotEmpty;
 
-                          final desiredWidth = screenWidth < 700
-                              ? screenWidth * 0.63
-                              : 420.0;
-                          final maxBoxHeight = 400.0;
-                          final fontSize = widget.textStyle?.fontSize ?? 14;
-
-                          double adjustedLeft = offset.dx;
-                          if (adjustedLeft + desiredWidth > screenWidth) {
-                            adjustedLeft = screenWidth - desiredWidth;
-                          }
-                          if (adjustedLeft < 0) {
-                            adjustedLeft = 0;
-                          }
-
-                          final spaceBelow =
-                              editorHeight - offset.dy - fontSize - 10;
-                          final spaceAbove = offset.dy - 10;
-                          final shouldPositionAbove =
-                              maxBoxHeight > spaceBelow &&
-                              spaceAbove > maxBoxHeight;
-
-                          double? adjustedTop;
-                          double? adjustedBottom;
-
-                          if (shouldPositionAbove) {
-                            adjustedBottom = editorHeight - offset.dy + 10;
-                          } else {
-                            adjustedTop = offset.dy + fontSize + 10;
-                          }
-
-                          return Positioned(
-                            width: desiredWidth,
-                            top: adjustedTop,
-                            bottom: adjustedBottom,
-                            left: adjustedLeft,
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(
-                                maxWidth: desiredWidth,
-                                maxHeight: maxBoxHeight,
-                                minWidth: 70,
-                              ),
-                              child: Card(
-                                color: _hoverDetailsStyle.backgroundColor,
-                                shape: _hoverDetailsStyle.shape,
-                                child: RawScrollbar(
-                                  interactive: true,
-                                  controller: sigScrollCtrl,
-                                  thumbVisibility: true,
-                                  thumbColor: _editorTheme['root']!.color!
-                                      .withAlpha(100),
-                                  child: SingleChildScrollView(
-                                    controller: sigScrollCtrl,
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            top: 7,
-                                            left: 6.5,
-                                          ),
-                                          child: RichText(
-                                            text: (() {
-                                              final label = signature.label;
-                                              final activeParamIndex =
-                                                  signature.activeParameter;
-
-                                              if (activeParamIndex < 0 ||
-                                                  activeParamIndex >=
-                                                      signature
-                                                          .parameters
-                                                          .length) {
-                                                return TextSpan(text: label);
-                                              }
-
-                                              final paramLabel = signature
-                                                  .parameters[activeParamIndex]['label'];
-
-                                              if (paramLabel is List &&
-                                                  paramLabel.length >= 2) {
-                                                final range = paramLabel
-                                                    .cast<int>();
-                                                final firstPart = label
-                                                    .substring(0, range[0]);
-                                                final highlightPart = label
-                                                    .substring(
-                                                      range[0],
-                                                      range[1],
-                                                    );
-                                                final finalPart = label
-                                                    .substring(range[1]);
-
-                                                return TextSpan(
-                                                  style: TextStyle(
-                                                    fontSize:
-                                                        (widget
-                                                                .textStyle
-                                                                ?.fontSize ??
-                                                            15) +
-                                                        1.75,
-                                                    color: _editorTheme['root']
-                                                        ?.color,
-                                                  ),
-                                                  children: [
-                                                    TextSpan(text: firstPart),
-                                                    TextSpan(
-                                                      text: highlightPart,
-                                                      style: TextStyle(
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        color: Colors.blue,
-                                                      ),
+                          final descriptionWidgets = <Widget>[];
+                          if (hasDescription) {
+                            final suggestion = selectedSuggestion;
+                            descriptionWidgets.add(
+                              Positioned(
+                                top:
+                                    offset.dy +
+                                    (widget.textStyle?.fontSize ?? 14) +
+                                    10,
+                                left:
+                                    offset.dx +
+                                    (screenWidth < 700
+                                        ? screenWidth * 0.63
+                                        : screenWidth * 0.3) +
+                                    8,
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    maxHeight: 400,
+                                    maxWidth: screenWidth < 700
+                                        ? screenWidth * 0.3
+                                        : 400,
+                                    minWidth: 200,
+                                  ),
+                                  child: Card(
+                                    shape: _suggestionDescriptionStyle.shape,
+                                    elevation:
+                                        _suggestionDescriptionStyle.elevation,
+                                    color: _suggestionDescriptionStyle
+                                        .backgroundColor,
+                                    margin: EdgeInsets.zero,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(12.0),
+                                      child: SingleChildScrollView(
+                                        child:
+                                            suggestion.jinjaHtmlWidget != null
+                                            ? JinjaHtmlWidget(
+                                                htmlContent: suggestion
+                                                    .jinjaHtmlWidget
+                                                    ?.htmlContent
+                                                    ?.replaceAll(
+                                                      '{{description}}',
+                                                      suggestion.description ??
+                                                          '',
+                                                    )
+                                                    .replaceAll(
+                                                      '{{ description }}',
+                                                      suggestion.description ??
+                                                          '',
                                                     ),
-                                                    TextSpan(text: finalPart),
-                                                  ],
-                                                );
-                                              } else if (paramLabel is String) {
-                                                final paramText = paramLabel;
-                                                final paramIndex = label
-                                                    .indexOf(paramText);
-
-                                                if (paramIndex >= 0) {
-                                                  final firstPart = label
-                                                      .substring(0, paramIndex);
-                                                  final highlightPart =
-                                                      paramText;
-                                                  final finalPart = label
-                                                      .substring(
-                                                        paramIndex +
-                                                            paramText.length,
-                                                      );
-
-                                                  return TextSpan(
-                                                    style: TextStyle(
-                                                      fontSize:
-                                                          (widget
-                                                                  .textStyle
-                                                                  ?.fontSize ??
-                                                              15) +
-                                                          1.75,
-                                                      color:
-                                                          _editorTheme['root']
-                                                              ?.color,
-                                                    ),
-                                                    children: [
-                                                      TextSpan(text: firstPart),
-                                                      TextSpan(
-                                                        text: highlightPart,
-                                                        style: TextStyle(
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          color: Colors.blue,
-                                                        ),
-                                                      ),
-                                                      TextSpan(text: finalPart),
-                                                    ],
-                                                  );
-                                                }
-                                              }
-
-                                              return TextSpan(
-                                                text: label,
-                                                style: TextStyle(
-                                                  fontSize:
-                                                      (widget
+                                              ).fromJson(
+                                                suggestion.jinjaHtmlWidget!
+                                                    .toJson(),
+                                              )
+                                            : Html(
+                                                data: suggestion.description!,
+                                                style: {
+                                                  "p": Style(
+                                                    fontSize: FontSize(
+                                                      _suggestionDescriptionStyle
                                                               .textStyle
-                                                              ?.fontSize ??
-                                                          15) +
-                                                      1.75,
-                                                  color: _editorTheme['root']
-                                                      ?.color,
-                                                ),
-                                              );
-                                            })(),
-                                          ),
-                                        ),
-                                        Divider(
-                                          color:
-                                              signature.documentation.isNotEmpty
-                                              ? _editorTheme['root']?.color
-                                              : Colors.transparent,
-                                          thickness: 0.5,
-                                        ),
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            left: 6.5,
-                                          ),
-                                          child: MarkdownBlock(
-                                            data: signature.documentation,
-                                            config: MarkdownConfig.darkConfig.copy(
-                                              configs: [
-                                                PConfig(
-                                                  textStyle: _hoverDetailsStyle
-                                                      .textStyle,
-                                                ),
-                                                PreConfig(
-                                                  language:
-                                                      _controller
-                                                          .lspConfig
-                                                          ?.languageId
-                                                          .toLowerCase() ??
-                                                      'dart',
-                                                  theme: _editorTheme,
-                                                  textStyle: TextStyle(
-                                                    fontSize: _hoverDetailsStyle
-                                                        .textStyle
-                                                        .fontSize,
+                                                              .fontSize ??
+                                                          14,
+                                                    ),
+                                                    color:
+                                                        _suggestionDescriptionStyle
+                                                            .textStyle
+                                                            .color,
+                                                    fontWeight:
+                                                        _suggestionDescriptionStyle
+                                                            .textStyle
+                                                            .fontWeight,
                                                   ),
-                                                  styleNotMatched: TextStyle(
-                                                    color: _editorTheme['root']!
-                                                        .color,
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    color: _editorTheme['root']!
-                                                        .backgroundColor!,
-                                                    borderRadius:
-                                                        BorderRadius.zero,
-                                                    border: Border.all(
-                                                      width: 0.2,
-                                                      color:
-                                                          _editorTheme['root']!
-                                                              .color ??
-                                                          Colors.grey,
+                                                  "pre": Style(
+                                                    fontSize: FontSize(
+                                                      _suggestionDescriptionStyle
+                                                              .textStyle
+                                                              .fontSize ??
+                                                          14,
+                                                    ),
+                                                    color:
+                                                        _suggestionDescriptionStyle
+                                                            .textStyle
+                                                            .color,
+                                                    backgroundColor:
+                                                        _editorTheme['root']!
+                                                            .backgroundColor,
+                                                    padding: HtmlPaddings.all(
+                                                      8,
                                                     ),
                                                   ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ],
+                                                  "code": Style(
+                                                    fontSize: FontSize(
+                                                      _suggestionDescriptionStyle
+                                                              .textStyle
+                                                              .fontSize ??
+                                                          14,
+                                                    ),
+                                                    color:
+                                                        _suggestionDescriptionStyle
+                                                            .textStyle
+                                                            .color,
+                                                  ),
+                                                },
+                                              ),
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                  ValueListenableBuilder(
-                    valueListenable: _offsetNotifier,
-                    builder: (context, offset, child) {
-                      if (offset.dy < 0 ||
-                          offset.dx < 0 ||
-                          !widget.enableSuggestions) {
-                        return SizedBox.shrink();
-                      }
-                      return ValueListenableBuilder(
-                        valueListenable: _suggestionNotifier,
-                        builder: (_, sugg, child) {
-                          if (_aiNotifier.value != null) {
-                            return SizedBox.shrink();
-                          }
-                          if (sugg == null || sugg.isEmpty) {
-                            _sugSelIndex = 0;
-                            _controller.currentlySelectedSuggestion = null;
-                            return SizedBox.shrink();
-                          }
-                          final completionScrlCtrl = ScrollController();
-                          final desiredWidth = screenWidth < 700
-                              ? screenWidth * 0.63
-                              : screenWidth * 0.3;
-                          final suggestionWidth = min(desiredWidth, 400.0);
-                          final itemExtent =
-                              _suggestionStyle.itemHeight ?? 24.0;
-                          final estimatedHeight = min(
-                            sugg.length * itemExtent,
-                            400.0,
-                          );
-                          double adjustedLeft = offset.dx;
-                          if (adjustedLeft + suggestionWidth > screenWidth) {
-                            adjustedLeft = screenWidth - suggestionWidth;
-                          }
-                          if (adjustedLeft < 0) {
-                            adjustedLeft = 0;
-                          }
-                          final fontSize = widget.textStyle?.fontSize ?? 14;
-                          final spaceBelow =
-                              editorHeight - offset.dy - fontSize - 10;
-                          final spaceAbove = offset.dy - 10;
-                          final shouldPositionAbove =
-                              estimatedHeight > spaceBelow &&
-                              spaceAbove > estimatedHeight;
-
-                          double? adjustedTop;
-                          double? adjustedBottom;
-
-                          if (shouldPositionAbove) {
-                            adjustedBottom = editorHeight - offset.dy + 10;
-                          } else {
-                            adjustedTop = offset.dy + fontSize + 10;
+                            );
                           }
 
-                          return ValueListenableBuilder(
-                            valueListenable:
-                                _controller.selectedSuggestionNotifier,
-                            builder: (context, selected, child) {
-                              return Stack(
-                                children: [
-                                  Positioned(
-                                    width: suggestionWidth,
-                                    top: adjustedTop,
-                                    bottom: adjustedBottom,
-                                    left: adjustedLeft,
-                                    child: ConstrainedBox(
-                                      constraints: BoxConstraints(
-                                        maxHeight: 400,
-                                        maxWidth: 400,
-                                        minWidth: 70,
-                                      ),
-                                      child: Card(
-                                        shape: _suggestionStyle.shape,
-                                        elevation: _suggestionStyle.elevation,
-                                        color: _suggestionStyle.backgroundColor,
-                                        margin: EdgeInsets.zero,
-                                        child: RawScrollbar(
-                                          thumbVisibility: true,
-                                          thumbColor: _editorTheme['root']!
-                                              .color!
-                                              .withAlpha(80),
-                                          interactive: true,
-                                          controller: _suggScrollController,
-                                          child: ListView.builder(
-                                            itemExtent:
-                                                _suggestionStyle.itemHeight ??
-                                                24.0,
-                                            controller: _suggScrollController,
-                                            padding: EdgeInsets.zero,
-                                            shrinkWrap: true,
-                                            itemCount: sugg.length,
-                                            itemBuilder: (_, indx) {
-                                              final item = sugg[indx];
-                                              if ((item is LspCompletion) &&
-                                                  (indx == _sugSelIndex ||
-                                                      (_isMobile &&
-                                                          _isMobileSuggActive))) {
-                                                final key =
-                                                    _getSuggestionCacheKey(
-                                                      item,
-                                                    );
-                                                if (!_suggestionDetailsCache
-                                                        .containsKey(key) &&
-                                                    _controller.lspConfig !=
-                                                        null) {
-                                                  (() async {
-                                                    try {
-                                                      final data = await _controller
-                                                          .lspConfig!
-                                                          .resolveCompletionItem(
-                                                            item.completionItem,
+                          return Stack(
+                            children: [
+                              // Suggestion list
+                              Positioned(
+                                width: screenWidth < 700
+                                    ? screenWidth * 0.63
+                                    : screenWidth * 0.3,
+                                top:
+                                    offset.dy +
+                                    (widget.textStyle?.fontSize ?? 14) +
+                                    10,
+                                left: offset.dx,
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    maxHeight: 400,
+                                    maxWidth: 400,
+                                    minWidth: 70,
+                                  ),
+                                  child: Card(
+                                    shape: _suggestionStyle.shape,
+                                    elevation: _suggestionStyle.elevation,
+                                    color: _suggestionStyle.backgroundColor,
+                                    margin: EdgeInsets.zero,
+                                    child: RawScrollbar(
+                                      thumbVisibility: true,
+                                      thumbColor: _editorTheme['root']!.color!
+                                          .withAlpha(80),
+                                      controller: _suggScrollController,
+                                      child: ListView.builder(
+                                        itemExtent:
+                                            (widget.textStyle?.fontSize ?? 14) +
+                                            6.5,
+                                        controller: _suggScrollController,
+                                        padding: EdgeInsets.only(right: 5),
+                                        shrinkWrap: true,
+                                        itemCount: sugg.length,
+                                        itemBuilder: (_, indx) {
+                                          final item = sugg[indx];
+                                          return Container(
+                                            color: _sugSelIndex == indx
+                                                ? _suggestionStyle
+                                                      .highlightColor
+                                                : Colors.transparent,
+                                            child: InkWell(
+                                              canRequestFocus: false,
+                                              hoverColor:
+                                                  _suggestionStyle.hoverColor,
+                                              focusColor:
+                                                  _suggestionStyle.focusColor,
+                                              highlightColor: _suggestionStyle
+                                                  .highlightColor,
+                                              splashColor:
+                                                  _suggestionStyle.splashColor,
+                                              onTap: () {
+                                                if (mounted) {
+                                                  setState(() {
+                                                    _sugSelIndex = indx;
+
+                                                    // Get text and cursor position first
+                                                    final text =
+                                                        _controller.text;
+                                                    final cursorPos =
+                                                        _controller
+                                                            .selection
+                                                            .extentOffset;
+
+                                                    // Extract text to insert based on item type
+                                                    final String textToInsert;
+                                                    if (item is LspCompletion) {
+                                                      textToInsert = item.label;
+                                                    } else if (item
+                                                        is SuggestionModel) {
+                                                      // Custom suggestions with SuggestionModel
+                                                      // Check if trigger pattern exists before cursor and replace it entirely
+                                                      // Also handle cases where cursor is in the middle of the trigger pattern
+                                                      final textBeforeCursor =
+                                                          text.substring(
+                                                            0,
+                                                            cursorPos,
                                                           );
-                                                      final mdText =
-                                                          "${data['detail'] ?? ''}\n${(() {
-                                                            final doc = data['documentation'];
-                                                            if (doc == null) {
-                                                              return '';
-                                                            }
+                                                      final textAfterCursor =
+                                                          text.substring(
+                                                            cursorPos,
+                                                          );
+                                                      final triggerPattern =
+                                                          item.triggeredAt;
 
-                                                            if (doc is Map<String, dynamic> && doc.containsKey('value')) {
-                                                              return doc['value'];
-                                                            }
-
-                                                            return doc;
-                                                          })()}";
-                                                      if (!mounted) return;
-                                                      setState(() {
-                                                        final edits =
-                                                            data['additionalTextEdits'];
-                                                        if (edits is List) {
-                                                          try {
-                                                            _extraText = edits
-                                                                .map(
-                                                                  (e) =>
-                                                                      Map<
-                                                                        String,
-                                                                        dynamic
-                                                                      >.from(
-                                                                        e as Map,
-                                                                      ),
-                                                                )
-                                                                .toList();
-                                                          } catch (_) {
-                                                            _extraText = edits
-                                                                .cast<
-                                                                  Map<
-                                                                    String,
-                                                                    dynamic
-                                                                  >
-                                                                >();
-                                                          }
-                                                        } else {
-                                                          _extraText = [];
-                                                        }
-                                                        _suggestionDetailsCache[key] =
-                                                            mdText;
-                                                        _selectedSuggestionMd =
-                                                            mdText;
-                                                      });
-                                                    } catch (e) {
-                                                      debugPrint(
-                                                        "Completion Resolve failed: ${e.toString()}",
-                                                      );
-                                                    }
-                                                  })();
-                                                } else if (_suggestionDetailsCache
-                                                    .containsKey(key)) {
-                                                  final cached =
-                                                      _suggestionDetailsCache[key];
-                                                  if (_selectedSuggestionMd !=
-                                                      cached) {
-                                                    WidgetsBinding.instance
-                                                        .addPostFrameCallback((
-                                                          _,
-                                                        ) {
-                                                          if (!mounted) return;
-                                                          setState(() {
-                                                            _selectedSuggestionMd =
-                                                                cached;
-                                                          });
-                                                        });
-                                                  }
-                                                }
-                                              } else if ((item
-                                                      is! LspCompletion) &&
-                                                  (indx == _sugSelIndex ||
-                                                      (_isMobile &&
-                                                          _isMobileSuggActive))) {
-                                                if (_selectedSuggestionMd !=
-                                                    null) {
-                                                  WidgetsBinding.instance
-                                                      .addPostFrameCallback((
-                                                        _,
-                                                      ) {
-                                                        if (!mounted) return;
-                                                        setState(() {
-                                                          _selectedSuggestionMd =
+                                                      if (triggerPattern
+                                                          .isNotEmpty) {
+                                                        // Check if trigger pattern exists entirely before cursor
+                                                        if (textBeforeCursor
+                                                            .endsWith(
+                                                              triggerPattern,
+                                                            )) {
+                                                          // Trigger pattern found - replace the entire trigger pattern with replacedOnClick
+                                                          final triggerStartPos =
+                                                              cursorPos -
+                                                              triggerPattern
+                                                                  .length;
+                                                          _controller.replaceRange(
+                                                            triggerStartPos,
+                                                            cursorPos,
+                                                            item.replacedOnClick,
+                                                          );
+                                                          _suggestionNotifier
+                                                                  .value =
                                                               null;
-                                                        });
-                                                      });
-                                                }
-                                              }
-
-                                              return Container(
-                                                height:
-                                                    _suggestionStyle.itemHeight,
-                                                padding: EdgeInsets.symmetric(
-                                                  horizontal: 8,
-                                                  vertical: 2,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color:
-                                                      ((!_isMobile &&
-                                                              (indx ==
-                                                                  _sugSelIndex)) ||
-                                                          _controller
-                                                                  .currentlySelectedSuggestion ==
-                                                              indx)
-                                                      ? (_suggestionStyle
-                                                                .selectedBackgroundColor ??
-                                                            _suggestionStyle
-                                                                .focusColor)
-                                                      : Colors.transparent,
-                                                  borderRadius:
-                                                      BorderRadius.circular(3),
-                                                ),
-                                                child: InkWell(
-                                                  canRequestFocus: false,
-                                                  hoverColor: _suggestionStyle
-                                                      .hoverColor,
-                                                  focusColor: _suggestionStyle
-                                                      .focusColor,
-                                                  splashColor: _suggestionStyle
-                                                      .splashColor,
-                                                  borderRadius:
-                                                      BorderRadius.circular(3),
-                                                  onTap: () {
-                                                    if (mounted) {
-                                                      setState(() {
-                                                        if (_isMobileSuggActive) {
-                                                          _controller
-                                                                  .currentlySelectedSuggestion =
-                                                              indx;
-                                                        } else {
-                                                          _sugSelIndex = indx;
+                                                          return;
                                                         }
-                                                        final text =
-                                                            item
-                                                                is LspCompletion
-                                                            ? item.label
-                                                            : item as String;
+
+                                                        // Check if cursor is in the middle of the trigger pattern
+                                                        // e.g., trigger is "{{}}" and we have "{{" before cursor and "}}" after cursor
+                                                        for (
+                                                          int i = 1;
+                                                          i <
+                                                              triggerPattern
+                                                                  .length;
+                                                          i++
+                                                        ) {
+                                                          final triggerPrefix =
+                                                              triggerPattern
+                                                                  .substring(
+                                                                    0,
+                                                                    i,
+                                                                  );
+                                                          final triggerSuffix =
+                                                              triggerPattern
+                                                                  .substring(i);
+                                                          if (textBeforeCursor
+                                                                  .endsWith(
+                                                                    triggerPrefix,
+                                                                  ) &&
+                                                              textAfterCursor
+                                                                  .startsWith(
+                                                                    triggerSuffix,
+                                                                  )) {
+                                                            // Cursor is in the middle of the trigger pattern - replace entire pattern
+                                                            final triggerStartPos =
+                                                                cursorPos -
+                                                                triggerPrefix
+                                                                    .length;
+                                                            final triggerEndPos =
+                                                                cursorPos +
+                                                                triggerSuffix
+                                                                    .length;
+                                                            _controller.replaceRange(
+                                                              triggerStartPos,
+                                                              triggerEndPos,
+                                                              item.replacedOnClick,
+                                                            );
+                                                            _suggestionNotifier
+                                                                    .value =
+                                                                null;
+                                                            return;
+                                                          }
+                                                        }
+                                                      }
+
+                                                      // No trigger pattern found - use normal insertion
+                                                      textToInsert =
+                                                          item.replacedOnClick;
+                                                    } else if (item is Map) {
+                                                      // Legacy map format support
+                                                      textToInsert =
+                                                          item['replaced_on_click'] ??
+                                                          item['insertText'] ??
+                                                          item['label'] ??
+                                                          '';
+                                                    } else {
+                                                      textToInsert =
+                                                          item as String;
+                                                    }
+
+                                                    final tagName =
+                                                        textToInsert;
+
+                                                    // Check if this is a tag completion
+                                                    final language = _controller
+                                                        .currentLanguage
+                                                        ?.name;
+                                                    if (TagCompletion.supportsTagCompletion(
+                                                          language,
+                                                          text: text,
+                                                          cursorPosition:
+                                                              cursorPos,
+                                                        ) &&
+                                                        widget.lspConfig ==
+                                                            null) {
+                                                      final tagContext =
+                                                          TagCompletion.analyzeTagContext(
+                                                            text,
+                                                            cursorPos,
+                                                          );
+
+                                                      if (tagContext.isInTag) {
+                                                        // Get the template for this tag
+                                                        final insertText =
+                                                            TagCompletion.getInsertTextForTag(
+                                                              tagName,
+                                                              tagContext
+                                                                  .isClosingTag,
+                                                              tagContext,
+                                                            );
+
+                                                        // Calculate what to replace
+                                                        // For HTML: Replace from after '<' (or '</') to cursor
+                                                        // For Jinja: Replace from after '{%' to cursor (or up to '%}' if tag is already closed)
+                                                        final replaceStart =
+                                                            tagContext
+                                                                .isJinjaTag
+                                                            ? (tagContext
+                                                                      .isClosingTag
+                                                                  ? tagContext
+                                                                            .tagStart +
+                                                                        5 // '{% end'
+                                                                  : tagContext
+                                                                            .tagStart +
+                                                                        2) // '{%'
+                                                            : (tagContext
+                                                                      .isClosingTag
+                                                                  ? tagContext
+                                                                            .tagStart +
+                                                                        2 // '</'
+                                                                  : tagContext
+                                                                            .tagStart +
+                                                                        1); // '<'
+
+                                                        // For Jinja tags, if tagEnd is found (meaning '%}' exists),
+                                                        // replace up to tagEnd+1 (to include the '}') to avoid duplicating '%}'
+                                                        int replaceEnd =
+                                                            cursorPos;
+                                                        if (tagContext
+                                                                .isJinjaTag &&
+                                                            tagContext.tagEnd !=
+                                                                null) {
+                                                          // tagEnd points to the '}' character, so include it
+                                                          replaceEnd =
+                                                              tagContext
+                                                                  .tagEnd! +
+                                                              1;
+                                                        }
+
+                                                        // Replace the prefix with the template
+                                                        _controller
+                                                            .replaceRange(
+                                                              replaceStart,
+                                                              replaceEnd,
+                                                              insertText,
+                                                            );
+
+                                                        // Position cursor appropriately
+                                                        if (!tagContext
+                                                            .isClosingTag) {
+                                                          if (tagContext
+                                                              .isJinjaTag) {
+                                                            // For Jinja tags, place cursor after '%}' if template has it
+                                                            if (insertText
+                                                                .contains(
+                                                                  '%}',
+                                                                )) {
+                                                              final tagEndIndex =
+                                                                  insertText
+                                                                      .indexOf(
+                                                                        '%}',
+                                                                      );
+                                                              final newCursorPos =
+                                                                  replaceStart +
+                                                                  tagEndIndex +
+                                                                  2;
+                                                              _controller
+                                                                  .selection = TextSelection.collapsed(
+                                                                offset: newCursorPos
+                                                                    .clamp(
+                                                                      0,
+                                                                      _controller
+                                                                          .length,
+                                                                    ),
+                                                              );
+                                                            }
+                                                          } else {
+                                                            // For HTML tags, place cursor after '>'
+                                                            if (insertText
+                                                                .contains(
+                                                                  '>',
+                                                                )) {
+                                                              final tagEndIndex =
+                                                                  insertText
+                                                                      .indexOf(
+                                                                        '>',
+                                                                      );
+                                                              final newCursorPos =
+                                                                  replaceStart +
+                                                                  tagEndIndex +
+                                                                  1;
+                                                              _controller
+                                                                  .selection = TextSelection.collapsed(
+                                                                offset: newCursorPos
+                                                                    .clamp(
+                                                                      0,
+                                                                      _controller
+                                                                          .length,
+                                                                    ),
+                                                              );
+                                                            }
+                                                          }
+                                                        }
+                                                      } else {
+                                                        // Fallback to normal insertion
                                                         _controller
                                                             .insertAtCurrentCursor(
-                                                              text,
+                                                              tagName,
                                                               replaceTypedChar:
                                                                   true,
                                                             );
-                                                        if (_extraText
-                                                            .isNotEmpty) {
-                                                          _controller
-                                                              .applyWorkspaceEdit(
-                                                                _extraText,
-                                                              );
-                                                        }
-                                                        _suggestionNotifier
-                                                                .value =
-                                                            null;
-                                                        _isSignatureInvoked =
-                                                            true;
-                                                        _controller
-                                                            .callSignatureHelp();
-                                                      });
+                                                      }
+                                                    } else {
+                                                      // Normal suggestion insertion
+                                                      _controller
+                                                          .insertAtCurrentCursor(
+                                                            tagName,
+                                                            replaceTypedChar:
+                                                                true,
+                                                          );
                                                     }
-                                                  },
-                                                  child: Row(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .center,
-                                                    children: [
-                                                      if (item
-                                                          is LspCompletion) ...[
-                                                        item.icon,
-                                                        const SizedBox(
-                                                          width: 8,
+                                                    _suggestionNotifier.value =
+                                                        null;
+                                                  });
+                                                }
+                                              },
+                                              child: Row(
+                                                children: [
+                                                  if (item
+                                                      is LspCompletion) ...[
+                                                    item.icon,
+                                                    const SizedBox(width: 10),
+                                                    Expanded(
+                                                      child: Text(
+                                                        item.label,
+                                                        style: _suggestionStyle
+                                                            .textStyle,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                    const Expanded(
+                                                      child: SizedBox(),
+                                                    ),
+                                                    if (item.importUri?[0] !=
+                                                        null)
+                                                      Expanded(
+                                                        child: Text(
+                                                          item.importUri![0],
+                                                          style: _suggestionStyle
+                                                              .textStyle
+                                                              .copyWith(
+                                                                color: _suggestionStyle
+                                                                    .textStyle
+                                                                    .color
+                                                                    ?.withAlpha(
+                                                                      150,
+                                                                    ),
+                                                              ),
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
                                                         ),
-                                                        Expanded(
-                                                          flex: 3,
-                                                          child: Text(
-                                                            item.label,
+                                                      ),
+                                                  ],
+                                                  if (item is String)
+                                                    Expanded(
+                                                      child: Text(
+                                                        item,
+                                                        style: _suggestionStyle
+                                                            .textStyle,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                  if (item
+                                                      is SuggestionModel) ...[
+                                                    Expanded(
+                                                      child: Text(
+                                                        item.label,
+                                                        style: _suggestionStyle
+                                                            .textStyle,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                  if (item is Map) ...[
+                                                    Expanded(
+                                                      child: Column(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        mainAxisSize:
+                                                            MainAxisSize.min,
+                                                        children: [
+                                                          Text(
+                                                            item['label'] ?? '',
                                                             style:
-                                                                _suggestionStyle.labelTextStyle?.copyWith(
-                                                                  color:
-                                                                      ((!_isMobile &&
-                                                                              (indx ==
-                                                                                  _sugSelIndex)) ||
-                                                                          _controller.currentlySelectedSuggestion ==
-                                                                              indx)
-                                                                      ? Colors
-                                                                            .white
-                                                                      : _suggestionStyle
-                                                                            .labelTextStyle
-                                                                            ?.color,
-                                                                ) ??
-                                                                _suggestionStyle.textStyle.copyWith(
-                                                                  color:
-                                                                      ((!_isMobile &&
-                                                                              (indx ==
-                                                                                  _sugSelIndex)) ||
-                                                                          _controller.currentlySelectedSuggestion ==
-                                                                              indx)
-                                                                      ? Colors
-                                                                            .white
-                                                                      : _suggestionStyle
-                                                                            .textStyle
-                                                                            .color,
-                                                                ),
-                                                            overflow:
-                                                                TextOverflow
-                                                                    .ellipsis,
-                                                          ),
-                                                        ),
-                                                        if (item.importUri?[0] !=
-                                                            null) ...[
-                                                          const SizedBox(
-                                                            width: 8,
-                                                          ),
-                                                          Expanded(
-                                                            flex: 2,
-                                                            child: Text(
-                                                              item.importUri![0],
-                                                              style:
-                                                                  _suggestionStyle
-                                                                      .detailTextStyle ??
-                                                                  _suggestionStyle
-                                                                      .textStyle
-                                                                      .copyWith(
-                                                                        color: _suggestionStyle
-                                                                            .textStyle
-                                                                            .color
-                                                                            ?.withAlpha(
-                                                                              150,
-                                                                            ),
-                                                                      ),
-                                                              overflow:
-                                                                  TextOverflow
-                                                                      .ellipsis,
-                                                              textAlign:
-                                                                  TextAlign
-                                                                      .right,
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ],
-                                                      if (item is String)
-                                                        Expanded(
-                                                          child: Text(
-                                                            item,
-                                                            style:
-                                                                _suggestionStyle
-                                                                    .labelTextStyle ??
                                                                 _suggestionStyle
                                                                     .textStyle,
                                                             overflow:
                                                                 TextOverflow
                                                                     .ellipsis,
                                                           ),
-                                                        ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              );
-                                            },
-                                          ),
-                                        ),
+                                                          if (item['description'] !=
+                                                                  null &&
+                                                              item['description']
+                                                                  .toString()
+                                                                  .isNotEmpty)
+                                                            Text(
+                                                              item['description'],
+                                                              style: _suggestionStyle.textStyle.copyWith(
+                                                                color: _suggestionStyle
+                                                                    .textStyle
+                                                                    .color
+                                                                    ?.withAlpha(
+                                                                      150,
+                                                                    ),
+                                                                fontSize:
+                                                                    (_suggestionStyle
+                                                                            .textStyle
+                                                                            .fontSize ??
+                                                                        14) *
+                                                                    0.85,
+                                                              ),
+                                                              overflow:
+                                                                  TextOverflow
+                                                                      .ellipsis,
+                                                              maxLines: 2,
+                                                            ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                            ),
+                                          );
+                                        },
                                       ),
                                     ),
                                   ),
-                                  if (_selectedSuggestionMd != null &&
-                                      _lspSignatureNotifier.value == null)
-                                    Positioned(
-                                      width: screenWidth < 700
-                                          ? screenWidth * 0.63
-                                          : null,
-                                      top:
-                                          offset.dy +
-                                          (widget.textStyle?.fontSize ?? 14) +
-                                          10 +
-                                          (screenWidth < 700
-                                              ? (offset.dy <
-                                                            (screenWidth / 2) &&
-                                                        400 < screenHeight)
-                                                    ? (((widget.textStyle?.fontSize ??
-                                                                      14) +
-                                                                  6.5) *
-                                                              (_suggestionNotifier
-                                                                      .value
-                                                                      ?.length ??
-                                                                  0))
-                                                          .clamp(0, 400)
-                                                    : -100
-                                              : 0),
-                                      left: screenWidth < 700
-                                          ? offset.dx
-                                          : ((adjustedLeft +
-                                                        suggestionWidth +
-                                                        420) >
-                                                    screenWidth
-                                                ? adjustedLeft - 420 - 10
-                                                : adjustedLeft +
-                                                      suggestionWidth),
-                                      child: ConstrainedBox(
-                                        constraints: BoxConstraints(
-                                          maxWidth: 420,
-                                          maxHeight: 400,
-                                          minWidth: 70,
-                                        ),
-                                        child: Card(
-                                          color: _hoverDetailsStyle
-                                              .backgroundColor,
-                                          shape: _hoverDetailsStyle.shape,
-                                          child: Padding(
-                                            padding: EdgeInsets.all(
-                                              _selectedSuggestionMd!
-                                                      .trim()
-                                                      .isEmpty
-                                                  ? 0
-                                                  : 8.0,
-                                            ),
-                                            child: RawScrollbar(
-                                              interactive: true,
-                                              controller: completionScrlCtrl,
-                                              thumbVisibility: true,
-                                              thumbColor: _editorTheme['root']!
-                                                  .color!
-                                                  .withAlpha(100),
-                                              child: SingleChildScrollView(
-                                                controller: completionScrlCtrl,
-                                                child: MarkdownBlock(
-                                                  data: _selectedSuggestionMd!,
-                                                  config: MarkdownConfig.darkConfig.copy(
-                                                    configs: [
-                                                      PConfig(
-                                                        textStyle:
-                                                            _hoverDetailsStyle
-                                                                .textStyle,
-                                                      ),
-                                                      PreConfig(
-                                                        language:
-                                                            _controller
-                                                                .lspConfig
-                                                                ?.languageId
-                                                                .toLowerCase() ??
-                                                            'dart',
-                                                        theme: _editorTheme,
-                                                        textStyle: TextStyle(
-                                                          fontSize:
-                                                              _hoverDetailsStyle
-                                                                  .textStyle
-                                                                  .fontSize,
-                                                        ),
-                                                        styleNotMatched: TextStyle(
-                                                          color:
-                                                              _editorTheme['root']!
-                                                                  .color,
-                                                        ),
-                                                        decoration: BoxDecoration(
-                                                          color: _editorTheme['root']!
-                                                              .backgroundColor!,
-                                                          borderRadius:
-                                                              BorderRadius.zero,
-                                                          border: Border.all(
-                                                            width: 0.2,
-                                                            color:
-                                                                _editorTheme['root']!
-                                                                    .color ??
-                                                                Colors.grey,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              );
-                            },
+                                ),
+                              ),
+                              // Description panel (shown next to suggestion list when description exists)
+                              ...descriptionWidgets,
+                            ],
                           );
                         },
                       );
                     },
                   ),
+                  // ValueListenableBuilder(
+                  //   valueListenable: _offsetNotifier,
+                  //   builder: (context, offset, child) {
+                  //     if (offset.dy < 0 ||
+                  //         offset.dx < 0 ||
+                  //         !widget.enableSuggestions) {
+                  //       return SizedBox.shrink();
+                  //     }
+                  //     return ValueListenableBuilder(
+                  //       valueListenable: _suggestionNotifier,
+                  //       builder: (_, sugg, child) {
+                  //         if (_aiNotifier.value != null) {
+                  //           return SizedBox.shrink();
+                  //         }
+                  //         if (sugg == null || sugg.isEmpty) {
+                  //           _sugSelIndex = 0;
+                  //           _controller.currentlySelectedSuggestion = null;
+                  //           return SizedBox.shrink();
+                  //         }
+                  //         final completionScrlCtrl = ScrollController();
+                  //         final desiredWidth = screenWidth < 700
+                  //             ? screenWidth * 0.63
+                  //             : screenWidth * 0.3;
+                  //         final suggestionWidth = min(desiredWidth, 400.0);
+                  //         final itemExtent =
+                  //             _suggestionStyle.itemHeight ?? 24.0;
+                  //         final estimatedHeight = min(
+                  //           sugg.length * itemExtent,
+                  //           400.0,
+                  //         );
+                  //         double adjustedLeft = offset.dx;
+                  //         if (adjustedLeft + suggestionWidth > screenWidth) {
+                  //           adjustedLeft = screenWidth - suggestionWidth;
+                  //         }
+                  //         if (adjustedLeft < 0) {
+                  //           adjustedLeft = 0;
+                  //         }
+                  //         final fontSize = widget.textStyle?.fontSize ?? 14;
+                  //         final spaceBelow =
+                  //             editorHeight - offset.dy - fontSize - 10;
+                  //         final spaceAbove = offset.dy - 10;
+                  //         final shouldPositionAbove =
+                  //             estimatedHeight > spaceBelow &&
+                  //             spaceAbove > estimatedHeight;
+
+                  //         double? adjustedTop;
+                  //         double? adjustedBottom;
+
+                  //         if (shouldPositionAbove) {
+                  //           adjustedBottom = editorHeight - offset.dy + 10;
+                  //         } else {
+                  //           adjustedTop = offset.dy + fontSize + 10;
+                  //         }
+
+                  //         return ValueListenableBuilder(
+                  //           valueListenable:
+                  //               _controller.selectedSuggestionNotifier,
+                  //           builder: (context, selected, child) {
+                  //             return Stack(
+                  //               children: [
+                  //                 Positioned(
+                  //                   width: suggestionWidth,
+                  //                   top: adjustedTop,
+                  //                   bottom: adjustedBottom,
+                  //                   left: adjustedLeft,
+                  //                   child: ConstrainedBox(
+                  //                     constraints: BoxConstraints(
+                  //                       maxHeight: 400,
+                  //                       maxWidth: 400,
+                  //                       minWidth: 70,
+                  //                     ),
+                  //                     child: Card(
+                  //                       shape: _suggestionStyle.shape,
+                  //                       elevation: _suggestionStyle.elevation,
+                  //                       color: _suggestionStyle.backgroundColor,
+                  //                       margin: EdgeInsets.zero,
+                  //                       child: RawScrollbar(
+                  //                         thumbVisibility: true,
+                  //                         thumbColor: _editorTheme['root']!
+                  //                             .color!
+                  //                             .withAlpha(80),
+                  //                         interactive: true,
+                  //                         controller: _suggScrollController,
+                  //                         child: ListView.builder(
+                  //                           itemExtent:
+                  //                               _suggestionStyle.itemHeight ??
+                  //                               24.0,
+                  //                           controller: _suggScrollController,
+                  //                           padding: EdgeInsets.zero,
+                  //                           shrinkWrap: true,
+                  //                           itemCount: sugg.length,
+                  //                           itemBuilder: (_, indx) {
+                  //                             final item = sugg[indx];
+                  //                             if ((item is LspCompletion) &&
+                  //                                 (indx == _sugSelIndex ||
+                  //                                     (_isMobile &&
+                  //                                         _isMobileSuggActive))) {
+                  //                               final key =
+                  //                                   _getSuggestionCacheKey(
+                  //                                     item,
+                  //                                   );
+                  //                               if (!_suggestionDetailsCache
+                  //                                       .containsKey(key) &&
+                  //                                   _controller.lspConfig !=
+                  //                                       null) {
+                  //                                 (() async {
+                  //                                   try {
+                  //                                     final data = await _controller
+                  //                                         .lspConfig!
+                  //                                         .resolveCompletionItem(
+                  //                                           item.completionItem,
+                  //                                         );
+                  //                                     final mdText =
+                  //                                         "${data['detail'] ?? ''}\n${(() {
+                  //                                           final doc = data['documentation'];
+                  //                                           if (doc == null) {
+                  //                                             return '';
+                  //                                           }
+
+                  //                                           if (doc is Map<String, dynamic> && doc.containsKey('value')) {
+                  //                                             return doc['value'];
+                  //                                           }
+
+                  //                                           return doc;
+                  //                                         })()}";
+                  //                                     if (!mounted) return;
+                  //                                     setState(() {
+                  //                                       final edits =
+                  //                                           data['additionalTextEdits'];
+                  //                                       if (edits is List) {
+                  //                                         try {
+                  //                                           _extraText = edits
+                  //                                               .map(
+                  //                                                 (e) =>
+                  //                                                     Map<
+                  //                                                       String,
+                  //                                                       dynamic
+                  //                                                     >.from(
+                  //                                                       e as Map,
+                  //                                                     ),
+                  //                                               )
+                  //                                               .toList();
+                  //                                         } catch (_) {
+                  //                                           _extraText = edits
+                  //                                               .cast<
+                  //                                                 Map<
+                  //                                                   String,
+                  //                                                   dynamic
+                  //                                                 >
+                  //                                               >();
+                  //                                         }
+                  //                                       } else {
+                  //                                         _extraText = [];
+                  //                                       }
+                  //                                       _suggestionDetailsCache[key] =
+                  //                                           mdText;
+                  //                                       _selectedSuggestionMd =
+                  //                                           mdText;
+                  //                                     });
+                  //                                   } catch (e) {
+                  //                                     debugPrint(
+                  //                                       "Completion Resolve failed: ${e.toString()}",
+                  //                                     );
+                  //                                   }
+                  //                                 })();
+                  //                               } else if (_suggestionDetailsCache
+                  //                                   .containsKey(key)) {
+                  //                                 final cached =
+                  //                                     _suggestionDetailsCache[key];
+                  //                                 if (_selectedSuggestionMd !=
+                  //                                     cached) {
+                  //                                   WidgetsBinding.instance
+                  //                                       .addPostFrameCallback((
+                  //                                         _,
+                  //                                       ) {
+                  //                                         if (!mounted) return;
+                  //                                         setState(() {
+                  //                                           _selectedSuggestionMd =
+                  //                                               cached;
+                  //                                         });
+                  //                                       });
+                  //                                 }
+                  //                               }
+                  //                             } else if ((item
+                  //                                     is! LspCompletion) &&
+                  //                                 (indx == _sugSelIndex ||
+                  //                                     (_isMobile &&
+                  //                                         _isMobileSuggActive))) {
+                  //                               if (_selectedSuggestionMd !=
+                  //                                   null) {
+                  //                                 WidgetsBinding.instance
+                  //                                     .addPostFrameCallback((
+                  //                                       _,
+                  //                                     ) {
+                  //                                       if (!mounted) return;
+                  //                                       setState(() {
+                  //                                         _selectedSuggestionMd =
+                  //                                             null;
+                  //                                       });
+                  //                                     });
+                  //                               }
+                  //                             }
+
+                  //                             return Container(
+                  //                               height:
+                  //                                   _suggestionStyle.itemHeight,
+                  //                               padding: EdgeInsets.symmetric(
+                  //                                 horizontal: 8,
+                  //                                 vertical: 2,
+                  //                               ),
+                  //                               decoration: BoxDecoration(
+                  //                                 color:
+                  //                                     ((!_isMobile &&
+                  //                                             (indx ==
+                  //                                                 _sugSelIndex)) ||
+                  //                                         _controller
+                  //                                                 .currentlySelectedSuggestion ==
+                  //                                             indx)
+                  //                                     ? (_suggestionStyle
+                  //                                               .selectedBackgroundColor ??
+                  //                                           _suggestionStyle
+                  //                                               .focusColor)
+                  //                                     : Colors.transparent,
+                  //                                 borderRadius:
+                  //                                     BorderRadius.circular(3),
+                  //                               ),
+                  //                               child: InkWell(
+                  //                                 canRequestFocus: false,
+                  //                                 hoverColor: _suggestionStyle
+                  //                                     .hoverColor,
+                  //                                 focusColor: _suggestionStyle
+                  //                                     .focusColor,
+                  //                                 splashColor: _suggestionStyle
+                  //                                     .splashColor,
+                  //                                 borderRadius:
+                  //                                     BorderRadius.circular(3),
+                  //                                 onTap: () {
+                  //                                   if (mounted) {
+                  //                                     setState(() {
+                  //                                       if (_isMobileSuggActive) {
+                  //                                         _controller
+                  //                                                 .currentlySelectedSuggestion =
+                  //                                             indx;
+                  //                                       } else {
+                  //                                         _sugSelIndex = indx;
+                  //                                       }
+                  //                                       final text =
+                  //                                           item
+                  //                                               is LspCompletion
+                  //                                           ? item.label
+                  //                                           : item as String;
+                  //                                       _controller
+                  //                                           .insertAtCurrentCursor(
+                  //                                             text,
+                  //                                             replaceTypedChar:
+                  //                                                 true,
+                  //                                           );
+                  //                                       if (_extraText
+                  //                                           .isNotEmpty) {
+                  //                                         _controller
+                  //                                             .applyWorkspaceEdit(
+                  //                                               _extraText,
+                  //                                             );
+                  //                                       }
+                  //                                       _suggestionNotifier
+                  //                                               .value =
+                  //                                           null;
+                  //                                       _isSignatureInvoked =
+                  //                                           true;
+                  //                                       _controller
+                  //                                           .callSignatureHelp();
+                  //                                     });
+                  //                                   }
+                  //                                 },
+                  //                                 child: Row(
+                  //                                   crossAxisAlignment:
+                  //                                       CrossAxisAlignment
+                  //                                           .center,
+                  //                                   children: [
+                  //                                     if (item
+                  //                                         is LspCompletion) ...[
+                  //                                       item.icon,
+                  //                                       const SizedBox(
+                  //                                         width: 8,
+                  //                                       ),
+                  //                                       Expanded(
+                  //                                         flex: 3,
+                  //                                         child: Text(
+                  //                                           item.label,
+                  //                                           style:
+                  //                                               _suggestionStyle.labelTextStyle?.copyWith(
+                  //                                                 color:
+                  //                                                     ((!_isMobile &&
+                  //                                                             (indx ==
+                  //                                                                 _sugSelIndex)) ||
+                  //                                                         _controller.currentlySelectedSuggestion ==
+                  //                                                             indx)
+                  //                                                     ? Colors
+                  //                                                           .white
+                  //                                                     : _suggestionStyle
+                  //                                                           .labelTextStyle
+                  //                                                           ?.color,
+                  //                                               ) ??
+                  //                                               _suggestionStyle.textStyle.copyWith(
+                  //                                                 color:
+                  //                                                     ((!_isMobile &&
+                  //                                                             (indx ==
+                  //                                                                 _sugSelIndex)) ||
+                  //                                                         _controller.currentlySelectedSuggestion ==
+                  //                                                             indx)
+                  //                                                     ? Colors
+                  //                                                           .white
+                  //                                                     : _suggestionStyle
+                  //                                                           .textStyle
+                  //                                                           .color,
+                  //                                               ),
+                  //                                           overflow:
+                  //                                               TextOverflow
+                  //                                                   .ellipsis,
+                  //                                         ),
+                  //                                       ),
+                  //                                       if (item.importUri?[0] !=
+                  //                                           null) ...[
+                  //                                         const SizedBox(
+                  //                                           width: 8,
+                  //                                         ),
+                  //                                         Expanded(
+                  //                                           flex: 2,
+                  //                                           child: Text(
+                  //                                             item.importUri![0],
+                  //                                             style:
+                  //                                                 _suggestionStyle
+                  //                                                     .detailTextStyle ??
+                  //                                                 _suggestionStyle
+                  //                                                     .textStyle
+                  //                                                     .copyWith(
+                  //                                                       color: _suggestionStyle
+                  //                                                           .textStyle
+                  //                                                           .color
+                  //                                                           ?.withAlpha(
+                  //                                                             150,
+                  //                                                           ),
+                  //                                                     ),
+                  //                                             overflow:
+                  //                                                 TextOverflow
+                  //                                                     .ellipsis,
+                  //                                             textAlign:
+                  //                                                 TextAlign
+                  //                                                     .right,
+                  //                                           ),
+                  //                                         ),
+                  //                                       ],
+                  //                                     ],
+                  //                                     if (item is String)
+                  //                                       Expanded(
+                  //                                         child: Text(
+                  //                                           item,
+                  //                                           style:
+                  //                                               _suggestionStyle
+                  //                                                   .labelTextStyle ??
+                  //                                               _suggestionStyle
+                  //                                                   .textStyle,
+                  //                                           overflow:
+                  //                                               TextOverflow
+                  //                                                   .ellipsis,
+                  //                                         ),
+                  //                                       ),
+                  //                                   ],
+                  //                                 ),
+                  //                               ),
+                  //                             );
+                  //                           },
+                  //                         ),
+                  //                       ),
+                  //                     ),
+                  //                   ),
+                  //                 ),
+                  //                 if (_selectedSuggestionMd != null &&
+                  //                     _lspSignatureNotifier.value == null)
+                  //                   Positioned(
+                  //                     width: screenWidth < 700
+                  //                         ? screenWidth * 0.63
+                  //                         : null,
+                  //                     top:
+                  //                         offset.dy +
+                  //                         (widget.textStyle?.fontSize ?? 14) +
+                  //                         10 +
+                  //                         (screenWidth < 700
+                  //                             ? (offset.dy <
+                  //                                           (screenWidth / 2) &&
+                  //                                       400 < screenHeight)
+                  //                                   ? (((widget.textStyle?.fontSize ??
+                  //                                                     14) +
+                  //                                                 6.5) *
+                  //                                             (_suggestionNotifier
+                  //                                                     .value
+                  //                                                     ?.length ??
+                  //                                                 0))
+                  //                                         .clamp(0, 400)
+                  //                                   : -100
+                  //                             : 0),
+                  //                     left: screenWidth < 700
+                  //                         ? offset.dx
+                  //                         : ((adjustedLeft +
+                  //                                       suggestionWidth +
+                  //                                       420) >
+                  //                                   screenWidth
+                  //                               ? adjustedLeft - 420 - 10
+                  //                               : adjustedLeft +
+                  //                                     suggestionWidth),
+                  //                     child: ConstrainedBox(
+                  //                       constraints: BoxConstraints(
+                  //                         maxWidth: 420,
+                  //                         maxHeight: 400,
+                  //                         minWidth: 70,
+                  //                       ),
+                  //                       child: Card(
+                  //                         color: _hoverDetailsStyle
+                  //                             .backgroundColor,
+                  //                         shape: _hoverDetailsStyle.shape,
+                  //                         child: Padding(
+                  //                           padding: EdgeInsets.all(
+                  //                             _selectedSuggestionMd!
+                  //                                     .trim()
+                  //                                     .isEmpty
+                  //                                 ? 0
+                  //                                 : 8.0,
+                  //                           ),
+                  //                           child: RawScrollbar(
+                  //                             interactive: true,
+                  //                             controller: completionScrlCtrl,
+                  //                             thumbVisibility: true,
+                  //                             thumbColor: _editorTheme['root']!
+                  //                                 .color!
+                  //                                 .withAlpha(100),
+                  //                             child: SingleChildScrollView(
+                  //                               controller: completionScrlCtrl,
+                  //                               child: MarkdownBlock(
+                  //                                 data: _selectedSuggestionMd!,
+                  //                                 config: MarkdownConfig.darkConfig.copy(
+                  //                                   configs: [
+                  //                                     PConfig(
+                  //                                       textStyle:
+                  //                                           _hoverDetailsStyle
+                  //                                               .textStyle,
+                  //                                     ),
+                  //                                     PreConfig(
+                  //                                       language:
+                  //                                           _controller
+                  //                                               .lspConfig
+                  //                                               ?.languageId
+                  //                                               .toLowerCase() ??
+                  //                                           'dart',
+                  //                                       theme: _editorTheme,
+                  //                                       textStyle: TextStyle(
+                  //                                         fontSize:
+                  //                                             _hoverDetailsStyle
+                  //                                                 .textStyle
+                  //                                                 .fontSize,
+                  //                                       ),
+                  //                                       styleNotMatched: TextStyle(
+                  //                                         color:
+                  //                                             _editorTheme['root']!
+                  //                                                 .color,
+                  //                                       ),
+                  //                                       decoration: BoxDecoration(
+                  //                                         color: _editorTheme['root']!
+                  //                                             .backgroundColor!,
+                  //                                         borderRadius:
+                  //                                             BorderRadius.zero,
+                  //                                         border: Border.all(
+                  //                                           width: 0.2,
+                  //                                           color:
+                  //                                               _editorTheme['root']!
+                  //                                                   .color ??
+                  //                                               Colors.grey,
+                  //                                         ),
+                  //                                       ),
+                  //                                     ),
+                  //                                   ],
+                  //                                 ),
+                  //                               ),
+                  //                             ),
+                  //                           ),
+                  //                         ),
+                  //                       ),
+                  //                     ),
+                  //                   ),
+                  //               ],
+                  //             );
+                  //           },
+                  //         );
+                  //       },
+                  //     );
+                  //   },
+                  // ),
                   ValueListenableBuilder(
                     valueListenable: _hoverNotifier,
                     builder: (_, hov, c) {
@@ -3047,50 +3524,60 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                               child: SingleChildScrollView(
                                                 controller:
                                                     hoverScrollController,
-                                                child: MarkdownBlock(
+                                                child: Html(
                                                   data: hoverMessage,
-                                                  config: MarkdownConfig.darkConfig.copy(
-                                                    configs: [
-                                                      PConfig(
-                                                        textStyle:
-                                                            _hoverDetailsStyle
-                                                                .textStyle,
+                                                  style: {
+                                                    "p": Style(
+                                                      fontSize: FontSize(
+                                                        _hoverDetailsStyle
+                                                                .textStyle
+                                                                .fontSize ??
+                                                            14,
                                                       ),
-                                                      PreConfig(
-                                                        language:
-                                                            _controller
-                                                                .lspConfig
-                                                                ?.languageId
-                                                                .toLowerCase() ??
-                                                            "dart",
-                                                        theme: _editorTheme,
-                                                        textStyle: TextStyle(
-                                                          fontSize:
-                                                              _hoverDetailsStyle
-                                                                  .textStyle
-                                                                  .fontSize,
-                                                        ),
-                                                        styleNotMatched: TextStyle(
-                                                          color:
-                                                              _editorTheme['root']!
-                                                                  .color,
-                                                        ),
-                                                        decoration: BoxDecoration(
-                                                          color: _editorTheme['root']!
+                                                      color: _hoverDetailsStyle
+                                                          .textStyle
+                                                          .color,
+                                                      fontWeight:
+                                                          _hoverDetailsStyle
+                                                              .textStyle
+                                                              .fontWeight,
+                                                    ),
+                                                    "pre": Style(
+                                                      fontSize: FontSize(
+                                                        _hoverDetailsStyle
+                                                                .textStyle
+                                                                .fontSize ??
+                                                            14,
+                                                      ),
+                                                      color:
+                                                          _editorTheme['root']!
+                                                              .color,
+                                                      backgroundColor:
+                                                          _editorTheme['root']!
                                                               .backgroundColor!,
-                                                          borderRadius:
-                                                              BorderRadius.zero,
-                                                          border: Border.all(
-                                                            width: 0.2,
-                                                            color:
-                                                                _editorTheme['root']!
-                                                                    .color ??
-                                                                Colors.grey,
-                                                          ),
-                                                        ),
+                                                      padding: HtmlPaddings.all(
+                                                        8,
                                                       ),
-                                                    ],
-                                                  ),
+                                                      border: Border.all(
+                                                        width: 0.2,
+                                                        color:
+                                                            _editorTheme['root']!
+                                                                .color ??
+                                                            Colors.grey,
+                                                      ),
+                                                    ),
+                                                    "code": Style(
+                                                      fontSize: FontSize(
+                                                        _hoverDetailsStyle
+                                                                .textStyle
+                                                                .fontSize ??
+                                                            14,
+                                                      ),
+                                                      color:
+                                                          _editorTheme['root']!
+                                                              .color,
+                                                    ),
+                                                  },
                                                 ),
                                               ),
                                             ),
@@ -3383,6 +3870,7 @@ class _CodeField extends LeafRenderObjectWidget {
   final ValueNotifier<Offset?> aiOffsetNotifier, lspActionOffsetNotifier;
   final BuildContext context;
   final TextStyle? ghostTextStyle;
+  final TextStyle? aiCompletionTextStyle;
   final String? filePath;
   final MatchHighlightStyle? matchHighlightStyle;
   final VoidCallback? onHoverSetByTap;
@@ -3429,6 +3917,7 @@ class _CodeField extends LeafRenderObjectWidget {
     this.semanticTokensVersion = 0,
     this.innerPadding,
     this.ghostTextStyle,
+    this.aiCompletionTextStyle,
     this.matchHighlightStyle,
     this.onHoverSetByTap,
   });
@@ -3473,6 +3962,7 @@ class _CodeField extends LeafRenderObjectWidget {
       lspActionOffsetNotifier: lspActionOffsetNotifier,
       signatureNotifier: signatureNotifier,
       ghostTextStyle: ghostTextStyle,
+      aiCompletionTextStyle: aiCompletionTextStyle,
       filePath: filePath,
       onHoverSetByTap: onHoverSetByTap,
       textDirection: textDirection,
@@ -3507,6 +3997,7 @@ class _CodeField extends LeafRenderObjectWidget {
       ..gutterStyle = gutterStyle
       ..selectionStyle = selectionStyle
       ..ghostTextStyle = ghostTextStyle
+      ..aiCompletionTextStyle = aiCompletionTextStyle
       ..textDirection = textDirection;
   }
 }
@@ -3566,6 +4057,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   late SyntaxHighlighter _syntaxHighlighter;
   late double _gutterWidth;
   TextStyle? _ghostTextStyle;
+  TextStyle? _aiCompletionTextStyle;
   Map<String, TextStyle> _editorTheme;
   Mode _language;
   EdgeInsets? _innerPadding;
@@ -3579,6 +4071,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   Timer? _selectionTimer, _hoverTimer;
   Offset? _pointerDownPosition;
   Offset _currentPosition = Offset.zero;
+  int? _hoveredBreakpointLine;
   bool _enableFolding, _enableGuideLines, _enableGutter, _enableGutterDivider;
   bool _isFoldToggleInProgress = false, _lineWrap;
   bool _foldRangesNeedsClear = false;
@@ -3712,9 +4205,11 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     EdgeInsets? innerPadding,
     TextStyle? textStyle,
     TextStyle? ghostTextStyle,
+    TextStyle? aiCompletionTextStyle,
     TextDirection textDirection = TextDirection.ltr,
   }) : _editorTheme = editorTheme,
        _ghostTextStyle = ghostTextStyle,
+       _aiCompletionTextStyle = aiCompletionTextStyle,
        _language = language,
        _readOnly = readOnly,
        _enableFolding = enableFolding,
@@ -3752,7 +4247,15 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         final digits = controller.lineCount.toString().length;
         final digitWidth = digits * _gutterPadding * 0.6;
         final foldIconSpace = enableFolding ? fontSize + 4 : 0;
-        _gutterWidth = digitWidth + foldIconSpace + _gutterPadding;
+        final breakpointColumnWidth = (_gutterStyle.showBreakpoints)
+            ? fontSize * 1.5
+            : 0;
+        _gutterWidth =
+            breakpointColumnWidth +
+            digitWidth +
+            foldIconSpace +
+            _gutterPadding -
+            15;
       }
     } else {
       _gutterWidth = 0;
@@ -3928,6 +4431,13 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   set ghostTextStyle(TextStyle? value) {
     if (_ghostTextStyle == value) return;
     _ghostTextStyle = value;
+    markNeedsPaint();
+  }
+
+  TextStyle? get aiCompletionTextStyle => _aiCompletionTextStyle;
+  set aiCompletionTextStyle(TextStyle? value) {
+    if (_aiCompletionTextStyle == value) return;
+    _aiCompletionTextStyle = value;
     markNeedsPaint();
   }
 
@@ -6403,19 +6913,89 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
           color: lineNumberColor,
         );
 
+        // Draw breakpoint indicator if enabled and breakpoint exists for this line
+        final fontSize = _textStyle?.fontSize ?? 14.0;
+        final breakpointColumnWidth = (_gutterStyle.showBreakpoints)
+            ? fontSize * 1.5
+            : 0;
+        if (_gutterStyle.showBreakpoints &&
+            controller.breakpoints.contains(i + 1)) {
+          final isHovered = _hoveredBreakpointLine == i + 1;
+          final breakpointPaint = Paint()
+            ..color = _gutterStyle.breakpointColor
+            ..style = PaintingStyle.fill;
+          final breakpointRadius = 4.0;
+          final breakpointCenterX =
+              offset.dx +
+              (isRTL ? size.width - _gutterWidth : 0) +
+              breakpointColumnWidth / 2;
+          final breakpointCenterY =
+              offset.dy +
+              (innerPadding?.top ?? 0) +
+              contentTop +
+              visualYOffset -
+              vscrollController.offset +
+              lineHeight / 2;
+
+          // Draw hover highlight (semi-transparent circle) if hovering
+          if (isHovered) {
+            final hoverPaint = Paint()
+              ..color = _gutterStyle.breakpointColor.withValues(alpha: 0.3)
+              ..style = PaintingStyle.fill;
+            canvas.drawCircle(
+              Offset(breakpointCenterX, breakpointCenterY),
+              breakpointRadius + 2,
+              hoverPaint,
+            );
+          }
+
+          canvas.drawCircle(
+            Offset(breakpointCenterX, breakpointCenterY),
+            breakpointRadius,
+            breakpointPaint,
+          );
+        } else if (_gutterStyle.showBreakpoints &&
+            _hoveredBreakpointLine == i + 1) {
+          // Show semi-transparent breakpoint on hover even if not set
+          final breakpointRadius = 4.0;
+          final breakpointCenterX =
+              offset.dx +
+              (isRTL ? size.width - _gutterWidth : 0) +
+              breakpointColumnWidth / 2;
+          final breakpointCenterY =
+              offset.dy +
+              (innerPadding?.top ?? 0) +
+              contentTop +
+              visualYOffset -
+              vscrollController.offset +
+              lineHeight / 2;
+          final hoverPaint = Paint()
+            ..color = _gutterStyle.breakpointColor.withValues(alpha: 0.5)
+            ..style = PaintingStyle.fill;
+          canvas.drawCircle(
+            Offset(breakpointCenterX, breakpointCenterY),
+            breakpointRadius,
+            hoverPaint,
+          );
+        }
+
         final lineNumPara = _buildLineNumberParagraph(
           (i + 1).toString(),
           lineNumberStyle,
         );
         final numWidth = lineNumPara.longestLine;
 
+        // Adjust line number position to account for breakpoint column
+        final lineNumberXOffset =
+            breakpointColumnWidth +
+            ((_gutterWidth - breakpointColumnWidth - numWidth) / 2) -
+            (enableFolding ? (lineNumberStyle.fontSize ?? 14) / 2 : 0);
+
         canvas.drawParagraph(
           lineNumPara,
           offset +
               Offset(
-                (isRTL ? size.width - _gutterWidth : 0) +
-                    (_gutterWidth - numWidth) / 2 -
-                    (enableFolding ? (lineNumberStyle.fontSize ?? 14) / 2 : 0),
+                (isRTL ? size.width - _gutterWidth : 0) + lineNumberXOffset,
                 (innerPadding?.top ?? 0) +
                     contentTop +
                     visualYOffset -
@@ -7716,15 +8296,15 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         (textStyle?.color ?? editorTheme['root']?.color ?? Colors.white)
             .withAlpha(100);
     final ghostStyle = ui.TextStyle(
-      color: _ghostTextStyle?.color ?? defaultGhostColor,
-      fontSize: _ghostTextStyle?.fontSize ?? textStyle?.fontSize ?? 14.0,
-      fontFamily: _ghostTextStyle?.fontFamily ?? textStyle?.fontFamily,
-      fontStyle: _ghostTextStyle?.fontStyle ?? FontStyle.italic,
-      fontWeight: _ghostTextStyle?.fontWeight,
-      letterSpacing: _ghostTextStyle?.letterSpacing,
-      wordSpacing: _ghostTextStyle?.wordSpacing,
-      decoration: _ghostTextStyle?.decoration,
-      decorationColor: _ghostTextStyle?.decorationColor,
+      color: _aiCompletionTextStyle?.color ?? defaultGhostColor,
+      fontSize: _aiCompletionTextStyle?.fontSize ?? textStyle?.fontSize ?? 14.0,
+      fontFamily: _aiCompletionTextStyle?.fontFamily ?? textStyle?.fontFamily,
+      fontStyle: _aiCompletionTextStyle?.fontStyle ?? FontStyle.italic,
+      fontWeight: _aiCompletionTextStyle?.fontWeight,
+      letterSpacing: _aiCompletionTextStyle?.letterSpacing,
+      wordSpacing: _aiCompletionTextStyle?.wordSpacing,
+      decoration: _aiCompletionTextStyle?.decoration,
+      decorationColor: _aiCompletionTextStyle?.decorationColor,
     );
 
     final aiLines = _aiResponse?.split('\n') ?? [];
@@ -9034,6 +9614,43 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     final textOffset = _getTextOffsetFromPosition(contentPosition);
 
     if (event is PointerHoverEvent) {
+      // Check for breakpoint hover
+      if (enableGutter &&
+          (isRTL
+              ? localPosition.dx > size.width - _gutterWidth
+              : localPosition.dx < _gutterWidth)) {
+        final fontSize = _textStyle?.fontSize ?? 14.0;
+        final breakpointColumnWidth = (_gutterStyle.showBreakpoints)
+            ? fontSize * 1.5
+            : 0;
+        final gutterLocalX = isRTL
+            ? size.width - localPosition.dx
+            : localPosition.dx;
+        if (_gutterStyle.showBreakpoints &&
+            gutterLocalX < breakpointColumnWidth) {
+          final clickY =
+              localPosition.dy -
+              (innerPadding?.top ?? 0) +
+              vscrollController.offset;
+          final hoveredLine = _findVisibleLineByYPosition(clickY);
+          if (_hoveredBreakpointLine != hoveredLine + 1) {
+            _hoveredBreakpointLine = hoveredLine + 1;
+            markNeedsPaint();
+          }
+        } else {
+          if (_hoveredBreakpointLine != null) {
+            _hoveredBreakpointLine = null;
+            markNeedsPaint();
+          }
+        }
+      } else {
+        // Pointer is outside gutter, clear hover state
+        if (_hoveredBreakpointLine != null) {
+          _hoveredBreakpointLine = null;
+          markNeedsPaint();
+        }
+      }
+
       if (hoverNotifier.value == null) {
         _hoverTimer?.cancel();
       }
@@ -9110,14 +9727,31 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
           ? localPosition.dx > size.width - _gutterWidth
           : localPosition.dx < _gutterWidth;
 
-      if (enableFolding && enableGutter && gutterClickArea) {
+      if (enableGutter && gutterClickArea) {
         if (clickY < 0) return;
         final clickedLine = _findVisibleLineByYPosition(clickY);
 
-        final foldRange = _getFoldRangeAtLine(clickedLine);
-        if (foldRange != null) {
-          _toggleFold(foldRange);
+        // Check if click is in breakpoint column area
+        final fontSize = _textStyle?.fontSize ?? 14.0;
+        final breakpointColumnWidth = (_gutterStyle.showBreakpoints)
+            ? fontSize * 1.5
+            : 0;
+        final gutterLocalX = isRTL
+            ? size.width - localPosition.dx
+            : localPosition.dx;
+        if (_gutterStyle.showBreakpoints &&
+            gutterLocalX < breakpointColumnWidth) {
+          // Toggle breakpoint for this line (convert 0-indexed to 1-indexed)
+          controller.toggleBreakpoint(clickedLine + 1);
           return;
+        }
+
+        if (enableFolding) {
+          final foldRange = _getFoldRangeAtLine(clickedLine);
+          if (foldRange != null) {
+            _toggleFold(foldRange);
+            return;
+          }
         }
         return;
       }
@@ -9385,6 +10019,20 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         : _currentPosition.dx >= 0 && _currentPosition.dx < _gutterWidth;
 
     if (isInGutter) {
+      final fontSize = _textStyle?.fontSize ?? 14.0;
+      final breakpointColumnWidth = (_gutterStyle.showBreakpoints)
+          ? fontSize * 1.5
+          : 0;
+      final gutterLocalX = isRTL
+          ? size.width - _currentPosition.dx
+          : _currentPosition.dx;
+
+      // Check if hovering over breakpoint column
+      if (_gutterStyle.showBreakpoints &&
+          gutterLocalX < breakpointColumnWidth) {
+        return SystemMouseCursors.click;
+      }
+
       if (_foldRanges.isEmpty && !enableFolding) {
         return MouseCursor.defer;
       }

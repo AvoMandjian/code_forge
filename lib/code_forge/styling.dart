@@ -73,6 +73,14 @@ class GutterStyle {
   /// If null, a low opacity version of the selection color is used.
   final Color? foldedLineHighlightColor;
 
+  /// Whether to show breakpoints in the gutter.
+  /// When true, breakpoint indicators will be displayed in the leftmost column of the gutter.
+  final bool showBreakpoints;
+
+  /// The color used for breakpoint indicators.
+  /// Defaults to red.
+  final Color breakpointColor;
+
   GutterStyle({
     this.lineNumberStyle,
     this.backgroundColor,
@@ -87,6 +95,8 @@ class GutterStyle {
     this.errorLineNumberColor = const Color(0xFFE53935),
     this.warningLineNumberColor = const Color(0xFFFFA726),
     this.foldedLineHighlightColor,
+    this.showBreakpoints = true,
+    this.breakpointColor = Colors.red,
   });
 }
 
@@ -106,6 +116,9 @@ sealed class OverlayStyle {
   /// The color used when the overlay is focused.
   final Color focusColor;
 
+  /// The color used when the overlay is highlighted.
+  final Color highlightColor;
+
   /// The color used when the overlay is hovered.
   final Color hoverColor;
 
@@ -124,6 +137,7 @@ sealed class OverlayStyle {
     required this.shape,
     required this.backgroundColor,
     required this.focusColor,
+    required this.highlightColor,
     required this.hoverColor,
     required this.splashColor,
     required this.textStyle,
@@ -205,6 +219,7 @@ class SuggestionStyle extends OverlayStyle {
     required super.shape,
     required super.backgroundColor,
     required super.focusColor,
+    required super.highlightColor,
     required super.hoverColor,
     required super.splashColor,
     required super.textStyle,
@@ -248,6 +263,7 @@ class HoverDetailsStyle extends OverlayStyle {
     required super.shape,
     required super.backgroundColor,
     required super.focusColor,
+    required super.highlightColor,
     required super.hoverColor,
     required super.splashColor,
     required super.textStyle,
