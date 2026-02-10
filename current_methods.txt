@@ -1,0 +1,63 @@
+  void _acceptControllerGhostText() {
+  void _acceptGhostText() {
+  void _acceptSuggestion() {
+  void _checkDocumentVersionAndClearCache() {
+  void _commonKeyFunctions() {
+  void _deferLayout() {
+  void _deleteWordBackward() {
+  void _deleteWordForward() {
+  void _drawAiGhostText(
+  void _drawBracketBox(
+  void _drawBracketHighlight(
+  void _drawDiagnostics(
+  void _drawDocumentColors(
+  void _drawDocumentHighlights(
+  void _drawFoldIcon(
+  void _drawFoldedLineHighlights(
+  void _drawGhostText(
+  void _drawGutter(
+  void _drawGutterDecorations(
+  void _drawIndentGuides(
+  void _drawInlayHints(
+  void _drawLineDecorations(
+  void _drawLineHighlight(
+  void _drawRulers(
+  void _drawSearchHighlights(
+  void _drawSelection(
+  void _drawSquigglyLine(
+  void _ensureCaretVisible() {
+  void _foldAllRanges() {
+  void _foldWithChildren(FoldRange parentFold) {
+  void _handleArrowLeft(bool withShift) {
+  void _handleArrowRight(bool withShift) {
+  void _handleEndKey(bool withShift) {
+  void _handleHomeKey(bool withShift) {
+  void _moveSelectionRight(bool withShift) {
+  void _moveWordLeft(bool withShift) {
+  void _moveWordRight(bool withShift) {
+  void _onControllerChange() {
+  void _resetCursorBlink() {
+  void _scrollToLine(int line) {
+  void _scrollToSelectedAction() {
+  void _scrollToSelectedSuggestion() {
+  void _selectWordAtOffset(int offset) {
+  void _showColorPicker(DocumentColor docColor) {
+  void _showCustomSuggestions(List<SuggestionModel> suggestions) {
+  void _toggleFold(FoldRange fold) {
+  void _toggleFoldAtLine(int lineNumber) {
+  void _unfoldAllRanges() {
+  void _unfoldWithChildren(FoldRange parentFold) {
+  void _updateSelectionHandleRects(
+  void addOriginallyFoldedChild(FoldRange child) {
+  void clearOriginallyFoldedChildren() {
+  void detach() {
+  void dispose() {
+  void dispose() {
+  void handleEvent(PointerEvent event, covariant BoxHitTestEntry entry) {
+  void handleFormatCode() {
+  void initState() {
+  void paint(PaintingContext context, Offset offset) {
+  void performLayout() {
+  void updateDiagnostics(List<LspErrors> diagnostics) {
+  void updateRenderObject(
+  void updateSemanticTokens(List<LspSemanticToken> tokens, int version) {

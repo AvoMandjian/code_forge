@@ -5,6 +5,7 @@ lib/LSP/lsp_socket.dart
 lib/LSP/lsp_stdio.dart
 lib/code_forge.dart
 lib/code_forge/code_area.dart
+lib/code_forge/code_formatter.dart
 lib/code_forge/controller.dart
 lib/code_forge/find_controller.dart
 lib/code_forge/rope.dart
@@ -34,4 +35,5 @@ lib/code_forge/suggestions/get_xml_suggestions.dart
 lib/code_forge/suggestions/get_yaml_suggestions.dart
 lib/code_forge/suggestions/initialize_language_specific_suggestions.dart
 lib/code_forge/syntax_highlighter.dart
+lib/code_forge/tag_completion.dart
 lib/code_forge/undo_redo.dart

@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:flutter_html/flutter_html.dart';
+import 'package:jinja_app_widgets_catalog/jinja_app_widgets_catalog.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:re_highlight/languages/dart.dart';
 import 'package:re_highlight/re_highlight.dart';
@@ -15,11 +17,16 @@ import 'package:universal_io/io.dart';
 import 'package:vector_math/vector_math_64.dart' show Vector3;
 
 import '../LSP/lsp.dart';
+import '../AI_completion/ai.dart';
+import 'code_formatter.dart';
 import 'controller.dart';
 import 'find_controller.dart';
 import 'scroll.dart';
 import 'styling.dart';
+import 'suggestion_model.dart';
+import 'suggestions/initialize_language_specific_suggestions.dart';
 import 'syntax_highlighter.dart';
+import 'tag_completion.dart';
 import 'undo_redo.dart';
 
 const String _wordCharPattern = r'[\w\u0600-\u06FF\u08A0-\u08FF\u0590-\u05FF]';
@@ -106,6 +113,11 @@ class CodeForge extends StatefulWidget {
   /// ```
   final TextStyle? ghostTextStyle;
 
+  /// AI completion configuration.
+  ///
+  /// If provided, enables AI code completion features using the specified model.
+  final AiCompletion? aiCompletion;
+
   /// Padding inside the editor content area.
   final EdgeInsets? innerPadding;
 
@@ -123,6 +135,12 @@ class CodeForge extends StatefulWidget {
 
   /// Styling options for the autocomplete suggestion popup.
   final SuggestionStyle? suggestionStyle;
+
+  /// Styling options for the autocomplete suggestion description popup.
+  ///
+  /// When a [SuggestionModel] is selected and has a description, this style
+  /// is used for the description popup shown next to the suggestion list.
+  final SuggestionStyle? suggestionDescriptionStyle;
 
   /// Styling options for hover documentation popup.
   final HoverDetailsStyle? hoverDetailsStyle;
@@ -188,6 +206,20 @@ class CodeForge extends StatefulWidget {
   /// Defaults to [TextInputType.multiline]
   final TextInputType keyboardType;
 
+  /// Callback to format the code.
+  /// If provided, this is called when formatting is requested.
+  final String? Function(String code)? formatCode;
+
+  /// Callback invoked on save (e.g. Cmd+S). When set, [CodeForgeController.saveFile]
+  /// will call this instead of only writing to [filePath].
+  final VoidCallback? saveFile;
+
+  /// Callback invoked when breakpoints change.
+  ///
+  /// This callback receives a [Set<int>] containing all current breakpoint
+  /// line numbers (1-indexed). Called whenever a breakpoint is toggled.
+  final void Function(Set<int> breakpoints)? onBreakpointsChanged;
+
   /// The text direction for the editor's content.
   ///
   /// This determines the direction in which text is laid out and rendered.
@@ -221,6 +253,7 @@ class CodeForge extends StatefulWidget {
     this.editorTheme,
     this.language,
     this.ghostTextStyle,
+    this.aiCompletion,
     this.filePath,
     this.initialText,
     this.focusNode,
@@ -243,10 +276,14 @@ class CodeForge extends StatefulWidget {
     this.selectionStyle,
     this.gutterStyle,
     this.suggestionStyle,
+    this.suggestionDescriptionStyle,
     this.hoverDetailsStyle,
     this.matchHighlightStyle,
     this.finderBuilder,
     this.findController,
+    this.formatCode,
+    this.saveFile,
+    this.onBreakpointsChanged,
   });
 
   @override
@@ -264,6 +301,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
   late final CodeSelectionStyle _selectionStyle;
   late final GutterStyle _gutterStyle;
   late final SuggestionStyle _suggestionStyle;
+  late final SuggestionStyle _suggestionDescriptionStyle;
   late final HoverDetailsStyle _hoverDetailsStyle;
   late final ValueNotifier<List<dynamic>?> _suggestionNotifier;
   late final ValueNotifier<(Offset, Map<String, int>)?> _hoverNotifier;
@@ -291,11 +329,15 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
   late bool _readOnly;
   TextInputConnection? _connection;
   StreamSubscription? _lspResponsesSubscription;
+  Timer? _aiDebounceTimer;
   bool _isHovering = false, _isSignatureInvoked = false;
+  bool _isTyping = false;
   bool _isMobileSuggActive = false;
   List<LspSemanticToken>? _semanticTokens;
   List<Map<String, dynamic>> _extraText = [];
   int _semanticTokensVersion = 0;
+  String _previousValue = "";
+  TextSelection _prevSelection = const TextSelection.collapsed(offset: 0);
   int _sugSelIndex = 0, _actionSelIndex = 0;
   String? _selectedSuggestionMd;
   Timer? _hoverTimer;
@@ -338,6 +380,22 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
     _controller.deleteFoldRangeOnDeletingFirstLine =
         _deleteFoldRangeOnDeletingFirstLine;
 
+    _controller.manualAiCompletion = getManualAiSuggestion;
+    _controller.showCustomSuggestionsCallback = _showCustomSuggestions;
+    _controller.setAiCompletion(widget.aiCompletion);
+    _controller.saveFileCallback = widget.saveFile;
+    if (widget.onBreakpointsChanged != null) {
+      _controller.onBreakpointsChanged(widget.onBreakpointsChanged!);
+    }
+
+    // Initialize suggestions
+    initializeLanguageSpecificSuggestions(
+      currentLanguage: _language,
+      registerCustomSuggestions: (suggestions) {
+        _controller.registerCustomSuggestions(suggestions);
+      },
+    );
+
     if (widget.readOnly && !_controller.readOnly) {
       _controller.readOnly = true;
     } else if (_controller.readOnly && !widget.readOnly) {
@@ -357,6 +415,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
         widget.suggestionStyle ??
         SuggestionStyle(
           elevation: 8,
+          highlightColor: Colors.blueAccent.withAlpha(50),
           textStyle: (() {
             TextStyle style = widget.textStyle ?? TextStyle();
             if (style.color == null) {
@@ -377,6 +436,39 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
           focusColor: ui.Color.fromARGB(108, 2, 66, 129),
           hoverColor: Colors.grey.withAlpha(15),
           splashColor: Colors.blueAccent.withAlpha(50),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(6),
+            side: BorderSide(
+              color: _editorTheme['root']!.color?.withAlpha(50) ??
+                  Colors.grey[400]!,
+              width: 1.0,
+            ),
+          ),
+        );
+
+    _suggestionDescriptionStyle =
+        widget.suggestionDescriptionStyle ??
+        SuggestionStyle(
+          elevation: 6,
+          highlightColor: Colors.blueAccent.withAlpha(50),
+          textStyle: (() {
+            TextStyle style = widget.textStyle ?? TextStyle();
+            if (style.color == null) {
+              style = style.copyWith(color: _editorTheme['root']!.color);
+            }
+            return style;
+          })(),
+          backgroundColor:
+              _editorTheme['root']?.backgroundColor ?? Colors.white,
+          focusColor: Colors.blueAccent.withAlpha(50),
+          hoverColor: Colors.grey.withAlpha(15),
+          splashColor: Colors.blueAccent.withAlpha(50),
+          shape: BeveledRectangleBorder(
+            side: BorderSide(
+              color: _editorTheme['root']!.color ?? Colors.grey[400]!,
+              width: 0.2,
+            ),
+          ),
           selectedBackgroundColor: Color(0xFF094771),
           borderColor:
               _editorTheme['root']!.color?.withAlpha(50) ?? Colors.grey[400],
@@ -402,20 +494,12 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
             fontStyle: FontStyle.italic,
             color: _editorTheme['root']!.color?.withAlpha(180),
           ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(6),
-            side: BorderSide(
-              color:
-                  _editorTheme['root']!.color?.withAlpha(50) ??
-                  Colors.grey[400]!,
-              width: 1.0,
-            ),
-          ),
         );
 
     _hoverDetailsStyle =
         widget.hoverDetailsStyle ??
         HoverDetailsStyle(
+          highlightColor: Colors.blueAccent.withAlpha(50),
           shape: BeveledRectangleBorder(
             side: BorderSide(
               color: _editorTheme['root']!.color ?? Colors.grey[400]!,
@@ -525,6 +609,15 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
         });
       }
 
+      final text = _controller.text;
+      final currentSelection = _controller.selection;
+      final cursorPosition = currentSelection.extentOffset;
+
+      _isTyping = false;
+
+      final oldText = _previousValue;
+      final oldSelection = _prevSelection;
+
       if (_controller.lastTypedCharacter == '(') {
         _isSignatureInvoked = true;
       } else if (_controller.lastTypedCharacter == ')') {
@@ -550,6 +643,137 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
           _hoverSetByTap = false;
         });
       }
+
+      _aiDebounceTimer?.cancel();
+
+      // Check AI completion from controller if available, otherwise fall back to widget
+      final aiCompletion = _controller.aiCompletion ?? widget.aiCompletion;
+      if (aiCompletion != null &&
+          _controller.selection.isValid &&
+          aiCompletion.enableCompletion &&
+          _aiNotifier.value == null) {
+        if (_suggestionNotifier.value != null) return;
+        final text = _controller.text;
+        final cursorPosition = _controller.selection.extentOffset.clamp(
+          0,
+          _controller.length,
+        );
+        final textAfterCursor = text.substring(cursorPosition);
+        if (cursorPosition <= 0) return;
+        bool lineEnd =
+            textAfterCursor.isEmpty ||
+            textAfterCursor.startsWith('\n') ||
+            textAfterCursor.trim().isEmpty;
+        if (!lineEnd) return;
+        final codeToSend =
+            "${text.substring(0, cursorPosition)}<|CURSOR|>${text.substring(cursorPosition)}";
+        if (aiCompletion.completionType == CompletionType.auto ||
+            aiCompletion.completionType == CompletionType.mixed) {
+          _aiDebounceTimer = Timer(
+            Duration(milliseconds: aiCompletion.debounceTime),
+            () async {
+              final aiComp = _controller.aiCompletion ?? widget.aiCompletion;
+              if (aiComp != null) {
+                _aiNotifier.value = await _getCachedResponse(
+                  codeToSend,
+                  aiComp,
+                );
+              }
+            },
+          );
+        }
+      }
+
+      if (text.length == oldText.length + 1 &&
+          currentSelection.baseOffset == oldSelection.baseOffset + 1) {
+        final insertedChar = text.substring(
+          _prevSelection.baseOffset,
+          currentSelection.baseOffset,
+        );
+        _isTyping =
+            insertedChar.isNotEmpty &&
+            RegExp(r'[a-zA-Z]').hasMatch(insertedChar);
+
+        // Check for HTML/Jinja tag completion
+        final language = _controller.currentLanguage?.name;
+        if (widget.enableSuggestions &&
+            TagCompletion.supportsTagCompletion(
+              language,
+              text: text,
+              cursorPosition: cursorPosition,
+            ) &&
+            _controller.lspConfig == null) {
+          final tagContext = TagCompletion.analyzeTagContext(
+            text,
+            cursorPosition,
+          );
+
+          // Check if we're typing '<', '/', '{', '%', or within a tag
+          // For Jinja: typing '{', '%', or '%' after '{%' triggers suggestions
+          final twoCharsBefore = cursorPosition >= 2
+              ? text.substring(cursorPosition - 2, cursorPosition)
+              : '';
+          final threeCharsBefore = cursorPosition >= 3
+              ? text.substring(cursorPosition - 3, cursorPosition)
+              : '';
+
+          final isJinjaTrigger =
+              insertedChar == '{' ||
+              insertedChar == '%' ||
+              twoCharsBefore == '{%' ||
+              threeCharsBefore == '{%%';
+
+          if (insertedChar == '<' ||
+              insertedChar == '/' ||
+              isJinjaTrigger ||
+              tagContext.isInTag) {
+            final tagSuggestions = TagCompletion.getTagSuggestions(
+              text,
+              cursorPosition,
+              language,
+              registeredSuggestions: _controller.registeredCustomSuggestions,
+            );
+            if (tagSuggestions.isNotEmpty) {
+              _sugSelIndex = 0;
+              _suggestionNotifier.value = tagSuggestions;
+              _previousValue = text;
+              _prevSelection = currentSelection;
+              return;
+            }
+          }
+        }
+
+        if (widget.enableSuggestions &&
+            _isTyping &&
+            _controller.selection.extentOffset > 0) {
+          if (_controller.lspConfig == null) {
+            final regExp = RegExp(r'\b\w+\b');
+            final List<String> words = regExp
+                .allMatches(text)
+                .map((m) => m.group(0)!)
+                .toList();
+            String currentWord = '';
+            final prefix = _controller.getCurrentWordPrefix(text, cursorPosition);
+
+            final List<String> results = [];
+            for (final word in words) {
+              if (word.startsWith(prefix) &&
+                  word != currentWord &&
+                  !results.contains(word)) {
+                results.add(word);
+              }
+            }
+
+            if (results.isNotEmpty) {
+              _sugSelIndex = 0;
+              _suggestionNotifier.value = results;
+            }
+          }
+        }
+      }
+
+      _previousValue = text;
+      _prevSelection = currentSelection;
     };
 
     _controller.addListener(_controllerListener);
@@ -1410,6 +1634,37 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                       HardwareKeyboard
                                                           .instance
                                                           .isMetaPressed;
+                                                  final isAltPressed =
+                                                      HardwareKeyboard
+                                                          .instance
+                                                          .isAltPressed;
+
+                                                  if (isAltPressed) {
+                                                    switch (event.logicalKey) {
+                                                      case LogicalKeyboardKey.arrowUp:
+                                                        if (!_readOnly) {
+                                                          _controller.moveLineUp();
+                                                          _commonKeyFunctions();
+                                                        }
+                                                        return KeyEventResult.handled;
+                                                      case LogicalKeyboardKey.arrowDown:
+                                                        if (!_readOnly) {
+                                                          _controller.moveLineDown();
+                                                          _commonKeyFunctions();
+                                                        }
+                                                        return KeyEventResult.handled;
+                                                      case LogicalKeyboardKey.keyF:
+                                                        if (isShiftPressed && !_readOnly) {
+                                                          handleFormatCode();
+                                                          _commonKeyFunctions();
+                                                          return KeyEventResult.handled;
+                                                        }
+                                                        break;
+                                                      default:
+                                                        break;
+                                                    }
+                                                  }
+
                                                   if (_suggestionNotifier
                                                               .value !=
                                                           null &&
@@ -1614,12 +1869,24 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
 
                                                   if (isCtrlPressed) {
                                                     switch (event.logicalKey) {
+                                                      case LogicalKeyboardKey.keyS:
+                                                        if (widget.saveFile != null) {
+                                                          widget.saveFile!();
+                                                        } else {
+                                                          _controller.saveFile();
+                                                        }
+                                                        return KeyEventResult.handled;
                                                       case LogicalKeyboardKey
                                                           .keyF:
                                                         final isAlt =
                                                             HardwareKeyboard
                                                                 .instance
                                                                 .isAltPressed;
+                                                        if (isShiftPressed) {
+                                                          handleFormatCode();
+                                                          _commonKeyFunctions();
+                                                          return KeyEventResult.handled;
+                                                        }
                                                         _findController
                                                                 .isActive =
                                                             true;
@@ -2607,11 +2874,11 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                         } else {
                                                           _sugSelIndex = indx;
                                                         }
-                                                        final text =
-                                                            item
-                                                                is LspCompletion
+                                                        final text = item is LspCompletion
                                                             ? item.label
-                                                            : item as String;
+                                                            : item is SuggestionModel
+                                                                ? item.replacedOnClick
+                                                                : item as String;
                                                         _controller
                                                             .insertAtCurrentCursor(
                                                               text,
@@ -2714,6 +2981,21 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                           ),
                                                         ],
                                                       ],
+                                                      if (item is SuggestionModel) ...[
+                                                        Expanded(
+                                                          child: Text(
+                                                            item.label,
+                                                            style:
+                                                                _suggestionStyle
+                                                                    .labelTextStyle ??
+                                                                _suggestionStyle
+                                                                    .textStyle,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                          ),
+                                                        ),
+                                                      ],
                                                       if (item is String)
                                                         Expanded(
                                                           child: Text(
@@ -2738,6 +3020,141 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                       ),
                                     ),
                                   ),
+                                  // Description popup for SuggestionModel items
+                                  if (sugg.isNotEmpty &&
+                                      _sugSelIndex < sugg.length &&
+                                      sugg[_sugSelIndex] is SuggestionModel) ...[
+                                    Builder(
+                                      builder: (context) {
+                                        final selectedSuggestion =
+                                            sugg[_sugSelIndex] as SuggestionModel;
+                                        final hasDescription =
+                                            selectedSuggestion.description != null &&
+                                            selectedSuggestion.description!.isNotEmpty;
+                                        if (!hasDescription) {
+                                          return SizedBox.shrink();
+                                        }
+                                        return Positioned(
+                                          top: adjustedTop != null
+                                              ? adjustedTop! +
+                                                  (widget.textStyle?.fontSize ?? 14) +
+                                                  10
+                                              : null,
+                                          bottom: adjustedBottom != null
+                                              ? null
+                                              : null,
+                                          left: screenWidth < 700
+                                              ? offset.dx +
+                                                  (screenWidth < 700
+                                                      ? screenWidth * 0.63
+                                                      : screenWidth * 0.3) +
+                                                  8
+                                              : ((adjustedLeft +
+                                                              suggestionWidth +
+                                                              420) >
+                                                          screenWidth
+                                                      ? adjustedLeft - 420 - 10
+                                                      : adjustedLeft +
+                                                            suggestionWidth +
+                                                            8),
+                                          child: ConstrainedBox(
+                                            constraints: BoxConstraints(
+                                              maxHeight: 400,
+                                              maxWidth: screenWidth < 700
+                                                  ? screenWidth * 0.3
+                                                  : 400,
+                                              minWidth: 200,
+                                            ),
+                                            child: Card(
+                                              shape: _suggestionDescriptionStyle.shape,
+                                              elevation:
+                                                  _suggestionDescriptionStyle.elevation,
+                                              color: _suggestionDescriptionStyle
+                                                  .backgroundColor,
+                                              margin: EdgeInsets.zero,
+                                              child: Padding(
+                                                padding: const EdgeInsets.all(12.0),
+                                                child: SingleChildScrollView(
+                                                  child: selectedSuggestion
+                                                              .jinjaHtmlWidget !=
+                                                          null
+                                                      ? JinjaHtmlWidget(
+                                                          htmlContent: selectedSuggestion
+                                                              .jinjaHtmlWidget
+                                                              ?.htmlContent
+                                                              ?.replaceAll(
+                                                                '{{description}}',
+                                                                selectedSuggestion
+                                                                        .description ??
+                                                                    '',
+                                                              )
+                                                              .replaceAll(
+                                                                '{{ description }}',
+                                                                selectedSuggestion
+                                                                        .description ??
+                                                                    '',
+                                                              ),
+                                                        ).fromJson(
+                                                          selectedSuggestion
+                                                              .jinjaHtmlWidget!
+                                                              .toJson(),
+                                                        )
+                                                      : Html(
+                                                          data: selectedSuggestion
+                                                              .description!,
+                                                          style: {
+                                                            "p": Style(
+                                                              fontSize: FontSize(
+                                                                _suggestionDescriptionStyle
+                                                                        .textStyle
+                                                                        .fontSize ??
+                                                                    14,
+                                                              ),
+                                                              color: _suggestionDescriptionStyle
+                                                                  .textStyle
+                                                                  .color,
+                                                              fontWeight:
+                                                                  _suggestionDescriptionStyle
+                                                                      .textStyle
+                                                                      .fontWeight,
+                                                            ),
+                                                            "pre": Style(
+                                                              fontSize: FontSize(
+                                                                _suggestionDescriptionStyle
+                                                                        .textStyle
+                                                                        .fontSize ??
+                                                                    14,
+                                                              ),
+                                                              color: _suggestionDescriptionStyle
+                                                                  .textStyle
+                                                                  .color,
+                                                              backgroundColor:
+                                                                  _editorTheme['root']!
+                                                                      .backgroundColor,
+                                                              padding:
+                                                                  HtmlPaddings.all(8),
+                                                            ),
+                                                            "code": Style(
+                                                              fontSize: FontSize(
+                                                                _suggestionDescriptionStyle
+                                                                        .textStyle
+                                                                        .fontSize ??
+                                                                    14,
+                                                              ),
+                                                              color: _suggestionDescriptionStyle
+                                                                  .textStyle
+                                                                  .color,
+                                                            ),
+                                                          },
+                                                        ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ],
                                   if (_selectedSuggestionMd != null &&
                                       _lspSignatureNotifier.value == null)
                                     Positioned(
@@ -3329,6 +3746,34 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
     _sugSelIndex = 0;
   }
 
+  void handleFormatCode() {
+    final currentText = _controller.text;
+    String? formattedText;
+
+    // Use custom formatter callback if provided
+    if (widget.formatCode != null) {
+      formattedText = widget.formatCode!(currentText);
+    } else {
+      // Auto-format based on language
+      final languageName = _language.name;
+      formattedText = CodeFormatter.formatCode(currentText, languageName);
+    }
+
+    // Apply formatting if successful
+    if (formattedText != null && formattedText != currentText) {
+      final selection = _controller.selection;
+      _controller.text = formattedText;
+
+      // Try to preserve cursor position
+      final newLength = formattedText.length;
+      if (selection.extentOffset <= newLength) {
+        _controller.selection = selection;
+      } else {
+        _controller.selection = TextSelection.collapsed(offset: newLength);
+      }
+    }
+  }
+
   void _acceptGhostText() {
     final ghostText = _aiNotifier.value;
     if (ghostText == null || ghostText.isEmpty) return;
@@ -3342,6 +3787,45 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
     if (ghost == null || ghost.text.isEmpty) return;
     _controller.insertAtCurrentCursor(ghost.text);
     _controller.clearGhostText();
+  }
+
+  /// This is called by the controller when [showCustomSuggestions] is invoked.
+  void _showCustomSuggestions(List<SuggestionModel> suggestions) {
+    if (!mounted) return;
+
+    // Set suggestions and show popup
+    _sugSelIndex = 0;
+    _suggestionNotifier.value = suggestions;
+  }
+
+  final Map<String, String> _cachedResponse = {};
+
+  Future<void> getManualAiSuggestion() async {
+    _suggestionNotifier.value = null;
+    final aiCompletion = _controller.aiCompletion ?? widget.aiCompletion;
+    if (aiCompletion?.completionType == CompletionType.manual ||
+        aiCompletion?.completionType == CompletionType.mixed) {
+      final String text = _controller.text;
+      final int cursorPosition = _controller.selection.extentOffset;
+      final String codeToSend =
+          "${text.substring(0, cursorPosition)}<|CURSOR|>${text.substring(cursorPosition)}";
+      _aiNotifier.value = await _getCachedResponse(codeToSend, aiCompletion!);
+    }
+  }
+
+  Future<String> _getCachedResponse(
+    String codeToSend,
+    AiCompletion aiCompletion,
+  ) async {
+    final key = codeToSend + aiCompletion.model.model.toString();
+    if (_cachedResponse.containsKey(key)) {
+      return _cachedResponse[key]!;
+    }
+    final String aiResponse = await aiCompletion.model.completionResponse(
+      codeToSend,
+    );
+    _cachedResponse[key] = aiResponse;
+    return aiResponse;
   }
 }
 
@@ -3591,6 +4075,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   List<ui.Paragraph>? _cachedSelectionMagnifierParagraphs;
   int? _cachedSelectionMagnifierStartLine, _cachedSelectionMagnifierEndLine;
   int? _ghostTextAnchorLine, _highlightedLine;
+  int? _hoveredBreakpointLine;
   int _lastAppliedSemanticVersion = -1, _lastDocumentVersion = -1;
   int _previousLineCount = 0;
   int _ghostTextLineCount = 0, _cachedLineCount = 0;
@@ -3743,7 +4228,11 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         final digits = controller.lineCount.toString().length;
         final digitWidth = digits * _gutterPadding * 0.6;
         final foldIconSpace = enableFolding ? fontSize + 4 : 0;
-        _gutterWidth = digitWidth + foldIconSpace + _gutterPadding;
+        final breakpointColumnWidth = (_gutterStyle.showBreakpoints)
+            ? fontSize * 1.5
+            : 0;
+        _gutterWidth =
+            breakpointColumnWidth + digitWidth + foldIconSpace + _gutterPadding;
       }
     } else {
       _gutterWidth = 0;
@@ -5469,6 +5958,15 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     return height;
   }
 
+  double _getCharWidth(String char) {
+    final builder = ui.ParagraphBuilder(_paragraphStyle);
+    builder.pushStyle(_uiTextStyle);
+    builder.addText(char);
+    final p = builder.build();
+    p.layout(const ui.ParagraphConstraints(width: double.infinity));
+    return p.maxIntrinsicWidth;
+  }
+
   double _getLineYOffset(int targetLine, bool hasActiveFolds) {
     final cacheKey = '${targetLine}_$hasActiveFolds';
     if (_lineOffsetCache.containsKey(cacheKey)) {
@@ -5839,6 +6337,19 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       );
     }
 
+    if (enableGuideLines && controller.rulers != null) {
+      _drawRulers(
+        canvas,
+        offset,
+        viewTop,
+        viewBottom,
+        firstVisibleLine,
+        lastVisibleLine,
+        firstVisibleLineY,
+        hasActiveFolds,
+      );
+    }
+
     if (focusNode.hasFocus && caretBlinkController.value > 0.5) {
       final caretInfo = _getCaretInfo();
 
@@ -6175,6 +6686,40 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     canvas.restore();
   }
 
+  void _drawRulers(
+    Canvas canvas,
+    Offset offset,
+    double viewTop,
+    double viewBottom,
+    int firstVisibleLine,
+    int lastVisibleLine,
+    double firstVisibleLineY,
+    bool hasActiveFolds,
+  ) {
+    if (controller.rulers == null || controller.rulers!.isEmpty) return;
+
+    final charWidth = _getCharWidth('M');
+    final scroll = lineWrap ? 0.0 : _effectiveHScroll;
+    final textX = isRTL
+        ? (innerPadding?.left ?? 0) - scroll
+        : _gutterWidth + (innerPadding?.left ?? 0) - scroll;
+
+    final rulerPaint = Paint()
+      ..color = Colors.grey.withAlpha(50)
+      ..strokeWidth = 1.0;
+
+    for (final column in controller.rulers!) {
+      final rulerX = offset.dx + textX + (column * charWidth);
+      if (rulerX >= 0 && rulerX <= size.width) {
+        canvas.drawLine(
+          Offset(rulerX, offset.dy),
+          Offset(rulerX, offset.dy + size.height),
+          rulerPaint,
+        );
+      }
+    }
+  }
+
   void _drawGutter(
     Canvas canvas,
     Offset offset,
@@ -6335,6 +6880,60 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
           lineNumberColor = inactiveLineColor;
         }
 
+        // Draw breakpoint indicator if enabled and breakpoint exists for this line
+        final fontSize = _textStyle?.fontSize ?? 14.0;
+        final breakpointColumnWidth = (_gutterStyle.showBreakpoints)
+            ? fontSize * 1.5
+            : 0;
+        if (_gutterStyle.showBreakpoints &&
+            !isRTL &&
+            controller.breakpoints.contains(i + 1)) {
+          final isHovered = _hoveredBreakpointLine == i + 1;
+          final breakpointPaint = Paint()
+            ..color = _gutterStyle.breakpointColor
+            ..style = PaintingStyle.fill;
+          if (isHovered) {
+            breakpointPaint.color = _gutterStyle.breakpointColor.withAlpha(200);
+          }
+
+          final breakpointRadius = 4.0;
+          final breakpointCenterX = offset.dx + breakpointColumnWidth / 2;
+          final breakpointCenterY =
+              offset.dy +
+              (innerPadding?.top ?? 0) +
+              contentTop +
+              visualYOffset -
+              vscrollController.offset +
+              _lineHeight / 2;
+
+          canvas.drawCircle(
+            Offset(breakpointCenterX, breakpointCenterY),
+            breakpointRadius,
+            breakpointPaint,
+          );
+        } else if (_gutterStyle.showBreakpoints &&
+            !isRTL &&
+            _hoveredBreakpointLine == i + 1) {
+          // Show semi-transparent breakpoint on hover even if not set
+          final breakpointRadius = 4.0;
+          final breakpointCenterX = offset.dx + breakpointColumnWidth / 2;
+          final breakpointCenterY =
+              offset.dy +
+              (innerPadding?.top ?? 0) +
+              contentTop +
+              visualYOffset -
+              vscrollController.offset +
+              _lineHeight / 2;
+
+          canvas.drawCircle(
+            Offset(breakpointCenterX, breakpointCenterY),
+            breakpointRadius,
+            Paint()
+              ..color = _gutterStyle.breakpointColor.withAlpha(100)
+              ..style = PaintingStyle.fill,
+          );
+        }
+
         final lineNumberStyle = baseLineNumberStyle!.copyWith(
           color: lineNumberColor,
         );
@@ -6350,7 +6949,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
           offset +
               Offset(
                 (isRTL ? size.width - _gutterWidth : 0) +
-                    (_gutterWidth - numWidth) / 2 -
+                    breakpointColumnWidth +
+                    (_gutterWidth - numWidth - breakpointColumnWidth) / 2 -
                     (enableFolding ? (lineNumberStyle.fontSize ?? 14) / 2 : 0),
                 (innerPadding?.top ?? 0) +
                     contentTop +
@@ -8958,6 +9558,31 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         hoverNotifier.value = null;
       }
 
+      // Check for breakpoint hover
+      _hoveredBreakpointLine = null;
+      if (_enableGutter &&
+          !isRTL &&
+          localPosition.dx >= 0 &&
+          localPosition.dx < _gutterWidth) {
+        final fontSize = _textStyle?.fontSize ?? 14.0;
+        final breakpointColumnWidth = (_gutterStyle.showBreakpoints)
+            ? fontSize * 1.5
+            : 0;
+        if (_gutterStyle.showBreakpoints &&
+            localPosition.dx < breakpointColumnWidth) {
+          final clickY =
+              localPosition.dy -
+              (innerPadding?.top ?? 0) +
+              vscrollController.offset;
+          if (clickY >= 0) {
+            final hoveredLine = _findVisibleLineByYPosition(clickY);
+            if (hoveredLine >= 0 && hoveredLine < controller.lineCount) {
+              _hoveredBreakpointLine = hoveredLine + 1;
+            }
+          }
+        }
+      }
+
       if ((hoverNotifier.value == null || !isHoveringPopup.value) &&
           _isOffsetOverWord(textOffset)) {
         _hoverTimer?.cancel();
@@ -9026,6 +9651,28 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       final gutterClickArea = isRTL
           ? localPosition.dx > size.width - _gutterWidth
           : localPosition.dx < _gutterWidth;
+
+      if (_enableGutter && !isRTL && gutterClickArea) {
+        final fontSize = _textStyle?.fontSize ?? 14.0;
+        final breakpointColumnWidth = (_gutterStyle.showBreakpoints)
+            ? fontSize * 1.5
+            : 0;
+
+        if (_gutterStyle.showBreakpoints &&
+            localPosition.dx < breakpointColumnWidth) {
+          final clickY =
+              localPosition.dy -
+              (innerPadding?.top ?? 0) +
+              vscrollController.offset;
+          if (clickY >= 0) {
+            final clickedLine = _findVisibleLineByYPosition(clickY);
+            if (clickedLine >= 0 && clickedLine < controller.lineCount) {
+              controller.toggleBreakpoint(clickedLine + 1);
+              return;
+            }
+          }
+        }
+      }
 
       if (enableFolding && enableGutter && gutterClickArea) {
         if (clickY < 0) return;
@@ -9302,6 +9949,18 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         : _currentPosition.dx >= 0 && _currentPosition.dx < _gutterWidth;
 
     if (isInGutter) {
+      final fontSize = _textStyle?.fontSize ?? 14.0;
+      final breakpointColumnWidth = (_gutterStyle.showBreakpoints)
+          ? fontSize * 1.5
+          : 0;
+
+      // Check if hovering over breakpoint column
+      if (_gutterStyle.showBreakpoints &&
+          !isRTL &&
+          _currentPosition.dx < breakpointColumnWidth) {
+        return SystemMouseCursors.click;
+      }
+
       if (_foldRanges.isEmpty && !enableFolding) {
         return MouseCursor.defer;
       }

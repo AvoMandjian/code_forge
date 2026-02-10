@@ -3,10 +3,15 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:jinja_app_widgets_catalog/jinja_app_widgets_catalog.dart';
+import 'package:re_highlight/languages/all.dart';
+import 'package:re_highlight/re_highlight.dart';
+import 'package:re_highlight/styles/all.dart';
 import 'package:universal_io/io.dart';
 
 import '../code_forge.dart';
 import 'rope.dart';
+import 'suggestions/initialize_language_specific_suggestions.dart';
 
 /// Controller for the [CodeForge] code editor widget.
 ///
@@ -76,6 +81,10 @@ class CodeForgeController implements DeltaTextInputClient {
   bool _lspFoldRangesAdjustedNotFetched = false;
   bool _inlayHintsVisible = false;
   bool documentHighlightsChanged = false;
+
+  /// If set, called when [saveFile] is invoked (e.g. Cmd+S).
+  /// When null, [saveFile] writes to [openedFile] when set.
+  VoidCallback? saveFileCallback;
 
   CodeForgeController({this.lspConfig}) {
     if (lspConfig != null) {
@@ -350,6 +359,157 @@ class CodeForgeController implements DeltaTextInputClient {
     }
   }
 
+  String? get openedFile => _openedFile;
+
+  /// The current programming language mode.
+  Mode? currentLanguage;
+
+  /// The current editor theme (color scheme).
+  Map<String, TextStyle>? currentTheme;
+
+  /// Sets the programming language by name.
+  ///
+  /// This method updates the [currentLanguage] and initializes language-specific
+  /// suggestions for the given language. The language name must match a key in
+  /// [builtinAllLanguages].
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.setLanguage('dart');
+  /// controller.setLanguage('json');
+  /// ```
+  void setLanguage(String languageName) {
+    if (builtinAllLanguages.containsKey(languageName)) {
+      currentLanguage = builtinAllLanguages[languageName];
+      initializeLanguageSpecificSuggestions(
+        currentLanguage: currentLanguage!,
+        registerCustomSuggestions: registerCustomSuggestions,
+      );
+      notifyListeners();
+    }
+  }
+
+  /// Sets the editor theme by name.
+  ///
+  /// This method updates the [currentTheme] with a theme from [builtinAllThemes].
+  /// The theme name must match a key in [builtinAllThemes].
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.setTheme('vs2015');
+  /// controller.setTheme('atom-one-dark');
+  /// ```
+  void setTheme(String themeName) {
+    if (builtinAllThemes.containsKey(themeName)) {
+      currentTheme = builtinAllThemes[themeName];
+      notifyListeners();
+    }
+  }
+
+  /// List of custom suggestions registered with the controller.
+  List<SuggestionModel> registeredCustomSuggestions = [];
+
+  /// Default Jinja HTML widget model to assign to registered suggestions.
+  ///
+  /// When [registerCustomSuggestions] is called, if this is set, it will be
+  /// assigned to each suggestion's [SuggestionModel.jinjaHtmlWidget].
+  /// This allows all registered suggestions to use the same Jinja HTML template
+  /// for rendering their descriptions.
+  JinjaHtmlModel? customSuggestionJinjaFlutterHtml;
+
+  /// Callback to show custom suggestions UI.
+  void Function(List<SuggestionModel>)? showCustomSuggestionsCallback;
+
+  /// Callback when code changes.
+  void Function(String currentCode)? _onCodeChanged;
+
+  /// Callback for breakpoint changes.
+  void Function(Set<int> breakpoints)? _onBreakpointsChanged;
+
+  /// Set of line numbers (1-indexed) that have breakpoints set.
+  final breakpoints = <int>{};
+
+  /// Column positions for editor rulers (vertical guide lines).
+  List<int>? rulers;
+
+  /// AI Completion instance.
+  AiCompletion? _aiCompletion;
+
+  /// Callback to show Ai suggestion manually.
+  VoidCallback? manualAiCompletion;
+
+  void setAiCompletion(AiCompletion? aiCompletion) {
+    _aiCompletion = aiCompletion;
+    notifyListeners();
+  }
+
+  AiCompletion? get aiCompletion => _aiCompletion;
+
+  void enableAiCompletion() {
+    _aiCompletion?.enableCompletion = true;
+    notifyListeners();
+  }
+
+  void disableAiCompletion() {
+    _aiCompletion?.enableCompletion = false;
+    notifyListeners();
+  }
+
+  bool toggleAiCompletion() {
+    if (_aiCompletion == null) return false;
+    _aiCompletion!.enableCompletion = !_aiCompletion!.enableCompletion;
+    notifyListeners();
+    return _aiCompletion!.enableCompletion;
+  }
+
+  bool isAiCompletionEnabled() {
+    return _aiCompletion?.enableCompletion ?? false;
+  }
+
+  void onCodeChanged(void Function(String currentCode) callback) {
+    _onCodeChanged = callback;
+  }
+
+  void onBreakpointsChanged(void Function(Set<int> breakpoints) callback) {
+    _onBreakpointsChanged = callback;
+  }
+
+  void setRulers(List<int>? columns) {
+    rulers = columns;
+    notifyListeners();
+  }
+
+  void clearRulers() {
+    rulers = null;
+    notifyListeners();
+  }
+
+  void toggleBreakpoint(int line) {
+    if (breakpoints.contains(line)) {
+      breakpoints.remove(line);
+    } else {
+      breakpoints.add(line);
+    }
+    _onBreakpointsChanged?.call(breakpoints);
+    notifyListeners();
+  }
+
+  void registerCustomSuggestions(List<SuggestionModel> suggestions) {
+    if (customSuggestionJinjaFlutterHtml != null) {
+      for (var element in suggestions) {
+        element.jinjaHtmlWidget = customSuggestionJinjaFlutterHtml;
+      }
+    }
+    registeredCustomSuggestions = suggestions;
+    notifyListeners();
+  }
+
+  /// Clears all registered custom suggestions.
+  void clearRegisteredCustomSuggestions() {
+    registeredCustomSuggestions = [];
+    notifyListeners();
+  }
+
   /// Returns the errors, warnings and info available in the editor as a [List<LspErrors>].
   /// Each [LspErrors] item holds the error severity, range and the message of each errors.
   List<LspErrors> get diagnostics => diagnosticsNotifier.value;
@@ -363,9 +523,6 @@ class CodeForgeController implements DeltaTextInputClient {
   /// The last character that was typed by the user.
   /// Returns an empty string if no character has been typed or if the last input was not a single character.
   String get lastTypedCharacter => _lastTypedCharacter ?? '';
-
-  /// Currently opened file.
-  String? get openedFile => _openedFile;
 
   VoidCallback? userCodeAction;
 
@@ -1028,14 +1185,76 @@ class CodeForgeController implements DeltaTextInputClient {
     }
   }
 
-  /// Save the current content, [controller.text] to the opened file.
+  /// Save the current content: calls [saveFileCallback] if set, then writes to
+  /// [openedFile] when non-null. Does not throw when both are unset.
   void saveFile() {
-    if (openedFile == null) {
-      throw FlutterError(
-        "No file found.\nPlease open a file by providing a valid filePath to the CodeForge widget",
-      );
+    saveFileCallback?.call();
+    if (openedFile != null) {
+      File(openedFile!).writeAsStringSync(text);
     }
-    File(openedFile!).writeAsStringSync(text);
+  }
+
+  /// Formats the current code content based on the current language.
+  ///
+  /// Uses [CodeFormatter] to automatically format the code based on the
+  /// language set in [currentLanguage]. Supports JSON, HTML, SQL, and Jinja.
+  ///
+  /// If formatting is not supported for the current language or [currentLanguage]
+  /// is null, formatting will be skipped.
+  ///
+  /// The method preserves cursor position when possible after formatting.
+  /// If rulers are set, the first ruler column will be used for wrapping
+  /// (e.g., for HTML attribute wrapping).
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.setLanguage('json');
+  /// controller.formatCode(); // Formats as JSON
+  /// ```
+  void formatCode() {
+    _flushBuffer(); // Ensure buffer is flushed before reading text
+
+    // Ensure buffer state is completely cleared
+    _bufferLineIndex = null;
+    _bufferLineText = null;
+    _bufferDirty = false;
+
+    // Force fresh text read directly from rope, bypassing cache
+    _cachedText = null;
+    final currentText = _rope.getText();
+    final langName = currentLanguage?.name;
+
+    if (langName == null) {
+      // No language set, cannot format
+      return;
+    }
+
+    // Get the first ruler column if rulers are set
+    final rulerColumn = rulers != null && rulers!.isNotEmpty
+        ? rulers!.first
+        : null;
+
+    final formattedText = CodeFormatter.formatCode(
+      currentText,
+      langName,
+      rulerColumn: rulerColumn,
+    );
+
+    if (formattedText != null && formattedText != currentText) {
+      final selectionBefore = selection;
+
+      text = formattedText;
+
+      // Try to preserve cursor position
+      final newLength = formattedText.length;
+      if (selectionBefore.extentOffset <= newLength) {
+        selection = selectionBefore;
+      } else {
+        selection = TextSelection.collapsed(offset: newLength);
+      }
+
+      notifyListeners();
+    }
   }
 
   /// Moves the cursor one character to the left.
@@ -1487,6 +1706,7 @@ class CodeForgeController implements DeltaTextInputClient {
     dirtyRegion = TextRange(start: 0, end: newText.length);
     _isTyping = false;
     notifyListeners();
+    _onCodeChanged?.call(text);
   }
 
   /// Sets the current text selection.

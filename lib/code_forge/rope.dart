@@ -1,3 +1,7 @@
+/// The controller uses a rope data structure internally for efficient text
+/// manipulation, especially for large documents.
+library;
+
 import 'dart:math';
 
 /// Text direction for bidirectional text support

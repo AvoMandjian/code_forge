@@ -70,6 +70,14 @@ class GutterStyle {
   /// If null, a low opacity version of the selection color is used.
   final Color? foldedLineHighlightColor;
 
+  /// Whether to show breakpoints in the gutter.
+  /// When true, breakpoint indicators will be displayed in the leftmost column of the gutter.
+  final bool showBreakpoints;
+
+  /// The color used for breakpoint indicators.
+  /// Defaults to red.
+  final Color breakpointColor;
+
   GutterStyle({
     this.lineNumberStyle,
     this.backgroundColor,
@@ -84,6 +92,8 @@ class GutterStyle {
     this.errorLineNumberColor = const Color(0xFFE53935),
     this.warningLineNumberColor = const Color(0xFFFFA726),
     this.foldedLineHighlightColor,
+    this.showBreakpoints = true,
+    this.breakpointColor = Colors.red,
   });
 }
 
@@ -116,6 +126,10 @@ sealed class OverlayStyle {
   /// The text style used for the text in the overlay.
   /// This is typically a [TextStyle] that defines the font size, weight, color, etc.
   final TextStyle textStyle;
+
+  /// The color used when the overlay is highlighted.
+  final Color highlightColor;
+
   OverlayStyle({
     this.elevation = 6,
     required this.shape,
@@ -124,6 +138,7 @@ sealed class OverlayStyle {
     required this.hoverColor,
     required this.splashColor,
     required this.textStyle,
+    required this.highlightColor,
   });
 }
 
@@ -205,6 +220,7 @@ class SuggestionStyle extends OverlayStyle {
     required super.hoverColor,
     required super.splashColor,
     required super.textStyle,
+    required super.highlightColor,
     this.selectedBackgroundColor,
     this.borderColor,
     this.borderWidth,
@@ -239,6 +255,18 @@ class SuggestionStyle extends OverlayStyle {
 /// )
 /// ```
 class HoverDetailsStyle extends OverlayStyle {
+  /// The border color for the hover details popup.
+  final Color? borderColor;
+
+  /// The border width for the hover details popup.
+  final double? borderWidth;
+
+  /// The padding inside the hover details popup.
+  final EdgeInsets padding;
+
+  /// The maximum width of the hover details popup.
+  final double maxWidth;
+
   /// Creates a [HoverDetailsStyle] with the specified options.
   HoverDetailsStyle({
     super.elevation,
@@ -248,6 +276,11 @@ class HoverDetailsStyle extends OverlayStyle {
     required super.hoverColor,
     required super.splashColor,
     required super.textStyle,
+    required super.highlightColor,
+    this.borderColor,
+    this.borderWidth,
+    this.padding = const EdgeInsets.all(8.0),
+    this.maxWidth = 300.0,
   });
 }
 

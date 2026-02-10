@@ -4,22 +4,31 @@ overview: Merge new features (AI Completion, Tag Completion, Code Formatting, En
 todos:
   - id: deps
     content: Update pubspec.yaml with new dependencies and asset/font definitions
-    status: pending
+    status: completed
   - id: copy_files
     content: Copy new feature files (CodeFormatter, TagCompletion, AI_completion, Suggestions) and assets
-    status: pending
+    status: completed
   - id: exports
     content: Update lib/code_forge.dart exports
-    status: pending
+    status: completed
   - id: controller
-    content: Update Controller to support AI completion, rulers, and callbacks
-    status: pending
+    content: Update Controller (AI, callbacks, rulers, breakpoints)
+    status: completed
+  - id: styling
+    content: Update Styling (GutterStyle) and SyntaxHighlighter (Jinja)
+    status: completed
+  - id: rope
+    content: Update Rope with BiDi support
+    status: completed
   - id: code_area
-    content: Update CodeArea to integrate AI, Tag Completion, Formatting, and Rulers
-    status: pending
+    content: Update CodeArea (AI, Tag Completion, Formatting, Rulers, Breakpoints)
+    status: completed
   - id: verify
     content: Verify build and resolve analysis errors
-    status: pending
+    status: completed
+  - id: remaining
+    content: Optional DP_V1 parity (saveFile/saveFileCallback, clearRegisteredCustomSuggestions)
+    status: completed
 isProject: false
 ---
 
@@ -69,13 +78,31 @@ Update `lib/code_forge.dart` to export the new public APIs:
 
 Modify `lib/code_forge/controller.dart`:
 
-- Add `AiCompletion? _aiCompletion` field and getter/setter.
-- Add `VoidCallback? manualAiCompletion`.
-- Add fields for `rulers`, `_onCodeChanged`, `_onBreakpointsChanged`, and `showCustomSuggestionsCallback`.
-- Add methods: `enableAiCompletion`, `disableAiCompletion`, `toggleAiCompletion`, `isAiCompletionEnabled`, `setRulers`, `clearRulers`, `onCodeChanged`, `onBreakpointsChanged`.
-- Integrate `_onCodeChanged?.call(text)` in the text update logic.
+- **AI**: `AiCompletion? _aiCompletion`, `manualAiCompletion`, methods `enableAiCompletion`, `toggleAiCompletion`, etc.
+- **Callbacks**: `onCodeChanged`, `onBreakpointsChanged`, `showCustomSuggestionsCallback`.
+- **Rulers**: `List<int>? rulers`, `setRulers`, `clearRulers`.
+- **Breakpoints**: `Set<int> breakpoints`, `toggleBreakpoint`.
+- **Logic**: Call `_onCodeChanged` in update logic; handle breakpoint toggles.
 
-### 5. Integration: Code Area
+### 5. Integration: Styling and Highlighting
+
+Modify `lib/code_forge/styling.dart`:
+
+- **GutterStyle**: Add `final bool showBreakpoints` and `final Color breakpointColor`.
+
+Modify `lib/code_forge/syntax_highlighter.dart`:
+
+- Add `_createJinjaPatterns` and integrate into the highlighter logic.
+
+### 6. Integration: Rope (BiDi Support)
+
+Modify `lib/code_forge/rope.dart`:
+
+- Add `TextDirection` enum and `BiDi` class.
+- Add `BiDiSegment` class.
+- Update `Rope` class with BiDi methods (`textDirection`, `bidiSegments`, `insertImmutable`, `deleteImmutable`).
+
+### 7. Integration: Code Area
 
 Modify `lib/code_forge/code_area.dart`:
 
@@ -83,15 +110,23 @@ Modify `lib/code_forge/code_area.dart`:
 - **State Initialization**:
   - Initialize `initializeLanguageSpecificSuggestions`.
   - Set up AI completion controller in `initState` (`_controller.setAiCompletion(widget.aiCompletion)`).
-- **Formatting**: Hook up `CodeFormatter.formatCode` (likely in a format command or keybinding).
-- **Tag Completion**: Integrate `TagCompletion.getTagSuggestions` into the autocomplete logic.
-- **AI Completion**: Add logic to trigger and accept AI suggestions (`_acceptAiCompletion`).
-- **Rulers**: Implement drawing logic for vertical rulers in the painter or as a separate layer.
+- **Formatting**: Hook up `CodeFormatter.formatCode`.
+- **Tag Completion**: Integrate `TagCompletion.getTagSuggestions`.
+- **AI Completion**: Logic to trigger and accept AI suggestions (`_acceptAiCompletion`).
+- **Rulers**: Paint vertical rulers in `_paintCode` or a new painter method.
+- **Breakpoints**: Calculate gutter width for breakpoints, paint breakpoints, handle gutter clicks to toggle.
 
-### 6. Verification
+### 7. Verification
 
 - Run `flutter pub get`.
 - Run `flutter analyze` to check for missing imports or type errors.
 - Verify that the application compiles.
+
+### 8. Remaining DP_V1 parity (done)
+
+- **Controller**: Added `saveFileCallback`; `saveFile()` now calls it when set, then writes to `openedFile` if non-null. Added `clearRegisteredCustomSuggestions()`.
+- **CodeForge**: Added `saveFile` (VoidCallback?); Cmd/Ctrl+S invokes `widget.saveFile ?? controller.saveFile()`. In `initState`, `_controller.saveFileCallback = widget.saveFile`. Added `onBreakpointsChanged` widget parameter, wired to controller.
+- **SuggestionDescriptionStyle**: Added `suggestionDescriptionStyle` widget parameter; initialized `_suggestionDescriptionStyle` in `initState`; added description popup rendering for `SuggestionModel` items with descriptions (supports HTML and Jinja HTML widgets); added `SuggestionModel` handling in suggestion list rendering.
+- **Doc**: `DP_V1_FEATURES.md` updated with "Remaining DP_V1-only items" table (all items now merged).
 
 **Note on Conflicts**: The `controller.dart` file is large. I will use targeted edits to insert the new functionality without disrupting existing logic.
