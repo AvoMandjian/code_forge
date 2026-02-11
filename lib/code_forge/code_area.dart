@@ -12,8 +12,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:jinja_app_widgets_catalog/jinja_app_widgets_catalog.dart';
-// import 'package:markdown_widget/markdown_widget.dart';
 import 'package:re_highlight/languages/dart.dart';
+import 'package:re_highlight/languages/jinja.dart';
 import 'package:re_highlight/re_highlight.dart';
 import 'package:re_highlight/styles/vs2015.dart';
 import 'package:universal_io/io.dart';
@@ -375,10 +375,10 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
         widget.horizontalScrollController ?? ScrollController();
     _vscrollController = widget.verticalScrollController ?? ScrollController();
     _editorTheme = widget.editorTheme ?? vs2015Theme;
-    _language = widget.language ?? langDart;
+    _language = widget.language ?? langJinja;
     // Sync widget language back to controller if controller doesn't have one
-    if (_controller.currentLanguage == null && widget.language != null) {
-      _controller.currentLanguage = widget.language;
+    if (_controller.currentLanguage == null) {
+      _controller.currentLanguage = _language;
       // Initialize language-specific suggestions
       initializeLanguageSpecificSuggestions(
         currentLanguage: _language,
@@ -387,7 +387,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
     } else if (_controller.currentLanguage != null) {
       // Initialize suggestions if language is already set
       initializeLanguageSpecificSuggestions(
-        currentLanguage: _language,
+        currentLanguage: _controller.currentLanguage!,
         registerCustomSuggestions: _controller.registerCustomSuggestions,
       );
     }
@@ -670,8 +670,10 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
       );
 
       if (widget.enableSuggestions &&
-          _controller.registeredCustomSuggestions.isNotEmpty &&
-          text != _previousValue) {
+          _controller.registeredCustomSuggestions.isNotEmpty
+      //  &&
+      // text != _previousValue
+      ) {
         final textBeforeCursor = text.substring(0, cursorPosition);
         final textAfterCursor = text.substring(cursorPosition);
         final matchingSuggestions = _checkTriggerPatterns(
@@ -1854,6 +1856,9 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                             .handled;
                                                       case LogicalKeyboardKey
                                                           .enter:
+                                                        _acceptSuggestion();
+                                                        return KeyEventResult
+                                                            .handled;
                                                       case LogicalKeyboardKey
                                                           .tab:
                                                         _acceptSuggestion();
@@ -9965,7 +9970,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     if (event is PointerDownEvent && event.buttons == kPrimaryButton) {
       try {
         focusNode.requestFocus();
-        suggestionNotifier.value = null;
+        // suggestionNotifier.value = null;
         signatureNotifier.value = null;
       } catch (e) {
         debugPrint(e.toString());
@@ -10103,9 +10108,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
         _dragStartOffset = textOffset;
         _onetap.onTap = () {
-          if (suggestionNotifier.value != null) {
-            suggestionNotifier.value = null;
-          }
+          // if (suggestionNotifier.value != null) {
+          //   suggestionNotifier.value = null;
+          // }
           if (signatureNotifier.value != null) {
             signatureNotifier.value = null;
           }
