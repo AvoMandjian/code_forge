@@ -560,13 +560,6 @@ List<SuggestionModel> getJinjaSuggestions() {
       triggeredAt: '|',
     ),
     SuggestionModelJinja(
-      label: 'Capitalize Letters',
-      description:
-          '<h2><code>{{ value | capitalize_letters }}</code> Filter\n\n<strong>Capitalize specific letters<strong> in the string.\n\n<pre><code>\n{{ value | capitalize_letters }}\n</code></pre>\n\n<strong>Use cases:<strong> Custom capitalization, text formatting, special formatting',
-      replacedOnClick: '| capitalize_letters',
-      triggeredAt: '|',
-    ),
-    SuggestionModelJinja(
       label: 'Get Plain Text From Html',
       description:
           '<h2><code>{{ value | get_plain_text_from_html }}</code> Filter\n\n<strong>Extract plain text<strong> from HTML content.\n\n<pre><code>\n{{ value | get_plain_text_from_html }}\n</code></pre>\n\n<strong>Use cases:<strong> Text extraction, content sanitization, plain text conversion',
@@ -754,6 +747,430 @@ List<SuggestionModel> getJinjaSuggestions() {
           '<h2><code>{{ value | safe }}</code> Filter</h2>\n\n<p><strong>Mark value as safe</strong> (do not escape).</p>\n\n<pre><code>{{ html_content | safe }}</code></pre>\n\n<p><strong>Use cases:</strong> Rendering trusted HTML, bypassing auto-escaping</p>',
       replacedOnClick: '| safe',
       triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Replace All From To',
+      description:
+          '<h2><code>{{ value | replace_all_from_to }}</code> Filter</h2>\n\n<p><strong>Replace all occurrences</strong> of a string with another.</p>\n\n<pre><code>{{ value | replace_all_from_to("world", "jinja") }}</code></pre>\n\n<p><strong>Use cases:</strong> String replacement, text substitution</p>',
+      replacedOnClick: '| replace_all_from_to("from", "to")',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Replace Backslash N',
+      description:
+          '<h2><code>{{ value | replace_backslash_n }}</code> Filter</h2>\n\n<p><strong>Remove all newline characters</strong> from a string.</p>\n\n<pre><code>{{ value | replace_backslash_n }}</code></pre>\n\n<p><strong>Use cases:</strong> Cleaning text, removing line breaks</p>',
+      replacedOnClick: '| replace_backslash_n',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Append',
+      description:
+          '<h2><code>{{ list | append }}</code> Filter</h2>\n\n<p><strong>Append a value</strong> to a list.</p>\n\n<pre><code>{{ list | append("new_item") }}</code></pre>\n\n<p><strong>Use cases:</strong> Adding items to a list</p>',
+      replacedOnClick: '| append("item")',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Fromjson',
+      description:
+          '<h2><code>{{ json_string | fromjson }}</code> Filter</h2>\n\n<p><strong>Parse a JSON string</strong> into an object.</p>\n\n<pre><code>{{ json_string | fromjson }}</code></pre>\n\n<p><strong>Use cases:</strong> JSON parsing</p>',
+      replacedOnClick: '| fromjson',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'As Bool',
+      description:
+          '<h2><code>{{ value | as_bool }}</code> Filter</h2>\n\n<p><strong>Convert value to boolean</strong>.</p>\n\n<pre><code>{{ value | as_bool }}</code></pre>\n\n<p><strong>Use cases:</strong> Type conversion, truthiness check</p>',
+      replacedOnClick: '| as_bool',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Bool',
+      description:
+          '<h2><code>{{ value | bool }}</code> Filter</h2>\n\n<p><strong>Convert value to boolean</strong> (alias for as_bool).</p>\n\n<pre><code>{{ value | bool }}</code></pre>\n\n<p><strong>Use cases:</strong> Type conversion, truthiness check</p>',
+      replacedOnClick: '| bool',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Combine',
+      description:
+          '<h2><code>{{ map1 | combine }}</code> Filter</h2>\n\n<p><strong>Merge two maps</strong> together.</p>\n\n<pre><code>{{ map1 | combine(map2) }}</code></pre>\n\n<p><strong>Use cases:</strong> Merging maps, combining data</p>',
+      replacedOnClick: '| combine(map2)',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Build Tree',
+      description:
+          '<h2><code>{{ flat_list | buildTree }}</code> Filter</h2>\n\n<p><strong>Build a tree structure</strong> from a flat list.</p>\n\n<pre><code>{{ flat_list | buildTree }}</code></pre>\n\n<p><strong>Use cases:</strong> Tree visualization, hierarchy building</p>',
+      replacedOnClick: '| buildTree',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Group By Multiple',
+      description:
+          '<h2><code>{{ list | groupbyMultiple }}</code> Filter</h2>\n\n<p><strong>Group a list</strong> by multiple attributes recursively.</p>\n\n<pre><code>{{ list | groupbyMultiple(["category", "subcategory"]) }}</code></pre>\n\n<p><strong>Use cases:</strong> Nested grouping, complex categorization</p>',
+      replacedOnClick: '| groupbyMultiple(["attr1", "attr2"])',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Urlencode',
+      description:
+          '<h2><code>{{ value | urlencode }}</code> Filter</h2>\n\n<p><strong>URL encode</strong> a string.</p>\n\n<pre><code>{{ value | urlencode }}</code></pre>\n\n<p><strong>Use cases:</strong> URL parameters, encoding strings</p>',
+      replacedOnClick: '| urlencode',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Urldecode',
+      description:
+          '<h2><code>{{ value | urldecode }}</code> Filter</h2>\n\n<p><strong>URL decode</strong> a string.</p>\n\n<pre><code>{{ value | urldecode }}</code></pre>\n\n<p><strong>Use cases:</strong> URL parameters, decoding strings</p>',
+      replacedOnClick: '| urldecode',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'To Json',
+      description:
+          '<h2><code>{{ value | to_json }}</code> Filter</h2>\n\n<p><strong>Convert object to JSON string</strong> (formatted).</p>\n\n<pre><code>{{ value | to_json(indent=2) }}</code></pre>\n\n<p><strong>Use cases:</strong> JSON serialization, debugging</p>',
+      replacedOnClick: '| to_json',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'From Json',
+      description:
+          '<h2><code>{{ value | from_json }}</code> Filter</h2>\n\n<p><strong>Parse JSON string</strong>.</p>\n\n<pre><code>{{ value | from_json }}</code></pre>\n\n<p><strong>Use cases:</strong> JSON parsing</p>',
+      replacedOnClick: '| from_json',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Mandatory',
+      description:
+          '<h2><code>{{ value | mandatory }}</code> Filter</h2>\n\n<p><strong>Throw error if value is null</strong>.</p>\n\n<pre><code>{{ value | mandatory(hint="Field is required") }}</code></pre>\n\n<p><strong>Use cases:</strong> Validation, required fields</p>',
+      replacedOnClick: '| mandatory(hint="Required")',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Ternary',
+      description:
+          '<h2><code>{{ condition | ternary }}</code> Filter</h2>\n\n<p><strong>Ternary operator</strong>.</p>\n\n<pre><code>{{ condition | ternary("true_val", "false_val") }}</code></pre>\n\n<p><strong>Use cases:</strong> Conditional values</p>',
+      replacedOnClick: '| ternary("true", "false")',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Type Debug',
+      description:
+          '<h2><code>{{ value | type_debug }}</code> Filter</h2>\n\n<p><strong>Get runtime type</strong>.</p>\n\n<pre><code>{{ value | type_debug }}</code></pre>\n\n<p><strong>Use cases:</strong> Debugging, type checking</p>',
+      replacedOnClick: '| type_debug',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Dict2Items',
+      description:
+          '<h2><code>{{ dict | dict2items }}</code> Filter</h2>\n\n<p><strong>Convert dictionary to list of items</strong>.</p>\n\n<pre><code>{{ dict | dict2items }}</code></pre>\n\n<p><strong>Use cases:</strong> Dictionary iteration</p>',
+      replacedOnClick: '| dict2items',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Items2Dict',
+      description:
+          '<h2><code>{{ items | items2dict }}</code> Filter</h2>\n\n<p><strong>Convert list of items to dictionary</strong>.</p>\n\n<pre><code>{{ items | items2dict }}</code></pre>\n\n<p><strong>Use cases:</strong> Dictionary construction</p>',
+      replacedOnClick: '| items2dict',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Flatten',
+      description:
+          '<h2><code>{{ list | flatten }}</code> Filter</h2>\n\n<p><strong>Flatten a nested list</strong>.</p>\n\n<pre><code>{{ list | flatten }}</code></pre>\n\n<p><strong>Use cases:</strong> List flattening</p>',
+      replacedOnClick: '| flatten',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Product',
+      description:
+          '<h2><code>{{ lists | product }}</code> Filter</h2>\n\n<p><strong>Cartesian product</strong> of input iterables.</p>\n\n<pre><code>{{ lists | product }}</code></pre>\n\n<p><strong>Use cases:</strong> Combinatorics</p>',
+      replacedOnClick: '| product',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Permutations',
+      description:
+          '<h2><code>{{ list | permutations }}</code> Filter</h2>\n\n<p><strong>Permutations</strong> of elements.</p>\n\n<pre><code>{{ list | permutations(2) }}</code></pre>\n\n<p><strong>Use cases:</strong> Combinatorics</p>',
+      replacedOnClick: '| permutations',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Combinations',
+      description:
+          '<h2><code>{{ list | combinations }}</code> Filter</h2>\n\n<p><strong>Combinations</strong> of elements.</p>\n\n<pre><code>{{ list | combinations(2) }}</code></pre>\n\n<p><strong>Use cases:</strong> Combinatorics</p>',
+      replacedOnClick: '| combinations',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Zip',
+      description:
+          '<h2><code>{{ list1 | zip }}</code> Filter</h2>\n\n<p><strong>Zip lists</strong> together.</p>\n\n<pre><code>{{ list1 | zip(list2) }}</code></pre>\n\n<p><strong>Use cases:</strong> Iterating multiple lists</p>',
+      replacedOnClick: '| zip(list2)',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Zip Longest',
+      description:
+          '<h2><code>{{ list1 | zip_longest }}</code> Filter</h2>\n\n<p><strong>Zip lists</strong> (longest).</p>\n\n<pre><code>{{ list1 | zip_longest(list2, fillvalue="-") }}</code></pre>\n\n<p><strong>Use cases:</strong> Iterating multiple lists</p>',
+      replacedOnClick: '| zip_longest(list2)',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'To UUID',
+      description:
+          '<h2><code>{{ value | to_uuid }}</code> Filter</h2>\n\n<p><strong>Generate UUID</strong>.</p>\n\n<pre><code>{{ value | to_uuid }}</code></pre>\n\n<p><strong>Use cases:</strong> ID generation</p>',
+      replacedOnClick: '| to_uuid',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Regex Escape',
+      description:
+          '<h2><code>{{ value | regex_escape }}</code> Filter</h2>\n\n<p><strong>Escape string for regex</strong>.</p>\n\n<pre><code>{{ value | regex_escape }}</code></pre>\n\n<p><strong>Use cases:</strong> Regex safety</p>',
+      replacedOnClick: '| regex_escape',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Regex Search',
+      description:
+          '<h2><code>{{ value | regex_search }}</code> Filter</h2>\n\n<p><strong>Search regex pattern</strong>.</p>\n\n<pre><code>{{ value | regex_search("pattern") }}</code></pre>\n\n<p><strong>Use cases:</strong> Pattern matching</p>',
+      replacedOnClick: '| regex_search("pattern")',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'Regex Findall',
+      description:
+          '<h2><code>{{ value | regex_findall }}</code> Filter</h2>\n\n<p><strong>Find all regex matches</strong>.</p>\n\n<pre><code>{{ value | regex_findall("pattern") }}</code></pre>\n\n<p><strong>Use cases:</strong> Pattern matching</p>',
+      replacedOnClick: '| regex_findall("pattern")',
+      triggeredAt: '|',
+    ),
+    SuggestionModelJinja(
+      label: 'First Where',
+      description:
+          '<h2><code>{{ list | firstWhere }}</code> Filter</h2>\n\n<p><strong>Find first item matching condition</strong>.</p>\n\n<pre><code>{{ list | firstWhere("key", "==", "value") }}</code></pre>\n\n<p><strong>Use cases:</strong> Searching lists</p>',
+      replacedOnClick: '| firstWhere("key", "==", "value")',
+      triggeredAt: '|',
+    ),
+
+    /// -------------------------------------------------------------------------
+    /// Globals / Functions
+    /// -------------------------------------------------------------------------
+    SuggestionModelJinja(
+      label: 'Return',
+      description:
+          '<h2><code>return(value)</code> Function</h2>\n\n<p><strong>Return data</strong> to the caller.</p>\n\n<pre><code>{{ return([1, 2, 3]) }}</code></pre>\n\n<p><strong>Use cases:</strong> Returning structured data from macros</p>',
+      replacedOnClick: 'return()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Jinja Action',
+      description:
+          '<h2><code>jinja_action(id, target, data)</code> Function</h2>\n\n<p><strong>Execute an action</strong> (widget, db, app).</p>\n\n<pre><code>{{ jinja_action(\'widget_id\', \'widget\', {\'key\': \'value\'}) }}</code></pre>\n\n<p><strong>Use cases:</strong> Widget refresh, DB actions, app callbacks</p>',
+      replacedOnClick: 'jinja_action()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Run Data Source',
+      description:
+          '<h2><code>run_data_source(id, properties)</code> Function</h2>\n\n<p><strong>Run a data source</strong> by ID.</p>\n\n<pre><code>{{ run_data_source(\'ds_users\', {\'page\': 1}) }}</code></pre>\n\n<p><strong>Use cases:</strong> Fetching data, API calls</p>',
+      replacedOnClick: 'run_data_source()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Get Data From DB',
+      description:
+          '<h2><code>get_data_from_db(query_map)</code> Function</h2>\n\n<p><strong>Retrieve data</strong> from database.</p>\n\n<pre><code>{{ get_data_from_db({\'table_name\': \'users\', \'limit\': 1}) }}</code></pre>\n\n<p><strong>Use cases:</strong> Database queries</p>',
+      replacedOnClick: 'get_data_from_db()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Render Widget By ID',
+      description:
+          '<h2><code>render_widget_by_id(id, data)</code> Function</h2>\n\n<p><strong>Render another widget</strong>.</p>\n\n<pre><code>{{ render_widget_by_id(\'footer\', {\'year\': 2024}) }}</code></pre>\n\n<p><strong>Use cases:</strong> Component composition, layout building</p>',
+      replacedOnClick: 'render_widget_by_id()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Get Widget By ID',
+      description:
+          '<h2><code>get_widget_by_id(id)</code> Function</h2>\n\n<p><strong>Get widget configuration</strong>.</p>\n\n<pre><code>{% set config = get_widget_by_id(\'chart\') %}</code></pre>\n\n<p><strong>Use cases:</strong> Accessing widget properties</p>',
+      replacedOnClick: 'get_widget_by_id()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Callback',
+      description:
+          '<h2><code>callback(id, data, payload)</code> Function</h2>\n\n<p><strong>Trigger generic callback</strong>.</p>\n\n<pre><code>{{ callback(\'on_submit\', {}, {\'status\': \'ok\'}) }}</code></pre>\n\n<p><strong>Use cases:</strong> Event handling, interactions</p>',
+      replacedOnClick: 'callback()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Print',
+      description:
+          '<h2><code>print(value)</code> Function</h2>\n\n<p><strong>Log value</strong> to console.</p>\n\n<pre><code>{{ print(my_var) }}</code></pre>\n\n<p><strong>Use cases:</strong> Debugging</p>',
+      replacedOnClick: 'print()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Translate',
+      description:
+          '<h2><code>translate(text, source, target)</code> Function</h2>\n\n<p><strong>Translate text</strong> using Google Translate.</p>\n\n<pre><code>{{ translate(\'Hello\', \'en\', \'es\') }}</code></pre>\n\n<p><strong>Use cases:</strong> Localization</p>',
+      replacedOnClick: 'translate()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'UUID',
+      description:
+          '<h2><code>uuid()</code> Function</h2>\n\n<p><strong>Generate UUID v4</strong>.</p>\n\n<pre><code>{{ uuid() }}</code></pre>\n\n<p><strong>Use cases:</strong> Unique identifiers</p>',
+      replacedOnClick: 'uuid()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Ref',
+      description:
+          '<h2><code>ref(model)</code> Function</h2>\n\n<p><strong>dbt Reference</strong> (placeholder).</p>\n\n<pre><code>{{ ref(\'my_model\') }}</code></pre>\n\n<p><strong>Use cases:</strong> dbt compatibility</p>',
+      replacedOnClick: 'ref()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Source',
+      description:
+          '<h2><code>source(source, table)</code> Function</h2>\n\n<p><strong>dbt Source</strong> (placeholder).</p>\n\n<pre><code>{{ source(\'raw\', \'users\') }}</code></pre>\n\n<p><strong>Use cases:</strong> dbt compatibility</p>',
+      replacedOnClick: 'source()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Config',
+      description:
+          '<h2><code>config(args)</code> Function</h2>\n\n<p><strong>dbt Config</strong> (placeholder).</p>\n\n<pre><code>{{ config(materialized=\'table\') }}</code></pre>\n\n<p><strong>Use cases:</strong> dbt compatibility</p>',
+      replacedOnClick: 'config()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Var',
+      description:
+          '<h2><code>var(name, default)</code> Function</h2>\n\n<p><strong>dbt Variable</strong> (placeholder).</p>\n\n<pre><code>{{ var(\'my_var\', 10) }}</code></pre>\n\n<p><strong>Use cases:</strong> dbt compatibility</p>',
+      replacedOnClick: 'var()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Env Var',
+      description:
+          '<h2><code>env_var(name)</code> Function</h2>\n\n<p><strong>Environment Variable</strong> (placeholder).</p>\n\n<pre><code>{{ env_var(\'DB_HOST\') }}</code></pre>\n\n<p><strong>Use cases:</strong> dbt compatibility</p>',
+      replacedOnClick: 'env_var()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Log',
+      description:
+          '<h2><code>log(message)</code> Function</h2>\n\n<p><strong>Log message</strong> (placeholder).</p>\n\n<pre><code>{{ log(\'Starting...\') }}</code></pre>\n\n<p><strong>Use cases:</strong> dbt compatibility</p>',
+      replacedOnClick: 'log()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Run Query',
+      description:
+          '<h2><code>run_query(sql)</code> Function</h2>\n\n<p><strong>Run SQL query</strong> (placeholder).</p>\n\n<pre><code>{{ run_query(\'SELECT * FROM users\') }}</code></pre>\n\n<p><strong>Use cases:</strong> dbt compatibility</p>',
+      replacedOnClick: 'run_query()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Modules Datetime Now',
+      description:
+          '<h2><code>modules.datetime.now()</code> Function</h2>\n\n<p><strong>Get current datetime</strong>.</p>\n\n<pre><code>{{ modules.datetime.now() }}</code></pre>\n\n<p><strong>Use cases:</strong> Timestamps</p>',
+      replacedOnClick: 'modules.datetime.now()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Get Current Date',
+      description:
+          '<h2><code>get_current_date()</code> Function</h2>\n\n<p><strong>Get current date</strong> (dd/MM/yyyy).</p>\n\n<pre><code>{{ get_current_date().value }}</code></pre>\n\n<p><strong>Use cases:</strong> Date display</p>',
+      replacedOnClick: 'get_current_date()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Generate List',
+      description:
+          '<h2><code>generate_list(count, value)</code> Function</h2>\n\n<p><strong>Generate a list</strong> of items.</p>\n\n<pre><code>{{ generate_list(5, \'item\') }}</code></pre>\n\n<p><strong>Use cases:</strong> Mock data, iteration</p>',
+      replacedOnClick: 'generate_list()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Get List Of Widgets',
+      description:
+          '<h2><code>get_list_of_widgets(tree)</code> Function</h2>\n\n<p><strong>Flatten widget tree</strong>.</p>\n\n<pre><code>{{ get_list_of_widgets(root_widgets) }}</code></pre>\n\n<p><strong>Use cases:</strong> Widget processing</p>',
+      replacedOnClick: 'get_list_of_widgets()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Get Widget Width',
+      description:
+          '<h2><code>getWidgetWidth()</code> Function</h2>\n\n<p><strong>Get widget width</strong> (placeholder).</p>\n\n<pre><code>{{ getWidgetWidth() }}</code></pre>\n\n<p><strong>Use cases:</strong> Layout calculations</p>',
+      replacedOnClick: 'getWidgetWidth()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Get Widget Height',
+      description:
+          '<h2><code>getWidgetHeight()</code> Function</h2>\n\n<p><strong>Get widget height</strong> (placeholder).</p>\n\n<pre><code>{{ getWidgetHeight() }}</code></pre>\n\n<p><strong>Use cases:</strong> Layout calculations</p>',
+      replacedOnClick: 'getWidgetHeight()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Get Screen Width',
+      description:
+          '<h2><code>getScreenWidth()</code> Function</h2>\n\n<p><strong>Get device screen width</strong>.</p>\n\n<pre><code>{{ getScreenWidth() }}</code></pre>\n\n<p><strong>Use cases:</strong> Responsive design</p>',
+      replacedOnClick: 'getScreenWidth()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Get Screen Height',
+      description:
+          '<h2><code>getScreenHeight()</code> Function</h2>\n\n<p><strong>Get device screen height</strong>.</p>\n\n<pre><code>{{ getScreenHeight() }}</code></pre>\n\n<p><strong>Use cases:</strong> Responsive design</p>',
+      replacedOnClick: 'getScreenHeight()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Change Properties Values',
+      description:
+          '<h2><code>changePropertiesValues(json, updates)</code> Function</h2>\n\n<p><strong>Update widget properties</strong>.</p>\n\n<pre><code>{{ changePropertiesValues(data, updates) }}</code></pre>\n\n<p><strong>Use cases:</strong> Internal editor logic</p>',
+      replacedOnClick: 'changePropertiesValues()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Json Decode Global',
+      description:
+          '<h2><code>jsonDecode(value)</code> Function</h2>\n\n<p><strong>Decode JSON</strong>.</p>\n\n<pre><code>{{ jsonDecode(json_str) }}</code></pre>\n\n<p><strong>Use cases:</strong> JSON parsing</p>',
+      replacedOnClick: 'jsonDecode()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Get',
+      description:
+          '<h2><code>get(map, key, default)</code> Function</h2>\n\n<p><strong>Get value from map</strong> safely.</p>\n\n<pre><code>{{ get(data, \'key\', \'default\') }}</code></pre>\n\n<p><strong>Use cases:</strong> Safe access, deep retrieval</p>',
+      replacedOnClick: 'get()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Is Equal',
+      description:
+          '<h2><code>is_equal(a, b)</code> Function</h2>\n\n<p><strong>Check equality</strong> (supports Futures).</p>\n\n<pre><code>{{ is_equal(val1, val2) }}</code></pre>\n\n<p><strong>Use cases:</strong> Comparisons</p>',
+      replacedOnClick: 'is_equal()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Get Key If In Json',
+      description:
+          '<h2><code>get_key_if_in_json(map, key)</code> Function</h2>\n\n<p><strong>Return key if exists</strong>.</p>\n\n<pre><code>{{ get_key_if_in_json(data, \'key\') }}</code></pre>\n\n<p><strong>Use cases:</strong> Key validation</p>',
+      replacedOnClick: 'get_key_if_in_json()',
+      triggeredAt: '{{',
+    ),
+    SuggestionModelJinja(
+      label: 'Json Path',
+      description:
+          '<h2><code>jsonPath(json, query)</code> Function</h2>\n\n<p><strong>Query JSON</strong> with JSONPath.</p>\n\n<pre><code>{{ jsonPath(data, \'\$.store.book[0]\') }}</code></pre>\n\n<p><strong>Use cases:</strong> Deep data extraction</p>',
+      replacedOnClick: 'jsonPath()',
+      triggeredAt: '{{',
     ),
   ];
 }
