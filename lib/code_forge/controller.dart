@@ -548,7 +548,11 @@ class CodeForgeController implements DeltaTextInputClient {
       final textBeforeCursor = text.substring(0, cursorPos);
       final textAfterCursor = text.substring(cursorPos);
       final triggerPattern = selected.triggeredAt;
-
+      final textBeforeReplaceText = selected.replacedOnClick.substring(0, 2);
+      if (triggerPattern != textBeforeReplaceText) {
+        insertAtCurrentCursor(selected.replacedOnClick, replaceTypedChar: true);
+        return;
+      }
       if (triggerPattern.isNotEmpty) {
         // Check if trigger pattern exists entirely before cursor
         if (textBeforeCursor.endsWith(triggerPattern)) {
