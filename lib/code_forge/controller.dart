@@ -247,7 +247,7 @@ class CodeForgeController implements DeltaTextInputClient {
 
           final cursorPosition = selection.extentOffset;
           final prefix = getCurrentWordPrefix(text, cursorPosition);
-          if (_isTyping && selection.extentOffset > 0) {
+          if (selection.extentOffset > 0) {
             String currentWord = '';
             if (text.isNotEmpty) {
               final match = RegExp(
@@ -276,7 +276,7 @@ class CodeForgeController implements DeltaTextInputClient {
             final isAlphaChar = _isAlpha(triggerChar);
 
             if (!isTriggerChar && !isAlphaChar) {
-              if (!_isDisposed) suggestionsNotifier.value = null;
+              // if (!_isDisposed) suggestionsNotifier.value = null;
               return;
             }
             if (!_isDisposed) suggestionsNotifier.value = _suggestions;
@@ -440,6 +440,7 @@ class CodeForgeController implements DeltaTextInputClient {
   /// (defined in [SuggestionModel.triggeredAt]). Suggestions are automatically
   /// shown when their trigger pattern is detected.
   List<SuggestionModel> handleRegisteredCustomSuggestions = [];
+  List<SuggestionModel> handleDataCustomSuggestions = [];
 
   JinjaHtmlModel? customSuggestionJinjaFlutterHtml;
 
@@ -539,6 +540,46 @@ class CodeForgeController implements DeltaTextInputClient {
       insertText = selected['insertText'] ?? selected['label'] ?? '';
     } else if (selected is String) {
       insertText = selected;
+    } else if (selected is SuggestionModel) {
+      final cursorPos = selection.extentOffset;
+      // Custom suggestions with SuggestionModel
+      // Check if trigger pattern exists before cursor and replace it entirely
+      // Also handle cases where cursor is in the middle of the trigger pattern
+      final textBeforeCursor = text.substring(0, cursorPos);
+      final textAfterCursor = text.substring(cursorPos);
+      final triggerPattern = selected.triggeredAt;
+
+      if (triggerPattern.isNotEmpty) {
+        // Check if trigger pattern exists entirely before cursor
+        if (textBeforeCursor.endsWith(triggerPattern)) {
+          // Trigger pattern found - replace the entire trigger pattern with replacedOnClick
+          final triggerStartPos = cursorPos - triggerPattern.length;
+          replaceRange(triggerStartPos, cursorPos, selected.replacedOnClick);
+          suggestionsNotifier.value = null;
+          return;
+        }
+
+        // Check if cursor is in the middle of the trigger pattern
+        // e.g., trigger is "{{}}" and we have "{{" before cursor and "}}" after cursor
+        for (int i = 1; i < triggerPattern.length; i++) {
+          final triggerPrefix = triggerPattern.substring(0, i);
+          final triggerSuffix = triggerPattern.substring(i);
+          if (textBeforeCursor.endsWith(triggerPrefix) &&
+              textAfterCursor.startsWith(triggerSuffix)) {
+            // Cursor is in the middle of the trigger pattern - replace entire pattern
+            final triggerStartPos = cursorPos - triggerPrefix.length;
+            final triggerEndPos = cursorPos + triggerSuffix.length;
+            replaceRange(
+              triggerStartPos,
+              triggerEndPos,
+              selected.replacedOnClick,
+            );
+          }
+        }
+      }
+
+      // // No trigger pattern found - use normal insertion
+      // insertText = selected.replacedOnClick;
     }
 
     if (insertText.isNotEmpty) {
@@ -1114,13 +1155,24 @@ class CodeForgeController implements DeltaTextInputClient {
   ///     .toList();
   /// controller.registerCustomSuggestions(suggestions);
   /// ```
-  void registerCustomSuggestions(List<SuggestionModel> suggestions) {
+  void registerCustomSuggestions(
+    List<SuggestionModel> suggestions, [
+    bool dataSuggestions = false,
+  ]) {
     if (customSuggestionJinjaFlutterHtml != null) {
       for (var element in suggestions) {
         element.jinjaHtmlWidget = customSuggestionJinjaFlutterHtml;
       }
     }
-    handleRegisteredCustomSuggestions.addAll(List.from(suggestions));
+    if (dataSuggestions) {
+      handleDataCustomSuggestions = List.from(suggestions);
+      handleRegisteredCustomSuggestions.addAll(
+        List.from(handleDataCustomSuggestions),
+      );
+    } else {
+      handleRegisteredCustomSuggestions.addAll(List.from(suggestions));
+    }
+
     notifyListeners();
   }
 
@@ -1128,7 +1180,10 @@ class CodeForgeController implements DeltaTextInputClient {
   ///
   /// After calling this, no custom suggestions will be triggered automatically.
   void clearRegisteredCustomSuggestions() {
-    handleRegisteredCustomSuggestions.clear();
+    handleRegisteredCustomSuggestions.removeWhere(
+      (item) => handleDataCustomSuggestions.contains(item),
+    );
+    handleDataCustomSuggestions.clear();
     notifyListeners();
   }
 
