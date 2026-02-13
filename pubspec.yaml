@@ -11,7 +11,7 @@ dependencies:
   jinja_app_widgets_catalog:
     git:
       url: git@git.jinja.app:jinja.app/jinja_app_widgets_catalog.git
-      ref: dev
+      ref: viewer
   flutter:
     sdk: flutter
   http: ^1.6.0
