@@ -13,7 +13,7 @@ enum SuggestionContext {
 /// - [label]: The text displayed in the suggestion list
 /// - [replacedOnClick]: The text inserted when the suggestion is selected
 /// - [description]: Optional description text shown below the label
-/// - [triggeredAt]: The string pattern that triggers this suggestion when typed
+/// - [openingTag]: The string pattern that triggers this suggestion when typed
 /// - [context]: Optional context requirement for when the suggestion should be shown
 class SuggestionModel {
   /// The text displayed in the suggestion list.
@@ -30,9 +30,16 @@ class SuggestionModel {
   /// The string pattern that triggers this suggestion when typed.
   ///
   /// When the user types this pattern in the editor, the suggestion popup
-  /// will be triggered. For example, if [triggeredAt] is "{{}}", typing
+  /// will be triggered. For example, if [closingTag] is "}}", typing
+  /// "}}" will show the suggestions.
+  final String closingTag;
+
+  /// The string pattern that triggers this suggestion when typed.
+  ///
+  /// When the user types this pattern in the editor, the suggestion popup
+  /// will be triggered. For example, if [openingTag] is "{{}}", typing
   /// "{{}}" will show the suggestions.
-  final String triggeredAt;
+  final String openingTag;
 
   /// The context requirement for this suggestion.
   ///
@@ -42,12 +49,13 @@ class SuggestionModel {
 
   /// Creates a [SuggestionModel] instance.
   ///
-  /// [label], [replacedOnClick], and [triggeredAt] are required.
+  /// [label], [replacedOnClick], and [openingTag] are required.
   /// [description] is optional.
   SuggestionModel({
     required this.label,
     required this.replacedOnClick,
-    required this.triggeredAt,
+    required this.openingTag,
+    required this.closingTag,
     this.description,
     this.jinjaHtmlWidget,
   });
@@ -55,13 +63,14 @@ class SuggestionModel {
   /// Creates a [SuggestionModel] from a map.
   ///
   /// Useful for deserializing from JSON or converting from legacy map format.
-  /// Supports both camelCase (replacedOnClick, triggeredAt) and snake_case
-  /// (replaced_on_click, triggered_at) formats for backend compatibility.
+  /// Supports both camelCase (replacedOnClick, openingTag) and snake_case
+  /// (replaced_on_click, opening_tag) formats for backend compatibility.
   factory SuggestionModel.fromJson(Map<String, dynamic> map) {
     return SuggestionModel(
       label: map['label'] as String,
       replacedOnClick: map['replaced_on_click'] ?? '',
-      triggeredAt: map['triggered_at'] ?? '',
+      openingTag: map['opening_tag'] ?? '',
+      closingTag: map['closing_tag'] ?? '',
       description: map['description'] as String?,
       jinjaHtmlWidget: map['jinja_html_widget'] as Map<String, dynamic>?,
     );
@@ -74,7 +83,8 @@ class SuggestionModel {
     return {
       'label': label,
       'replaced_on_click': replacedOnClick,
-      'triggered_at': triggeredAt,
+      'opening_tag': openingTag,
+      'closing_tag': closingTag,
       if (description != null) 'description': description,
       if (jinjaHtmlWidget != null) 'jinja_html_widget': jinjaHtmlWidget,
     };
@@ -83,7 +93,7 @@ class SuggestionModel {
   @override
   String toString() {
     return 'SuggestionModel(label: $label, replacedOnClick: $replacedOnClick, '
-        'description: $description, triggeredAt: $triggeredAt, jinjaHtmlWidget: $jinjaHtmlWidget)';
+        'description: $description, openingTag: $openingTag, closingTag: $closingTag, jinjaHtmlWidget: $jinjaHtmlWidget)';
   }
 
   @override
@@ -93,7 +103,8 @@ class SuggestionModel {
         other.label == label &&
         other.replacedOnClick == replacedOnClick &&
         other.description == description &&
-        other.triggeredAt == triggeredAt &&
+        other.openingTag == openingTag &&
+        other.closingTag == closingTag &&
         other.jinjaHtmlWidget == jinjaHtmlWidget;
   }
 
@@ -103,8 +114,9 @@ class SuggestionModel {
       label,
       replacedOnClick,
       description,
-      triggeredAt,
+      openingTag,
       jinjaHtmlWidget,
+      closingTag,
     );
   }
 }
@@ -113,7 +125,8 @@ class SuggestionModelJinja extends SuggestionModel {
   SuggestionModelJinja({
     required super.label,
     required super.replacedOnClick,
-    required super.triggeredAt,
+    required super.openingTag,
+    required super.closingTag,
     super.description,
   });
 
@@ -125,7 +138,8 @@ class SuggestionModelHtml extends SuggestionModel {
   SuggestionModelHtml({
     required super.label,
     required super.replacedOnClick,
-    required super.triggeredAt,
+    required super.openingTag,
+    required super.closingTag,
     super.description,
   });
 }
