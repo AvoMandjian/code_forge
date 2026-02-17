@@ -325,3 +325,6 @@ This release establishes **CodeForge** as a powerful, production-ready code edit
  ## 8.4.0
  - FEATURE: [#39](https://github.com/heckmon/code_forge/issues/39)
  - FIX: html/xml guide lines.
+
+ ## 8.4.1
+  - Typo fix
