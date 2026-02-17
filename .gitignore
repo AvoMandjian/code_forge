@@ -32,3 +32,10 @@ migrate_working_dir/
 
 /example/lib/little_code.dart
 /example/lib/big_code.dart
+.cursor
+.drift
+.fvm
+.learnings
+.serena
+*.md
+chronoid_time_export_*.json
