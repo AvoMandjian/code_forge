@@ -47,10 +47,16 @@ class SuggestionModel {
   /// Defaults to [SuggestionContext.none] (no restriction).
   SuggestionContext? get context => SuggestionContext.none;
 
+  /// Character indices in [label] that match the filter text.
+  ///
+  /// Used for highlighting matched characters in the UI.
+  /// This is a runtime-only field, computed during suggestion filtering.
+  final List<int>? matchRanges;
+
   /// Creates a [SuggestionModel] instance.
   ///
   /// [label], [replacedOnClick], and [openingTag] are required.
-  /// [description] is optional.
+  /// [description] and [matchRanges] are optional.
   SuggestionModel({
     required this.label,
     required this.replacedOnClick,
@@ -58,6 +64,7 @@ class SuggestionModel {
     required this.closingTag,
     this.description,
     this.jinjaHtmlWidget,
+    this.matchRanges,
   });
 
   /// Creates a [SuggestionModel] from a map.
@@ -93,7 +100,8 @@ class SuggestionModel {
   @override
   String toString() {
     return 'SuggestionModel(label: $label, replacedOnClick: $replacedOnClick, '
-        'description: $description, openingTag: $openingTag, closingTag: $closingTag, jinjaHtmlWidget: $jinjaHtmlWidget)';
+        'description: $description, openingTag: $openingTag, closingTag: $closingTag, '
+        'jinjaHtmlWidget: $jinjaHtmlWidget, matchRanges: $matchRanges)';
   }
 
   @override
@@ -105,7 +113,8 @@ class SuggestionModel {
         other.description == description &&
         other.openingTag == openingTag &&
         other.closingTag == closingTag &&
-        other.jinjaHtmlWidget == jinjaHtmlWidget;
+        other.jinjaHtmlWidget == jinjaHtmlWidget &&
+        other.matchRanges == matchRanges;
   }
 
   @override
@@ -117,6 +126,7 @@ class SuggestionModel {
       openingTag,
       jinjaHtmlWidget,
       closingTag,
+      matchRanges,
     );
   }
 }

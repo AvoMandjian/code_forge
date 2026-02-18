@@ -11,6 +11,14 @@ import '../code_forge.dart';
 import 'rope.dart';
 import 'suggestion_model.dart';
 
+/// Result of word-boundary matching, containing score and matched positions.
+class MatchResult {
+  final int score;
+  final List<int> matchedPositions;
+
+  MatchResult({required this.score, required this.matchedPositions});
+}
+
 /// Controller for the [CodeForge] code editor widget.
 ///
 /// This controller manages the text content, selection state, and various
@@ -3410,18 +3418,42 @@ class CodeForgeController implements DeltaTextInputClient {
       }
 
       // Step 3: Filter candidates by label if filter text exists
-      // Use existing _scoreMatch() for consistent scoring with other suggestions
+      // Use word-boundary matching for custom suggestions
       if (filterText != null && filterText.isNotEmpty) {
         final trimmedFilter = filterText.trim(); // Handle whitespace
         for (final candidate in candidates) {
-          // Use existing scoring system - score > -1000000 means it matches
-          final score = _scoreMatch(candidate.label, trimmedFilter);
-          if (score > -1000000) {
-            matched.add(candidate);
+          // Use word-boundary matching for custom suggestions
+          final matchResult = _scoreMatchWithWordBoundaries(
+            candidate.label,
+            trimmedFilter,
+          );
+          if (matchResult.score > -1000000) {
+            // Create new SuggestionModel with match ranges
+            final suggestionWithMatch = SuggestionModel(
+              label: candidate.label,
+              replacedOnClick: candidate.replacedOnClick,
+              openingTag: candidate.openingTag,
+              closingTag: candidate.closingTag,
+              description: candidate.description,
+              jinjaHtmlWidget: candidate.jinjaHtmlWidget,
+              matchRanges: matchResult.matchedPositions,
+            );
+            matched.add(suggestionWithMatch);
+
+            AppLogger.instance.debug(
+              'Word-boundary match',
+              data: {
+                'label': candidate.label,
+                'filter': trimmedFilter,
+                'score': matchResult.score,
+                'matchedPositions': matchResult.matchedPositions,
+              },
+            );
           }
         }
       } else {
         // No filter text - return all candidates (exact opening tag match)
+        // No match ranges needed when there's no filter
         matched.addAll(candidates);
       }
 
@@ -3684,8 +3716,24 @@ class CodeForgeController implements DeltaTextInputClient {
       final bLabel = b is LspCompletion
           ? b.label
           : (b is SuggestionModel ? b.label : b.toString());
-      final aScore = _scoreMatch(aLabel, prefix);
-      final bScore = _scoreMatch(bLabel, prefix);
+
+      int aScore;
+      int bScore;
+
+      // Use word-boundary matching for SuggestionModel items
+      if (a is SuggestionModel) {
+        final matchResult = _scoreMatchWithWordBoundaries(aLabel, prefix);
+        aScore = matchResult.score;
+      } else {
+        aScore = _scoreMatch(aLabel, prefix);
+      }
+
+      if (b is SuggestionModel) {
+        final matchResult = _scoreMatchWithWordBoundaries(bLabel, prefix);
+        bScore = matchResult.score;
+      } else {
+        bScore = _scoreMatch(bLabel, prefix);
+      }
 
       if (aScore != bScore) {
         return bScore.compareTo(aScore);
@@ -3693,6 +3741,97 @@ class CodeForgeController implements DeltaTextInputClient {
 
       return aLabel.compareTo(bLabel);
     });
+  }
+
+  /// Matches filter text against label using word-boundary matching.
+  ///
+  /// This method matches filter characters sequentially through the label,
+  /// prioritizing word boundaries (space-separated words, camelCase boundaries).
+  /// Returns a [MatchResult] with score and matched character positions.
+  ///
+  /// Scoring priority:
+  /// - Word start matches: highest score
+  /// - Word continuation: medium score
+  /// - Any match: lowest score
+  /// - Position: earlier matches score higher
+  MatchResult _scoreMatchWithWordBoundaries(String label, String filter) {
+    if (filter.isEmpty) {
+      return MatchResult(score: 0, matchedPositions: []);
+    }
+
+    final lowerLabel = label.toLowerCase();
+    final lowerFilter = filter.toLowerCase();
+    final matchedPositions = <int>[];
+    int labelIndex = 0;
+    int score = 0;
+
+    // Track word boundaries for scoring
+    final wordStarts = <int>[];
+    for (int i = 0; i < label.length; i++) {
+      if (i == 0) {
+        wordStarts.add(0);
+      } else {
+        final prevChar = label[i - 1];
+        final currChar = label[i];
+        // Word boundary: space, underscore, or uppercase after lowercase (camelCase)
+        if (prevChar == ' ' ||
+            prevChar == '_' ||
+            prevChar == '-' ||
+            (prevChar.toLowerCase() == prevChar &&
+                currChar.toUpperCase() == currChar)) {
+          wordStarts.add(i);
+        }
+      }
+    }
+
+    // Match each filter character sequentially
+    for (int filterIndex = 0; filterIndex < lowerFilter.length; filterIndex++) {
+      final filterChar = lowerFilter[filterIndex];
+      bool found = false;
+
+      // Try to find match starting from current label position
+      for (int i = labelIndex; i < lowerLabel.length; i++) {
+        if (lowerLabel[i] == filterChar) {
+          matchedPositions.add(i);
+          labelIndex = i + 1;
+          found = true;
+
+          // Score based on match type
+          if (wordStarts.contains(i)) {
+            // Word start match - highest priority
+            score += 10000;
+          } else if (i > 0 &&
+              (label[i - 1] == ' ' ||
+                  label[i - 1] == '_' ||
+                  label[i - 1] == '-')) {
+            // After separator - medium priority
+            score += 5000;
+          } else {
+            // Any match - lowest priority
+            score += 1000;
+          }
+
+          // Bonus for earlier matches
+          score += (label.length - i) * 10;
+          break;
+        }
+      }
+
+      if (!found) {
+        // Cannot match all characters - return no match
+        return MatchResult(score: -1000000, matchedPositions: []);
+      }
+    }
+
+    // Bonus for prefix match (if first characters match)
+    if (matchedPositions.isNotEmpty && matchedPositions.first == 0) {
+      score += 50000;
+    }
+
+    // Penalty for longer labels (prefer shorter matches)
+    score -= label.length;
+
+    return MatchResult(score: score, matchedPositions: matchedPositions);
   }
 
   int _scoreMatch(String label, String prefix) {

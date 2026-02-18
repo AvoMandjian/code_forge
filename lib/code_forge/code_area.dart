@@ -15,6 +15,7 @@ import 'package:universal_io/io.dart';
 import 'package:vector_math/vector_math_64.dart' show Vector3;
 
 import '../LSP/lsp.dart';
+import '../app_logger.dart';
 import 'controller.dart';
 import 'find_controller.dart';
 import 'scroll.dart';
@@ -695,6 +696,84 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
       return 'sugg|${item.label}|${item.openingTag}';
     }
     return 'str|${item.toString()}';
+  }
+
+  /// Builds a TextSpan for suggestion label with highlighted match ranges.
+  ///
+  /// If [matchRanges] is null or empty, returns a plain TextSpan.
+  /// Otherwise, highlights characters at positions in [matchRanges] using
+  /// the same style as LSP completions (blue, bold).
+  TextSpan _buildSuggestionLabelTextSpan(String label, List<int>? matchRanges) {
+    final baseStyle =
+        _suggestionStyle.labelTextStyle ??
+        TextStyle(
+          fontSize: widget.textStyle?.fontSize ?? 14,
+          color: _editorTheme['root']?.color ?? Colors.black,
+        );
+
+    // No match ranges - return plain text
+    if (matchRanges == null || matchRanges.isEmpty) {
+      AppLogger.instance.debug(
+        'Suggestion label highlighting',
+        data: {'label': label, 'hasMatchRanges': false, 'highlighted': false},
+      );
+      return TextSpan(text: label, style: baseStyle);
+    }
+
+    // Sort match positions to handle them in order
+    final sortedRanges = List<int>.from(matchRanges)..sort();
+    final children = <TextSpan>[];
+    int lastIndex = 0;
+    final highlightedChars = <String>[];
+
+    for (final matchIndex in sortedRanges) {
+      // Add text before this match
+      if (matchIndex > lastIndex) {
+        children.add(
+          TextSpan(
+            text: label.substring(lastIndex, matchIndex),
+            style: baseStyle,
+          ),
+        );
+      }
+
+      // Add highlighted match character
+      if (matchIndex < label.length) {
+        final char = label[matchIndex];
+        highlightedChars.add('$char($matchIndex)');
+        children.add(
+          TextSpan(
+            text: char,
+            style: baseStyle.copyWith(
+              fontWeight: FontWeight.bold,
+              color: Colors.blue,
+            ),
+          ),
+        );
+      }
+
+      lastIndex = matchIndex + 1;
+    }
+
+    // Add remaining text after last match
+    if (lastIndex < label.length) {
+      children.add(
+        TextSpan(text: label.substring(lastIndex), style: baseStyle),
+      );
+    }
+
+    AppLogger.instance.debug(
+      'Suggestion label highlighting',
+      data: {
+        'label': label,
+        'hasMatchRanges': true,
+        'matchRanges': sortedRanges,
+        'highlightedChars': highlightedChars,
+        'highlighted': true,
+      },
+    );
+
+    return TextSpan(style: baseStyle, children: children);
   }
 
   Future<void> _fetchCodeActionsForCurrentPosition() async {
@@ -2744,13 +2823,11 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                       if (item
                                                           is SuggestionModel)
                                                         Expanded(
-                                                          child: Text(
-                                                            item.label,
-                                                            style:
-                                                                _suggestionStyle
-                                                                    .labelTextStyle ??
-                                                                _suggestionStyle
-                                                                    .textStyle,
+                                                          child: RichText(
+                                                            text: _buildSuggestionLabelTextSpan(
+                                                              item.label,
+                                                              item.matchRanges,
+                                                            ),
                                                             overflow:
                                                                 TextOverflow
                                                                     .ellipsis,
