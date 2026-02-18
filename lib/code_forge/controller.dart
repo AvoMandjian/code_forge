@@ -567,6 +567,31 @@ class CodeForgeController implements DeltaTextInputClient {
     );
   }
 
+  /// Removes all custom suggestions that were previously added via [addCustomSuggestions]
+  /// or [registerCustomSuggestions].
+  ///
+  /// This method clears the entire custom suggestions list, removing all user-added
+  /// suggestions. After calling this method, only language-specific suggestions
+  /// (if any) will remain available.
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.addCustomSuggestions([...]);
+  /// // Later, clear all custom suggestions
+  /// controller.clearCustomSuggestions();
+  /// ```
+  void clearCustomSuggestions() {
+    final clearedCount = _customSuggestions.length;
+    _customSuggestions.clear();
+    AppLogger.instance.debug(
+      'Custom suggestions cleared',
+      data: {
+        'clearedCount': clearedCount,
+        'totalCount': _customSuggestions.length,
+      },
+    );
+  }
+
   /// Current language mode (e.g. for syntax highlighting). Updated when the editor language changes.
   Mode? get currentLanguage => _currentLanguage;
 
