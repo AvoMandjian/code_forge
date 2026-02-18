@@ -3,10 +3,13 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:re_highlight/re_highlight.dart';
 import 'package:universal_io/io.dart';
 
+import '../app_logger.dart';
 import '../code_forge.dart';
 import 'rope.dart';
+import 'suggestion_model.dart';
 
 /// Controller for the [CodeForge] code editor widget.
 ///
@@ -38,6 +41,7 @@ class CodeForgeController implements DeltaTextInputClient {
   static const _documentColorDebounce = Duration(milliseconds: 50);
   static const _documentHighlightDebounce = Duration(milliseconds: 300);
   static const _cclsRefreshDebounce = Duration(milliseconds: 1000);
+  static const int _maxOpeningTagLookback = 20;
   final List<VoidCallback> _listeners = [];
   final _isMobile = Platform.isAndroid || Platform.isIOS;
   Timer? _flushTimer, _semanticTokenTimer, _codeActionTimer, _syncTimer;
@@ -76,8 +80,11 @@ class CodeForgeController implements DeltaTextInputClient {
   bool _lspFoldRangesAdjustedNotFetched = false;
   bool _inlayHintsVisible = false;
   bool documentHighlightsChanged = false;
+  List<SuggestionModel> _customSuggestions = [];
+  Mode? _currentLanguage;
 
   CodeForgeController({this.lspConfig}) {
+    _listeners.add(() => onCodeChanged?.call(text));
     if (lspConfig != null) {
       (() async {
         try {
@@ -212,7 +219,29 @@ class CodeForgeController implements DeltaTextInputClient {
 
           final cursorPosition = selection.extentOffset;
           final prefix = getCurrentWordPrefix(text, cursorPosition);
-          if (_isTyping && selection.extentOffset > 0) {
+
+          // Always check for custom matches first, regardless of _isTyping
+          // This allows custom opening tags like "{{", "{%", "<" to trigger suggestions
+          final customMatches = _getMatchingCustomSuggestions(
+            text,
+            cursorPosition,
+          );
+          final hasCustomMatches = customMatches.isNotEmpty;
+
+          AppLogger.instance.debug(
+            'Text listener check',
+            data: {
+              '_isTyping': _isTyping,
+              'cursorPosition': cursorPosition,
+              'text': text,
+              'prefix': prefix,
+              'hasCustomMatches': hasCustomMatches,
+              'customMatchesCount': customMatches.length,
+            },
+          );
+
+          // If we have custom matches, show suggestions even if _isTyping is false
+          if (hasCustomMatches || (_isTyping && selection.extentOffset > 0)) {
             String currentWord = '';
             if (text.isNotEmpty) {
               final match = RegExp(
@@ -225,28 +254,66 @@ class CodeForgeController implements DeltaTextInputClient {
 
             _suggestions.clear();
 
-            for (final i in _wordCache) {
-              if (!_suggestions.contains(i) && i != currentWord) {
-                _suggestions.add(i);
+            // Only populate word-based suggestions if we're actually typing (not just custom matches)
+            if (_isTyping) {
+              for (final i in _wordCache) {
+                if (!_suggestions.contains(i) && i != currentWord) {
+                  _suggestions.add(i);
+                }
+              }
+              if (prefix.isNotEmpty) {
+                _suggestions = _suggestions
+                    .where((s) => s is String && s.startsWith(prefix))
+                    .toList();
               }
             }
-            if (prefix.isNotEmpty) {
-              _suggestions = _suggestions
-                  .where((s) => s.startsWith(prefix))
-                  .toList();
+
+            AppLogger.instance.debug(
+              'Custom matches check (non-LSP)',
+              data: {
+                'customMatchesCount': customMatches.length,
+                'text': text,
+                'cursorPosition': cursorPosition,
+                'prefix': prefix,
+              },
+            );
+            if (customMatches.isNotEmpty) {
+              _suggestions = <dynamic>[...customMatches, ..._suggestions];
             }
             _sortSuggestions(prefix);
-            final triggerChar = text[cursorPosition - 1];
-            final isTriggerChar = _isCompletionTriggerChar(triggerChar);
-            final isAlphaChar = _isAlpha(triggerChar);
+            final triggerChar = cursorPosition > 0
+                ? text[cursorPosition - 1]
+                : '';
+            final isTriggerChar =
+                triggerChar.isNotEmpty && _isCompletionTriggerChar(triggerChar);
+            final isAlphaChar = triggerChar.isNotEmpty && _isAlpha(triggerChar);
 
-            if (!isTriggerChar && !isAlphaChar) {
-              if (!_isDisposed) suggestionsNotifier.value = null;
+            // Show suggestions if: standard trigger OR alpha char OR custom matches found
+            if (!isTriggerChar && !isAlphaChar && !hasCustomMatches) {
+              if (!_isDisposed) {
+                suggestionsNotifier.value = null;
+                AppLogger.instance.debug('Suggestions closed');
+              }
               return;
             }
-            if (!_isDisposed) suggestionsNotifier.value = _suggestions;
+            if (!_isDisposed) {
+              suggestionsNotifier.value = _suggestions;
+              final formatted = _formatSuggestionsForLog(_suggestions);
+              AppLogger.instance.debug(
+                'Suggestions opened',
+                data: {
+                  'count': _suggestions.length,
+                  'triggerChar': triggerChar,
+                  'prefix': prefix,
+                  'options': formatted,
+                },
+              );
+            }
           } else {
-            if (!_isDisposed) suggestionsNotifier.value = null;
+            if (!_isDisposed) {
+              suggestionsNotifier.value = null;
+              AppLogger.instance.debug('Suggestions closed');
+            }
           }
         });
       });
@@ -277,19 +344,64 @@ class CodeForgeController implements DeltaTextInputClient {
         final isTriggerChar = _isCompletionTriggerChar(triggerChar);
         final isAlphaChar = _isAlpha(triggerChar);
 
-        if (isTriggerChar || isAlphaChar) {
-          _suggestions = await lspConfig!.getCompletions(
-            openedFile!,
-            getLineAtOffset(selection.extentOffset),
-            character,
-          );
+        // Check for custom matches first (even without standard trigger)
+        final customMatches = _getMatchingCustomSuggestions(
+          text,
+          cursorPosition,
+        );
+        final hasCustomMatches = customMatches.isNotEmpty;
+        AppLogger.instance.debug(
+          'Custom matches check (LSP)',
+          data: {
+            'customMatchesCount': customMatches.length,
+            'text': text,
+            'cursorPosition': cursorPosition,
+            'prefix': prefix,
+            'isTriggerChar': isTriggerChar,
+            'isAlphaChar': isAlphaChar,
+            'hasCustomMatches': hasCustomMatches,
+          },
+        );
+
+        if (isTriggerChar || isAlphaChar || hasCustomMatches) {
+          if (isTriggerChar || isAlphaChar) {
+            _suggestions = await lspConfig!.getCompletions(
+              openedFile!,
+              getLineAtOffset(selection.extentOffset),
+              character,
+            );
+          } else {
+            _suggestions = []; // No LSP, but we have custom matches
+          }
+          if (customMatches.isNotEmpty) {
+            _suggestions = <dynamic>[...customMatches, ..._suggestions];
+          }
           _sortSuggestions(prefix);
-          if (!_isDisposed) suggestionsNotifier.value = _suggestions;
+          if (!_isDisposed) {
+            suggestionsNotifier.value = _suggestions;
+            final formatted = _formatSuggestionsForLog(_suggestions);
+            AppLogger.instance.debug(
+              'Suggestions opened (LSP)',
+              data: {
+                'count': _suggestions.length,
+                'triggerChar': triggerChar,
+                'prefix': prefix,
+                'options': formatted,
+              },
+            );
+          }
         } else {
-          if (!_isDisposed) suggestionsNotifier.value = null;
+          // Clear suggestions only if no triggers AND no custom matches
+          if (!_isDisposed) {
+            suggestionsNotifier.value = null;
+            AppLogger.instance.debug('Suggestions closed (LSP)');
+          }
         }
       } else {
-        if (!_isDisposed) suggestionsNotifier.value = null;
+        if (!_isDisposed) {
+          suggestionsNotifier.value = null;
+          AppLogger.instance.debug('Suggestions closed (LSP - no change)');
+        }
       }
     }
     _previousValue = text;
@@ -360,6 +472,33 @@ class CodeForgeController implements DeltaTextInputClient {
   /// else a [List<String>] with locally available words will be returned.
   List<dynamic>? get suggestions => suggestionsNotifier.value;
 
+  /// Registers custom (language-specific) suggestions that are triggered by [SuggestionModel.openingTag].
+  /// Typically called from [CodeForge] via [initializeLanguageSpecificSuggestions] when the widget
+  /// is built or when the language changes.
+  void registerCustomSuggestions(List<SuggestionModel> suggestions) {
+    _customSuggestions = List.from(suggestions);
+    AppLogger.instance.debug(
+      'Custom suggestions registered',
+      data: {
+        'count': _customSuggestions.length,
+        'openingTags': _customSuggestions
+            .map((s) => s.openingTag)
+            .where((tag) => tag.isNotEmpty)
+            .toSet()
+            .toList(),
+      },
+    );
+  }
+
+  /// Current language mode (e.g. for syntax highlighting). Updated when the editor language changes.
+  Mode? get currentLanguage => _currentLanguage;
+
+  /// Updates the current language. Call [registerCustomSuggestions] with language-specific
+  /// suggestions after changing the language so that openingTag-based suggestions match the editor.
+  void setLanguage(Mode language) {
+    _currentLanguage = language;
+  }
+
   /// The last character that was typed by the user.
   /// Returns an empty string if no character has been typed or if the last input was not a single character.
   String get lastTypedCharacter => _lastTypedCharacter ?? '';
@@ -368,6 +507,10 @@ class CodeForgeController implements DeltaTextInputClient {
   String? get openedFile => _openedFile;
 
   VoidCallback? userCodeAction;
+
+  /// Callback invoked whenever the code/text changes.
+  /// Receives the new text content after the change.
+  void Function(String text)? onCodeChanged;
 
   Rope _rope = Rope('');
   TextSelection _selection = const TextSelection.collapsed(offset: 0);
@@ -449,10 +592,14 @@ class CodeForgeController implements DeltaTextInputClient {
 
   /// Clear LSP suggestions, hover info, code actions and signature help.
   void clearAllSuggestions() {
+    final hadSuggestions = suggestionsNotifier.value != null;
     suggestionsNotifier.value = null;
     selectedSuggestionNotifier.value = null;
     signatureNotifier.value = null;
     codeActionsNotifier.value = null;
+    if (hadSuggestions) {
+      AppLogger.instance.debug('Suggestions cleared (clearAllSuggestions)');
+    }
   }
 
   /// Accepts the currently selected suggestion and inserts it at the cursor position.
@@ -482,6 +629,8 @@ class CodeForgeController implements DeltaTextInputClient {
 
     if (selected is LspCompletion) {
       insertText = selected.label;
+    } else if (selected is SuggestionModel) {
+      insertText = selected.replacedOnClick;
     } else if (selected is Map) {
       insertText = selected['insertText'] ?? selected['label'] ?? '';
     } else if (selected is String) {
@@ -489,6 +638,26 @@ class CodeForgeController implements DeltaTextInputClient {
     }
 
     if (insertText.isNotEmpty) {
+      final selectedLabel = selected is LspCompletion
+          ? selected.label
+          : selected is SuggestionModel
+          ? selected.label
+          : selected is String
+          ? selected
+          : 'Unknown';
+      AppLogger.instance.debug(
+        'Suggestion accepted',
+        data: {
+          'index': isMobile ? currentlySelectedSuggestion : selectedIndex,
+          'type': selected is LspCompletion
+              ? 'LSP'
+              : selected is SuggestionModel
+              ? 'Custom'
+              : 'Word',
+          'label': selectedLabel,
+          'insertLength': insertText.length,
+        },
+      );
       insertAtCurrentCursor(insertText, replaceTypedChar: true);
     }
 
@@ -1481,11 +1650,23 @@ class CodeForgeController implements DeltaTextInputClient {
   int findLineEnd(int offset) => _rope.findLineEnd(offset);
 
   set text(String newText) {
+    final oldLength = _rope.length;
     _rope = Rope(newText);
     _currentVersion++;
     _selection = TextSelection.collapsed(offset: newText.length);
     dirtyRegion = TextRange(start: 0, end: newText.length);
     _isTyping = false;
+    AppLogger.instance.debug(
+      'Code change: Text set',
+      data: {
+        'oldLength': oldLength,
+        'newLength': newText.length,
+        'lengthDelta': newText.length - oldLength,
+        'preview': newText.length > 100
+            ? '${newText.substring(0, 100)}...'
+            : newText,
+      },
+    );
     notifyListeners();
   }
 
@@ -1710,7 +1891,11 @@ class CodeForgeController implements DeltaTextInputClient {
             _isMobile &&
             currentlySelectedSuggestion != null) {
           final sugg = suggestionsNotifier.value![currentlySelectedSuggestion!];
-          final text = sugg is LspCompletion ? sugg.label : sugg as String;
+          final text = sugg is LspCompletion
+              ? sugg.label
+              : sugg is SuggestionModel
+              ? sugg.replacedOnClick
+              : sugg as String;
           insertAtCurrentCursor(text, replaceTypedChar: true);
           suggestionsNotifier.value = null;
           currentlySelectedSuggestion = null;
@@ -1784,6 +1969,10 @@ class CodeForgeController implements DeltaTextInputClient {
     if (isFolded) {
       final newPosition = text.length;
       selection = TextSelection.collapsed(offset: newPosition);
+      AppLogger.instance.debug(
+        'Code change: Insertion skipped (folded region)',
+        data: {'cursorPosition': cursorPosition, 'foldedLine': currentLine},
+      );
       return;
     }
 
@@ -1792,8 +1981,30 @@ class CodeForgeController implements DeltaTextInputClient {
       final prefix = getCurrentWordPrefix(ropeText, safePosition);
       final prefixStart = (safePosition - prefix.length).clamp(0, _rope.length);
 
+      AppLogger.instance.debug(
+        'Code change: Insert at cursor (replace word)',
+        data: {
+          'cursorPosition': safePosition,
+          'prefixLength': prefix.length,
+          'prefixStart': prefixStart,
+          'insertedLength': textToInsert.length,
+          'insertedPreview': textToInsert.length > 50
+              ? '${textToInsert.substring(0, 50)}...'
+              : textToInsert,
+        },
+      );
       replaceRange(prefixStart, safePosition, textToInsert);
     } else {
+      AppLogger.instance.debug(
+        'Code change: Insert at cursor',
+        data: {
+          'cursorPosition': safePosition,
+          'insertedLength': textToInsert.length,
+          'insertedPreview': textToInsert.length > 50
+              ? '${textToInsert.substring(0, 50)}...'
+              : textToInsert,
+        },
+      );
       replaceRange(safePosition, safePosition, textToInsert);
     }
   }
@@ -2300,10 +2511,52 @@ class CodeForgeController implements DeltaTextInputClient {
         selectionBefore,
         _selection,
       );
+      AppLogger.instance.debug(
+        'Code change: Replacement',
+        data: {
+          'start': safeStart,
+          'end': safeEnd,
+          'deletedLength': deletedText.length,
+          'insertedLength': replacement.length,
+          'deletedPreview': deletedText.length > 50
+              ? '${deletedText.substring(0, 50)}...'
+              : deletedText,
+          'insertedPreview': replacement.length > 50
+              ? '${replacement.substring(0, 50)}...'
+              : replacement,
+          'selectionBefore': '${selectionBefore.start}-${selectionBefore.end}',
+          'selectionAfter': '${_selection.start}-${_selection.end}',
+        },
+      );
     } else if (deletedText.isNotEmpty) {
       _recordDeletion(safeStart, deletedText, selectionBefore, _selection);
+      AppLogger.instance.debug(
+        'Code change: Deletion',
+        data: {
+          'start': safeStart,
+          'end': safeEnd,
+          'length': deletedText.length,
+          'deletedPreview': deletedText.length > 50
+              ? '${deletedText.substring(0, 50)}...'
+              : deletedText,
+          'selectionBefore': '${selectionBefore.start}-${selectionBefore.end}',
+          'selectionAfter': '${_selection.start}-${_selection.end}',
+        },
+      );
     } else if (replacement.isNotEmpty) {
       _recordInsertion(safeStart, replacement, selectionBefore, _selection);
+      AppLogger.instance.debug(
+        'Code change: Insertion',
+        data: {
+          'position': safeStart,
+          'length': replacement.length,
+          'insertedPreview': replacement.length > 50
+              ? '${replacement.substring(0, 50)}...'
+              : replacement,
+          'selectionBefore': '${selectionBefore.start}-${selectionBefore.end}',
+          'selectionAfter': '${_selection.start}-${_selection.end}',
+        },
+      );
     }
 
     if (connection != null && connection!.attached) {
@@ -2934,6 +3187,223 @@ class CodeForgeController implements DeltaTextInputClient {
     }
   }
 
+  /// Returns true if the cursor is inside a Jinja block ({% ... %} or {{ ... }}).
+  bool _isWithinJinjaBlock(String text, int cursorPosition) {
+    if (cursorPosition <= 0 || text.isEmpty) return false;
+    final before = text.substring(0, cursorPosition);
+    final lastOpenStmt = before.lastIndexOf('{%');
+    final lastOpenExpr = before.lastIndexOf('{{');
+    final openIdx = lastOpenStmt > lastOpenExpr ? lastOpenStmt : lastOpenExpr;
+    if (openIdx < 0) return false;
+    final isStmt = before.substring(openIdx).startsWith('{%');
+    final closeMark = isStmt ? '%}' : '}}';
+    final afterOpen = text.substring(openIdx + 2);
+    final closeIdx = afterOpen.indexOf(closeMark);
+    if (closeIdx < 0) return true;
+    final closeAbsolute = openIdx + 2 + closeIdx;
+    return cursorPosition <= closeAbsolute;
+  }
+
+  /// Validates that [suggestion]'s context requirement is satisfied at [cursorPosition].
+  bool _validateSuggestionContext(
+    SuggestionModel suggestion,
+    String text,
+    int cursorPosition,
+  ) {
+    final ctx = suggestion.context;
+    if (ctx == null || ctx == SuggestionContext.none) return true;
+    if (ctx == SuggestionContext.jinjaBlock) {
+      return _isWithinJinjaBlock(text, cursorPosition);
+    }
+    return true;
+  }
+
+  /// Determines if the cursor is inside an opening tag block (between [openingTag] and [closingTag]).
+  ///
+  /// Returns true if:
+  /// - [closingTag] is empty (no closing tag requirement)
+  /// - No [closingTag] is found after [openingTag]
+  /// - [closingTag] is found but cursor is before it
+  ///
+  /// [openingTagIndex] must be an absolute position in [text], not relative to a substring.
+  bool _isInsideOpeningTagBlock(
+    String text,
+    int cursorPosition,
+    int openingTagIndex,
+    String openingTag,
+    String closingTag,
+  ) {
+    if (closingTag.isEmpty) {
+      // No closing tag - always consider inside block if opening tag found
+      return true;
+    }
+
+    final afterOpeningTag = openingTagIndex + openingTag.length;
+    final textAfterOpening = text.substring(afterOpeningTag, cursorPosition);
+
+    // Check if closing tag appears after opening tag
+    final closingTagIndex = textAfterOpening.indexOf(closingTag);
+
+    if (closingTagIndex < 0) {
+      // No closing tag found - we're inside the block
+      return true;
+    }
+
+    // Closing tag found - check if cursor is before it
+    return cursorPosition <= (afterOpeningTag + closingTagIndex);
+  }
+
+  /// Returns custom suggestions whose [SuggestionModel.openingTag] matches the text
+  /// immediately before [cursorPosition], sorted by openingTag length (longest first).
+  List<SuggestionModel> _getMatchingCustomSuggestions(
+    String text,
+    int cursorPosition,
+  ) {
+    if (_customSuggestions.isEmpty || cursorPosition <= 0) {
+      if (_customSuggestions.isEmpty) {
+        AppLogger.instance.debug(
+          'Custom suggestions empty - cannot match',
+          data: {'cursorPosition': cursorPosition},
+        );
+      }
+      return [];
+    }
+    try {
+      final start = cursorPosition > _maxOpeningTagLookback
+          ? cursorPosition - _maxOpeningTagLookback
+          : 0;
+      final prefix = text.substring(start, cursorPosition);
+      final matched = <SuggestionModel>[];
+      final checkedTags = <String>[];
+      final contextFailures = <String>[];
+
+      // Step 1: Find all suggestions whose openingTag appears in prefix
+      final candidates = <SuggestionModel>[];
+      for (final s in _customSuggestions) {
+        if (s.openingTag.isEmpty) continue;
+        checkedTags.add(s.openingTag);
+
+        // Find opening tag in prefix (relative to prefix start)
+        final relativeOpeningTagIndex = prefix.lastIndexOf(s.openingTag);
+        if (relativeOpeningTagIndex < 0) continue;
+
+        // Convert to absolute position in full text
+        final absoluteOpeningTagIndex = start + relativeOpeningTagIndex;
+
+        // Check if we're inside this opening tag block
+        final isInsideBlock = _isInsideOpeningTagBlock(
+          text,
+          cursorPosition,
+          absoluteOpeningTagIndex, // Use absolute position
+          s.openingTag,
+          s.closingTag,
+        );
+
+        if (isInsideBlock &&
+            _validateSuggestionContext(s, text, cursorPosition)) {
+          candidates.add(s);
+        } else if (!isInsideBlock) {
+          contextFailures.add(s.openingTag);
+        }
+      }
+
+      // Step 2: Extract filter text if we're inside a block
+      String? filterText;
+      SuggestionModel? activeBlock;
+
+      for (final candidate in candidates) {
+        // Find opening tag in prefix (relative to prefix start)
+        final relativeOpeningTagIndex = prefix.lastIndexOf(
+          candidate.openingTag,
+        );
+        if (relativeOpeningTagIndex < 0) continue;
+
+        // Convert to absolute position in full text
+        final absoluteOpeningTagIndex = start + relativeOpeningTagIndex;
+
+        // Extract content after opening tag (from prefix, relative)
+        final afterOpeningTagRelative =
+            relativeOpeningTagIndex + candidate.openingTag.length;
+        final contentAfterTag = prefix.substring(afterOpeningTagRelative);
+
+        // Check if we're inside this block (before closing tag)
+        if (_isInsideOpeningTagBlock(
+          text,
+          cursorPosition,
+          absoluteOpeningTagIndex, // Use absolute position
+          candidate.openingTag,
+          candidate.closingTag,
+        )) {
+          filterText = contentAfterTag;
+          activeBlock = candidate;
+          break; // Use longest match (already sorted)
+        }
+      }
+
+      // Step 3: Filter candidates by label if filter text exists
+      // Use existing _scoreMatch() for consistent scoring with other suggestions
+      if (filterText != null && filterText.isNotEmpty) {
+        final trimmedFilter = filterText.trim(); // Handle whitespace
+        for (final candidate in candidates) {
+          // Use existing scoring system - score > -1000000 means it matches
+          final score = _scoreMatch(candidate.label, trimmedFilter);
+          if (score > -1000000) {
+            matched.add(candidate);
+          }
+        }
+      } else {
+        // No filter text - return all candidates (exact opening tag match)
+        matched.addAll(candidates);
+      }
+
+      // Sort by opening tag length (longest first)
+      // Note: Final sorting by score happens in _sortSuggestions() which uses _scoreMatch()
+      matched.sort(
+        (a, b) => b.openingTag.length.compareTo(a.openingTag.length),
+      );
+
+      // Debug logging for custom suggestion matching
+      if (checkedTags.isNotEmpty || matched.isNotEmpty) {
+        AppLogger.instance.debug(
+          'Custom suggestion matching',
+          data: {
+            'cursorPosition': cursorPosition,
+            'prefix': prefix,
+            'filterText': filterText?.trim(),
+            'activeBlockTag': activeBlock?.openingTag,
+            'candidatesCount': candidates.length,
+            'matchedCount': matched.length,
+            'checkedTags': checkedTags,
+            'matchedTags': matched.map((s) => s.openingTag).toList(),
+            'contextFailures': contextFailures,
+          },
+        );
+      }
+
+      return matched;
+    } catch (e) {
+      AppLogger.instance.debug(
+        'Error in _getMatchingCustomSuggestions',
+        data: {'error': e.toString()},
+      );
+      return [];
+    }
+  }
+
+  /// Formats suggestions list for logging purposes.
+  List<String> _formatSuggestionsForLog(List<dynamic> suggestions) {
+    return suggestions.map((s) {
+      if (s is LspCompletion) {
+        return 'LSP: ${s.label}';
+      } else if (s is SuggestionModel) {
+        return 'Custom: ${s.label} (tag: ${s.openingTag})';
+      } else if (s is String) {
+        return 'Word: $s';
+      }
+      return 'Unknown: ${s.toString()}';
+    }).toList();
+  }
+
   bool _isAlpha(String s) {
     if (s.isEmpty) return false;
     final code = s.codeUnitAt(0);
@@ -3139,8 +3609,12 @@ class CodeForgeController implements DeltaTextInputClient {
 
   void _sortSuggestions(String prefix) {
     _suggestions.sort((a, b) {
-      final aLabel = a is LspCompletion ? a.label : a.toString();
-      final bLabel = b is LspCompletion ? b.label : b.toString();
+      final aLabel = a is LspCompletion
+          ? a.label
+          : (a is SuggestionModel ? a.label : a.toString());
+      final bLabel = b is LspCompletion
+          ? b.label
+          : (b is SuggestionModel ? b.label : b.toString());
       final aScore = _scoreMatch(aLabel, prefix);
       final bScore = _scoreMatch(bLabel, prefix);
 

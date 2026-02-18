@@ -19,6 +19,8 @@ import 'controller.dart';
 import 'find_controller.dart';
 import 'scroll.dart';
 import 'styling.dart';
+import 'suggestion_model.dart';
+import 'suggestions/initialize_language_specific_suggestions.dart';
 import 'syntax_highlighter.dart';
 import 'undo_redo.dart';
 
@@ -316,6 +318,11 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
     _vscrollController = widget.verticalScrollController ?? ScrollController();
     _editorTheme = widget.editorTheme ?? vs2015Theme;
     _language = widget.language ?? langDart;
+    _controller.setLanguage(_language);
+    initializeLanguageSpecificSuggestions(
+      currentLanguage: _language,
+      registerCustomSuggestions: _controller.registerCustomSuggestions,
+    );
     _suggestionNotifier = _controller.suggestionsNotifier;
     _diagnosticsNotifier = _controller.diagnosticsNotifier;
     _lspActionNotifier = _controller.codeActionsNotifier;
@@ -606,6 +613,20 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
     });
   }
 
+  @override
+  void didUpdateWidget(covariant CodeForge oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final newLanguage = widget.language ?? langDart;
+    if (oldWidget.language != widget.language) {
+      _language = newLanguage;
+      _controller.setLanguage(_language);
+      initializeLanguageSpecificSuggestions(
+        currentLanguage: _language,
+        registerCustomSuggestions: _controller.registerCustomSuggestions,
+      );
+    }
+  }
+
   void _scrollToSelectedSuggestion() {
     if (!_suggScrollController.hasClients) return;
 
@@ -669,6 +690,9 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
           ? item.importUri![0]
           : '';
       return 'lsp|$label|$id|$sort|$source|$importUri';
+    }
+    if (item is SuggestionModel) {
+      return 'sugg|${item.label}|${item.openingTag}';
     }
     return 'str|${item.toString()}';
   }
@@ -2549,19 +2573,19 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                   (indx == _sugSelIndex ||
                                                       (_isMobile &&
                                                           _isMobileSuggActive))) {
-                                                if (_selectedSuggestionMd !=
-                                                    null) {
-                                                  WidgetsBinding.instance
-                                                      .addPostFrameCallback((
-                                                        _,
-                                                      ) {
-                                                        if (!mounted) return;
-                                                        setState(() {
-                                                          _selectedSuggestionMd =
-                                                              null;
-                                                        });
+                                                WidgetsBinding.instance
+                                                    .addPostFrameCallback((_) {
+                                                      if (!mounted) return;
+                                                      setState(() {
+                                                        _selectedSuggestionMd =
+                                                            item
+                                                                    is SuggestionModel &&
+                                                                item.description !=
+                                                                    null
+                                                            ? item.description
+                                                            : null;
                                                       });
-                                                }
+                                                    });
                                               }
 
                                               return Container(
@@ -2611,6 +2635,9 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                             item
                                                                 is LspCompletion
                                                             ? item.label
+                                                            : item
+                                                                  is SuggestionModel
+                                                            ? item.replacedOnClick
                                                             : item as String;
                                                         _controller
                                                             .insertAtCurrentCursor(
@@ -2714,6 +2741,21 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                           ),
                                                         ],
                                                       ],
+                                                      if (item
+                                                          is SuggestionModel)
+                                                        Expanded(
+                                                          child: Text(
+                                                            item.label,
+                                                            style:
+                                                                _suggestionStyle
+                                                                    .labelTextStyle ??
+                                                                _suggestionStyle
+                                                                    .textStyle,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                          ),
+                                                        ),
                                                       if (item is String)
                                                         Expanded(
                                                           child: Text(
