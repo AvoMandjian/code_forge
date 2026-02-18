@@ -1,4 +1,5 @@
 import 'package:code_forge/code_forge.dart';
+import 'package:code_forge/code_forge/suggestion_model.dart';
 import 'package:example/finder.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -39,6 +40,14 @@ class _MyAppState extends State<MyApp> {
     codeController!.onCodeChanged = (String newText) {
       debugPrint('Code changed: $newText');
     };
+    codeController?.addCustomSuggestions([
+      SuggestionModel(
+        label: "THIS IS A TEST",
+        replacedOnClick: "print('Hello, world!');",
+        openingTag: "{{",
+        closingTag: "}}",
+      ),
+    ]);
   }
 
   @override

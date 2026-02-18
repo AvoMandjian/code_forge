@@ -475,13 +475,82 @@ class CodeForgeController implements DeltaTextInputClient {
   /// Registers custom (language-specific) suggestions that are triggered by [SuggestionModel.openingTag].
   /// Typically called from [CodeForge] via [initializeLanguageSpecificSuggestions] when the widget
   /// is built or when the language changes.
+  ///
+  /// This method merges language-specific suggestions with any existing suggestions added via
+  /// [addCustomSuggestions], preserving user-added suggestions while updating language-specific ones.
+  /// User-added suggestions persist across language changes.
   void registerCustomSuggestions(List<SuggestionModel> suggestions) {
-    _customSuggestions = List.from(suggestions);
+    // Merge: add new language-specific suggestions, filtering out duplicates
+    final newSuggestions = suggestions
+        .where((s) => !_customSuggestions.contains(s))
+        .toList();
+
+    // Prepend language-specific suggestions to existing ones
+    // This ensures language-specific suggestions are checked first during matching
+    _customSuggestions = [...newSuggestions, ..._customSuggestions];
+
     AppLogger.instance.debug(
       'Custom suggestions registered',
       data: {
-        'count': _customSuggestions.length,
+        'languageSpecificCount': suggestions.length,
+        'addedCount': newSuggestions.length,
+        'skippedDuplicates': suggestions.length - newSuggestions.length,
+        'preservedUserAddedCount':
+            _customSuggestions.length - newSuggestions.length,
+        'totalCount': _customSuggestions.length,
         'openingTags': _customSuggestions
+            .map((s) => s.openingTag)
+            .where((tag) => tag.isNotEmpty)
+            .toSet()
+            .toList(),
+      },
+    );
+  }
+
+  /// Adds custom suggestions to the existing list without replacing them.
+  ///
+  /// Unlike [registerCustomSuggestions], this method appends the provided
+  /// suggestions to the current list, allowing incremental addition of suggestions.
+  /// Duplicate suggestions (based on full equality) are automatically filtered out.
+  ///
+  /// Example:
+  /// ```dart
+  /// controller.addCustomSuggestions([
+  ///   SuggestionModel(
+  ///     label: "print",
+  ///     replacedOnClick: "print('Hello, world!');",
+  ///     openingTag: "print",
+  ///     closingTag: "}",
+  ///   ),
+  /// ]);
+  /// ```
+  void addCustomSuggestions(List<SuggestionModel> suggestions) {
+    if (suggestions.isEmpty) {
+      AppLogger.instance.debug('Custom suggestions add called with empty list');
+      return;
+    }
+
+    // Filter out duplicates using full equality (SuggestionModel.==)
+    final newSuggestions = suggestions
+        .where((suggestion) => !_customSuggestions.contains(suggestion))
+        .toList();
+
+    if (newSuggestions.isEmpty) {
+      AppLogger.instance.debug(
+        'All suggestions were duplicates - nothing added',
+        data: {'originalCount': suggestions.length},
+      );
+      return;
+    }
+
+    _customSuggestions.addAll(newSuggestions);
+    AppLogger.instance.debug(
+      'Custom suggestions added',
+      data: {
+        'addedCount': newSuggestions.length,
+        'skippedDuplicates': suggestions.length - newSuggestions.length,
+        'totalCount': _customSuggestions.length,
+        'openingTags': newSuggestions
             .map((s) => s.openingTag)
             .where((tag) => tag.isNotEmpty)
             .toSet()
