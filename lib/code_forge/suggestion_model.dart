@@ -53,6 +53,9 @@ class SuggestionModel {
   /// This is a runtime-only field, computed during suggestion filtering.
   final List<int>? matchRanges;
 
+  /// Whether the suggestion is a custom suggestion.
+  final bool isCustom;
+
   /// Creates a [SuggestionModel] instance.
   ///
   /// [label], [replacedOnClick], and [openingTag] are required.
@@ -65,6 +68,7 @@ class SuggestionModel {
     this.description,
     this.jinjaHtmlWidget,
     this.matchRanges,
+    this.isCustom = false,
   });
 
   /// Creates a [SuggestionModel] from a map.
@@ -80,6 +84,7 @@ class SuggestionModel {
       closingTag: map['closing_tag'] ?? '',
       description: map['description'] as String?,
       jinjaHtmlWidget: map['jinja_html_widget'] as Map<String, dynamic>?,
+      isCustom: map['is_custom'] ?? false,
     );
   }
 
@@ -94,6 +99,7 @@ class SuggestionModel {
       'closing_tag': closingTag,
       if (description != null) 'description': description,
       if (jinjaHtmlWidget != null) 'jinja_html_widget': jinjaHtmlWidget,
+      'is_custom': isCustom,
     };
   }
 
@@ -101,7 +107,7 @@ class SuggestionModel {
   String toString() {
     return 'SuggestionModel(label: $label, replacedOnClick: $replacedOnClick, '
         'description: $description, openingTag: $openingTag, closingTag: $closingTag, '
-        'jinjaHtmlWidget: $jinjaHtmlWidget, matchRanges: $matchRanges)';
+        'jinjaHtmlWidget: $jinjaHtmlWidget, matchRanges: $matchRanges, isCustom: $isCustom)';
   }
 
   @override
@@ -114,7 +120,8 @@ class SuggestionModel {
         other.openingTag == openingTag &&
         other.closingTag == closingTag &&
         other.jinjaHtmlWidget == jinjaHtmlWidget &&
-        other.matchRanges == matchRanges;
+        other.matchRanges == matchRanges &&
+        other.isCustom == isCustom;
   }
 
   @override
@@ -127,6 +134,7 @@ class SuggestionModel {
       jinjaHtmlWidget,
       closingTag,
       matchRanges,
+      isCustom,
     );
   }
 }
@@ -138,6 +146,7 @@ class SuggestionModelJinja extends SuggestionModel {
     required super.openingTag,
     required super.closingTag,
     super.description,
+    super.isCustom,
   });
 
   @override
@@ -151,5 +160,6 @@ class SuggestionModelHtml extends SuggestionModel {
     required super.openingTag,
     required super.closingTag,
     super.description,
+    super.isCustom,
   });
 }

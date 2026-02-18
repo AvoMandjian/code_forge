@@ -91,6 +91,28 @@ class CodeForgeController implements DeltaTextInputClient {
   List<SuggestionModel> _customSuggestions = [];
   Mode? _currentLanguage;
 
+  // Breakpoint state (1-indexed line numbers)
+  /// Set of line numbers (1-indexed) with active breakpoints.
+  /// This is a public, mutable set that can be read and modified directly.
+  Set<int> breakpoints = {};
+
+  /// Internal callback for breakpoint change notifications.
+  void Function(Set<int>)? _onBreakpointsChanged;
+
+  /// Tracks the character offset of the most recent edit that changed the line count.
+  /// Used to compute the pivot line for breakpoint shifting.
+  int? lastStructuralEditOffset;
+
+  /// Batching flag: indicates breakpoints changed during an undo/redo action.
+  bool _pendingBreakpointsChanged = false;
+
+  /// Holds the latest breakpoint set during undo/redo; emitted once at the end.
+  Set<int>? _batchedBreakpointsSnapshot;
+
+  /// Exposes undo/redo-in-progress state so the controller can batch callbacks appropriately.
+  bool get isUndoRedoInProgress =>
+      _undoController?.isUndoRedoInProgress ?? false;
+
   CodeForgeController({this.lspConfig}) {
     _listeners.add(() => onCodeChanged?.call(text));
     if (lspConfig != null) {
@@ -581,13 +603,13 @@ class CodeForgeController implements DeltaTextInputClient {
   /// controller.clearCustomSuggestions();
   /// ```
   void clearCustomSuggestions() {
-    final clearedCount = _customSuggestions.length;
-    _customSuggestions.clear();
+    final clearedCount = _customSuggestions.where((s) => s.isCustom).length;
+    _customSuggestions.removeWhere((s) => s.isCustom);
     AppLogger.instance.debug(
       'Custom suggestions cleared',
       data: {
         'clearedCount': clearedCount,
-        'totalCount': _customSuggestions.length,
+        'totalCount': _customSuggestions.where((s) => s.isCustom).length,
       },
     );
   }
@@ -863,6 +885,85 @@ class CodeForgeController implements DeltaTextInputClient {
     _gutterDecorations.clear();
     decorationsChanged = true;
     notifyListeners();
+  }
+
+  /// Registers a callback that fires whenever the breakpoint set changes.
+  ///
+  /// The callback receives an unmodifiable set of 1-indexed line numbers.
+  /// This fires after every breakpoint mutation: user interaction, programmatic API,
+  /// line shifting, undo/redo, and full content replace.
+  void onBreakpointsChanged(void Function(Set<int>) callback) {
+    _onBreakpointsChanged = callback;
+  }
+
+  /// Toggles a breakpoint at the specified line (1-indexed).
+  ///
+  /// If the line has a breakpoint, it is removed. If not, one is added.
+  /// This is a no-op if the editor is in `readOnly` mode.
+  void toggleBreakpoint(int line) {
+    if (readOnly) return;
+    if (breakpoints.contains(line)) {
+      breakpoints.remove(line);
+    } else {
+      breakpoints.add(line);
+    }
+    _notifyBreakpointsChanged();
+    notifyListeners();
+  }
+
+  /// Adds a breakpoint at the specified line (1-indexed).
+  ///
+  /// If the line already has a breakpoint, this is a no-op.
+  /// This is a no-op if the editor is in `readOnly` mode.
+  void addBreakpoint(int line) {
+    if (readOnly) return;
+    if (!breakpoints.contains(line)) {
+      breakpoints.add(line);
+      _notifyBreakpointsChanged();
+      notifyListeners();
+    }
+  }
+
+  /// Removes a breakpoint at the specified line (1-indexed).
+  ///
+  /// If the line does not have a breakpoint, this is a no-op.
+  /// This is a no-op if the editor is in `readOnly` mode.
+  void removeBreakpoint(int line) {
+    if (readOnly) return;
+    if (breakpoints.remove(line)) {
+      _notifyBreakpointsChanged();
+      notifyListeners();
+    }
+  }
+
+  /// Replaces the entire breakpoint set with the provided lines (1-indexed).
+  ///
+  /// This is a no-op if the editor is in `readOnly` mode.
+  void setBreakpoints(Set<int> lines) {
+    if (readOnly) return;
+    breakpoints = Set<int>.from(lines);
+    _notifyBreakpointsChanged();
+    notifyListeners();
+  }
+
+  /// Removes all breakpoints.
+  ///
+  /// This is a no-op if the editor is in `readOnly` mode.
+  void clearBreakpoints() {
+    if (readOnly) return;
+    breakpoints.clear();
+    _notifyBreakpointsChanged();
+    notifyListeners();
+  }
+
+  /// Internal method to notify breakpoint changes, with batching for undo/redo.
+  void _notifyBreakpointsChanged() {
+    if (isUndoRedoInProgress) {
+      _pendingBreakpointsChanged = true;
+      _batchedBreakpointsSnapshot = Set<int>.from(breakpoints);
+    } else {
+      _onBreakpointsChanged?.call(Set.unmodifiable(breakpoints));
+    }
   }
 
   /// Sets the ghost text (inline suggestion) at a specific position.
@@ -1171,6 +1272,70 @@ class CodeForgeController implements DeltaTextInputClient {
         ? null
         : adjustedLspFoldRanges;
     _lspFoldRangesAdjustedNotFetched = true;
+  }
+
+  /// Shifts breakpoints when lines are inserted or deleted.
+  ///
+  /// Called by the render object from its `lineCountChanged` branch.
+  /// This method must NOT call `notifyListeners()` to avoid re-entrant recursion.
+  ///
+  /// [editLine] is 0-indexed; [breakpoints] are 1-indexed.
+  /// [lineDelta] is positive for insertions, negative for deletions.
+  void shiftBreakpointsForLineChange(int editLine, int lineDelta) {
+    if (readOnly || breakpoints.isEmpty || lineDelta == 0) return;
+
+    // Compute pivot line (0-indexed)
+    int pivotLine = editLine;
+    if (lastStructuralEditOffset != null) {
+      final lineStartOffset = getLineStartOffset(editLine);
+      if (lastStructuralEditOffset == lineStartOffset) {
+        // Edit happened at the start of the line, treat as "inserting/deleting above"
+        pivotLine = (editLine - 1).clamp(-1, editLine);
+      }
+    }
+
+    final newBreakpoints = <int>{};
+
+    if (lineDelta > 0) {
+      // Insert: shift breakpoints after pivotLine up by lineDelta
+      for (final bp in breakpoints) {
+        final bpLine0 = bp - 1; // Convert to 0-indexed
+        if (bpLine0 > pivotLine) {
+          newBreakpoints.add(bp + lineDelta);
+        } else {
+          newBreakpoints.add(bp);
+        }
+      }
+    } else {
+      // Delete: lineDelta is negative
+      final deletedLines = -lineDelta;
+      final deletedStart0 = pivotLine + 1; // First deleted line (0-indexed)
+      final deletedEnd0 =
+          pivotLine + deletedLines; // Last deleted line (0-indexed)
+
+      for (final bp in breakpoints) {
+        final bpLine0 = bp - 1; // Convert to 0-indexed
+
+        if (bpLine0 >= deletedStart0 && bpLine0 <= deletedEnd0) {
+          // Breakpoint is inside the deleted range
+          if (pivotLine >= 0) {
+            // Move to nearest surviving line above (pivotLine)
+            newBreakpoints.add(pivotLine + 1); // Convert back to 1-indexed
+          }
+          // If pivotLine < 0, the breakpoint is removed (not added to newBreakpoints)
+        } else if (bpLine0 > deletedEnd0) {
+          // Breakpoint is after the deleted range, shift down
+          newBreakpoints.add(bp - deletedLines);
+        } else {
+          // Breakpoint is before the deleted range, keep as-is
+          newBreakpoints.add(bp);
+        }
+      }
+    }
+
+    breakpoints = newBreakpoints;
+    _notifyBreakpointsChanged();
+    // Note: Do NOT call notifyListeners() here to avoid recursion
   }
 
   /// Convenience method to set git diff decorations for multiple line ranges.
@@ -1758,6 +1923,14 @@ class CodeForgeController implements DeltaTextInputClient {
     _selection = TextSelection.collapsed(offset: newText.length);
     dirtyRegion = TextRange(start: 0, end: newText.length);
     _isTyping = false;
+
+    // Clear breakpoints and reset metadata when content is fully replaced
+    breakpoints.clear();
+    lastStructuralEditOffset = null;
+    _pendingBreakpointsChanged = false;
+    _batchedBreakpointsSnapshot = null;
+    _onBreakpointsChanged?.call({});
+
     AppLogger.instance.debug(
       'Code change: Text set',
       data: {
@@ -2571,6 +2744,11 @@ class CodeForgeController implements DeltaTextInputClient {
         ? _rope.substring(safeStart, safeEnd)
         : '';
 
+    // Track structural edits (line count changes) for breakpoint shifting
+    final deletedNewlines = deletedText.split('\n').length - 1;
+    final insertedNewlines = replacement.split('\n').length - 1;
+    final lineCountChanged = deletedNewlines != insertedNewlines;
+
     if (safeStart < safeEnd) {
       _rope.delete(safeStart, safeEnd);
     }
@@ -2578,6 +2756,12 @@ class CodeForgeController implements DeltaTextInputClient {
       _rope.insert(safeStart, replacement);
     }
     _currentVersion++;
+
+    // Store structural edit offset if line count changed
+    if (lineCountChanged && !isUndoRedoInProgress) {
+      lastStructuralEditOffset = safeStart;
+    }
+
     TextSelection newSelection;
     if (preserveOldCursor) {
       final delta = replacement.length - (safeEnd - safeStart);
@@ -3947,11 +4131,28 @@ class CodeForgeController implements DeltaTextInputClient {
         for (final op in operations) {
           _applyUndoRedoOperation(op);
         }
+        // Emit batched breakpoint callback after compound operation completes
+        if (_pendingBreakpointsChanged && _batchedBreakpointsSnapshot != null) {
+          _onBreakpointsChanged?.call(
+            Set.unmodifiable(_batchedBreakpointsSnapshot!),
+          );
+          _pendingBreakpointsChanged = false;
+          _batchedBreakpointsSnapshot = null;
+        }
         return;
     }
 
     _syncToConnection();
     notifyListeners();
+
+    // Emit batched breakpoint callback after single operation completes
+    if (_pendingBreakpointsChanged && _batchedBreakpointsSnapshot != null) {
+      _onBreakpointsChanged?.call(
+        Set.unmodifiable(_batchedBreakpointsSnapshot!),
+      );
+      _pendingBreakpointsChanged = false;
+      _batchedBreakpointsSnapshot = null;
+    }
   }
 
   void _recordEdit(EditOperation operation) {

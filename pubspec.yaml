@@ -11,15 +11,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  markdown_widget: ^2.3.2+8
+  # markdown_widget: ^2.3.2+8
   re_highlight: ^0.0.3
   universal_io: ^2.3.1
   web_socket_channel: ^3.0.3
   flutter_colorpicker: ^1.1.0
-  jinja_app_widgets_catalog:
-    git:
-      url: git@git.jinja.app:jinja.app/jinja_app_widgets_catalog.git
-      ref: dev
   vector_math: ^2.1.4
   http: ^1.6.0
 
@@ -29,7 +25,21 @@ dev_dependencies:
   flutter_lints: ^6.0.0
 
 dependency_overrides:
+  jinja_app_widgets_catalog:
+    path: /Users/avo/Documents/Workplace/digital_pomegranate/jinja-app/projects/jinja_app_widgets_catalog
+    # git:
+    #   url: git@git.jinja.app:jinja.app/jinja_app_widgets_catalog.git
+    #   ref: dev
   intl: ^0.20.2
+  flutter_quill:
+    git:
+      url: https://github.com/AvoMandjian/flutter-quill.git
+      ref: DP
+  flutter_quill_extensions:
+    git:
+      url: https://github.com/AvoMandjian/flutter-quill.git
+      path: flutter_quill_extensions
+      ref: DP
 
 flutter:
   fonts:

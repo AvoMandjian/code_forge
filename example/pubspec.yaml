@@ -21,7 +21,18 @@ dev_dependencies:
 
 dependency_overrides:
   code_forge: { path: ../ }
+  jinja_app_widgets_catalog:
+    path: /Users/avo/Documents/Workplace/digital_pomegranate/jinja-app/projects/jinja_app_widgets_catalog
   intl: ^0.20.2
+  flutter_quill:
+    git:
+      url: https://github.com/AvoMandjian/flutter-quill.git
+      ref: DP
+  flutter_quill_extensions:
+    git:
+      url: https://github.com/AvoMandjian/flutter-quill.git
+      path: flutter_quill_extensions
+      ref: DP
 
   flutter_lints: ^6.0.0
 

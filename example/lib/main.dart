@@ -40,14 +40,30 @@ class _MyAppState extends State<MyApp> {
     codeController!.onCodeChanged = (String newText) {
       debugPrint('Code changed: $newText');
     };
+    codeController!.onBreakpointsChanged((Set<int> breakpoints) {
+      debugPrint('Breakpoints changed: $breakpoints');
+    });
     codeController?.addCustomSuggestions([
       SuggestionModel(
+        isCustom: true,
         label: "THIS IS A TEST",
         replacedOnClick: "print('Hello, world!');",
         openingTag: "{{",
         closingTag: "}}",
       ),
     ]);
+
+    Future.delayed(const Duration(seconds: 2), () {
+      codeController?.addCustomSuggestions([
+        SuggestionModel(
+          isCustom: true,
+          label: "THIS IS ADDED AFTER 2 SECONDS",
+          replacedOnClick: "print('Hello, world!');",
+          openingTag: "{{",
+          closingTag: "}}",
+        ),
+      ]);
+    });
   }
 
   @override
@@ -56,12 +72,16 @@ class _MyAppState extends State<MyApp> {
       home: Scaffold(
         floatingActionButton: FloatingActionButton(
           onPressed: () {
-            codeController?.setGitDiffDecorations(
-              addedRanges: [(1, 5), (10, 25)],
-              removedRanges: [(30, 37)],
-            );
-            codeController?.scrollToLine(100);
+            // Demonstrate breakpoint API
+            if (codeController!.breakpoints.isEmpty) {
+              // Add some breakpoints
+              codeController?.setBreakpoints({3, 7, 12});
+            } else {
+              // Clear breakpoints
+              codeController?.clearBreakpoints();
+            }
           },
+          child: const Icon(Icons.bug_report),
         ),
         body: SafeArea(
           child: CodeForge(
@@ -76,6 +96,9 @@ class _MyAppState extends State<MyApp> {
             ),
             finderBuilder: (c, controller) =>
                 FindPanelView(controller: controller),
+            onBreakpointsChanged: (Set<int> breakpoints) {
+              debugPrint('Breakpoints from widget callback: $breakpoints');
+            },
           ),
         ),
       ),

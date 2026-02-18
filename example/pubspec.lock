@@ -657,6 +657,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.0"
+  dart_quill_delta:
+    dependency: transitive
+    description:
+      name: dart_quill_delta
+      sha256: bddb0b2948bd5b5a328f1651764486d162c59a8ccffd4c63e8b2c5e44be1dac4
+      url: "https://pub.dev"
+    source: hosted
+    version: "10.8.3"
   dart_style:
     dependency: transitive
     description:
@@ -685,10 +693,10 @@ packages:
     dependency: transitive
     description:
       name: date_picker_plus
-      sha256: e2693c3514430cdc874d071dcb80a717385cb94206e8e458137c993b5c69d9a7
+      sha256: a4249f6e130e5b88743f0a69e45e8473692890fd6cbbec5a65fed218c1ccd87d
       url: "https://pub.dev"
     source: hosted
-    version: "4.2.0"
+    version: "6.0.0"
   dbus:
     dependency: transitive
     description:
@@ -1152,14 +1160,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.0"
-  flutter_highlight:
-    dependency: transitive
-    description:
-      name: flutter_highlight
-      sha256: "7b96333867aa07e122e245c033b8ad622e4e3a42a1a2372cbb098a2541d8782c"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.7.0"
   flutter_html:
     dependency: transitive
     description:
@@ -1373,6 +1373,32 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.33"
+  flutter_quill:
+    dependency: "direct overridden"
+    description:
+      path: "."
+      ref: DP
+      resolved-ref: "32b7cd3d129c029fb76f4d20eba1f8f111fffedf"
+      url: "https://github.com/AvoMandjian/flutter-quill.git"
+    source: git
+    version: "11.4.1"
+  flutter_quill_delta_from_html:
+    dependency: transitive
+    description:
+      name: flutter_quill_delta_from_html
+      sha256: "0eb801ea8dd498cadc057507af5da794d4c9599ce58b2569cb3d4bb53ba8bed2"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.5.3"
+  flutter_quill_extensions:
+    dependency: "direct overridden"
+    description:
+      path: flutter_quill_extensions
+      ref: DP
+      resolved-ref: "32b7cd3d129c029fb76f4d20eba1f8f111fffedf"
+      url: "https://github.com/AvoMandjian/flutter-quill.git"
+    source: git
+    version: "11.0.0"
   flutter_rating_bar:
     dependency: transitive
     description:
@@ -1728,14 +1754,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.3.2"
-  highlight:
-    dependency: transitive
-    description:
-      name: highlight
-      sha256: "5353a83ffe3e3eca7df0abfb72dcf3fa66cc56b953728e7113ad4ad88497cf21"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.7.0"
   hooks:
     dependency: transitive
     description:
@@ -1922,13 +1940,11 @@ packages:
     source: git
     version: "2.0.0-dev.1"
   jinja_app_widgets_catalog:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      path: "."
-      ref: dev
-      resolved-ref: ab145582f92a264e62445069e680a0c21bfa6a08
-      url: "git@git.jinja.app:jinja.app/jinja_app_widgets_catalog.git"
-    source: git
+      path: "/Users/avo/Documents/Workplace/digital_pomegranate/jinja-app/projects/jinja_app_widgets_catalog"
+      relative: false
+    source: path
     version: "0.0.1"
   js:
     dependency: transitive
@@ -2204,14 +2220,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "7.3.0"
-  markdown_widget:
-    dependency: transitive
-    description:
-      name: markdown_widget
-      sha256: b52c13d3ee4d0e60c812e15b0593f142a3b8a2003cde1babb271d001a1dbdc1c
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.3.2+8"
   matcher:
     dependency: transitive
     description:
@@ -2565,6 +2573,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "7.0.2"
+  photo_view:
+    dependency: transitive
+    description:
+      name: photo_view
+      sha256: "1fc3d970a91295fbd1364296575f854c9863f225505c28c46e0a03e48960c75e"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.15.0"
   pinput:
     dependency: transitive
     description:
@@ -2717,6 +2733,62 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.2"
+  quill_native_bridge:
+    dependency: transitive
+    description:
+      name: quill_native_bridge
+      sha256: "76a16512e398e84216f3f659f7cb18a89ec1e141ea908e954652b4ce6cf15b18"
+      url: "https://pub.dev"
+    source: hosted
+    version: "11.1.0"
+  quill_native_bridge_android:
+    dependency: transitive
+    description:
+      name: quill_native_bridge_android
+      sha256: b75c7e6ede362a7007f545118e756b1f19053994144ec9eda932ce5e54a57569
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.1+2"
+  quill_native_bridge_ios:
+    dependency: transitive
+    description:
+      name: quill_native_bridge_ios
+      sha256: d23de3cd7724d482fe2b514617f8eedc8f296e120fb297368917ac3b59d8099f
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.1"
+  quill_native_bridge_macos:
+    dependency: transitive
+    description:
+      name: quill_native_bridge_macos
+      sha256: "1c0631bd1e2eee765a8b06017c5286a4e829778f4585736e048eb67c97af8a77"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.1"
+  quill_native_bridge_platform_interface:
+    dependency: transitive
+    description:
+      name: quill_native_bridge_platform_interface
+      sha256: "8264a2bdb8a294c31377a27b46c0f8717fa9f968cf113f7dc52d332ed9c84526"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.2+1"
+  quill_native_bridge_web:
+    dependency: transitive
+    description:
+      name: quill_native_bridge_web
+      sha256: "7c723f6824b0250d7f33e8b6c23f2f8eb0103fe48ee7ebf47ab6786b64d5c05d"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.2"
+  quill_native_bridge_windows:
+    dependency: transitive
+    description:
+      name: quill_native_bridge_windows
+      sha256: "3f96ced19e3206ddf4f6f7dde3eb16bdd05e10294964009ea3a806d995aa7caa"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.2"
   quiver:
     dependency: transitive
     description:
@@ -3159,10 +3231,10 @@ packages:
     dependency: transitive
     description:
       name: test_api
-      sha256: "19a78f63e83d3a61f00826d09bc2f60e191bf3504183c001262be6ac75589fb8"
+      sha256: "93167629bfc610f71560ab9312acdda4959de4df6fac7492c89ff0d3886f6636"
       url: "https://pub.dev"
     source: hosted
-    version: "0.7.8"
+    version: "0.7.9"
   textwrap:
     dependency: transitive
     description:

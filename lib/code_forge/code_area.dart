@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
-import 'package:markdown_widget/markdown_widget.dart';
+import 'package:jinja_app_widgets_catalog/jinja_app_widgets_catalog.dart';
 import 'package:re_highlight/languages/dart.dart';
 import 'package:re_highlight/re_highlight.dart';
 import 'package:re_highlight/styles/vs2015.dart';
@@ -216,6 +216,13 @@ class CodeForge extends StatefulWidget {
   )?
   finderBuilder;
 
+  /// Callback fired whenever the breakpoint set changes.
+  ///
+  /// Receives an unmodifiable set of 1-indexed line numbers with active breakpoints.
+  /// Fires after every breakpoint mutation: user interaction, programmatic API,
+  /// line shifting, undo/redo, and full content replace.
+  final void Function(Set<int>)? onBreakpointsChanged;
+
   /// Creates a [CodeForge] code editor widget.
   const CodeForge({
     super.key,
@@ -250,6 +257,7 @@ class CodeForge extends StatefulWidget {
     this.matchHighlightStyle,
     this.finderBuilder,
     this.findController,
+    this.onBreakpointsChanged,
   });
 
   @override
@@ -345,6 +353,11 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
     _controller.setUndoController(_undoRedoController);
     _controller.deleteFoldRangeOnDeletingFirstLine =
         _deleteFoldRangeOnDeletingFirstLine;
+
+    // Wire up breakpoint change callback if provided
+    if (widget.onBreakpointsChanged != null) {
+      _controller.onBreakpointsChanged(widget.onBreakpointsChanged!);
+    }
 
     if (widget.readOnly && !_controller.readOnly) {
       _controller.readOnly = true;
@@ -2212,10 +2225,10 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                   _buildContextMenu(),
                   ValueListenableBuilder(
                     valueListenable: _offsetNotifier,
-                    builder: (_, offset, __) {
+                    builder: (_, offset, _) {
                       return ValueListenableBuilder(
                         valueListenable: _lspSignatureNotifier,
-                        builder: (_, signature, __) {
+                        builder: (_, signature, _) {
                           if (signature == null ||
                               signature.activeParameter < 0 ||
                               signature.parameters.isEmpty) {
@@ -2410,47 +2423,9 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                           padding: const EdgeInsets.only(
                                             left: 6.5,
                                           ),
-                                          child: MarkdownBlock(
-                                            data: signature.documentation,
-                                            config: MarkdownConfig.darkConfig.copy(
-                                              configs: [
-                                                PConfig(
-                                                  textStyle: _hoverDetailsStyle
-                                                      .textStyle,
-                                                ),
-                                                PreConfig(
-                                                  language:
-                                                      _controller
-                                                          .lspConfig
-                                                          ?.languageId
-                                                          .toLowerCase() ??
-                                                      'dart',
-                                                  theme: _editorTheme,
-                                                  textStyle: TextStyle(
-                                                    fontSize: _hoverDetailsStyle
-                                                        .textStyle
-                                                        .fontSize,
-                                                  ),
-                                                  styleNotMatched: TextStyle(
-                                                    color: _editorTheme['root']!
-                                                        .color,
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    color: _editorTheme['root']!
-                                                        .backgroundColor!,
-                                                    borderRadius:
-                                                        BorderRadius.zero,
-                                                    border: Border.all(
-                                                      width: 0.2,
-                                                      color:
-                                                          _editorTheme['root']!
-                                                              .color ??
-                                                          Colors.grey,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
+                                          child: JinjaHtmlWidget(
+                                            htmlContent:
+                                                signature.documentation,
                                           ),
                                         ),
                                       ],
@@ -2917,50 +2892,9 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                                   .withAlpha(100),
                                               child: SingleChildScrollView(
                                                 controller: completionScrlCtrl,
-                                                child: MarkdownBlock(
-                                                  data: _selectedSuggestionMd!,
-                                                  config: MarkdownConfig.darkConfig.copy(
-                                                    configs: [
-                                                      PConfig(
-                                                        textStyle:
-                                                            _hoverDetailsStyle
-                                                                .textStyle,
-                                                      ),
-                                                      PreConfig(
-                                                        language:
-                                                            _controller
-                                                                .lspConfig
-                                                                ?.languageId
-                                                                .toLowerCase() ??
-                                                            'dart',
-                                                        theme: _editorTheme,
-                                                        textStyle: TextStyle(
-                                                          fontSize:
-                                                              _hoverDetailsStyle
-                                                                  .textStyle
-                                                                  .fontSize,
-                                                        ),
-                                                        styleNotMatched: TextStyle(
-                                                          color:
-                                                              _editorTheme['root']!
-                                                                  .color,
-                                                        ),
-                                                        decoration: BoxDecoration(
-                                                          color: _editorTheme['root']!
-                                                              .backgroundColor!,
-                                                          borderRadius:
-                                                              BorderRadius.zero,
-                                                          border: Border.all(
-                                                            width: 0.2,
-                                                            color:
-                                                                _editorTheme['root']!
-                                                                    .color ??
-                                                                Colors.grey,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
+                                                child: JinjaHtmlWidget(
+                                                  htmlContent:
+                                                      _selectedSuggestionMd!,
                                                 ),
                                               ),
                                             ),
@@ -3022,7 +2956,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                           onExit: (_) => _isHoveringPopup.value = false,
                           child: ValueListenableBuilder<Map<String, dynamic>?>(
                             valueListenable: _hoverContentNotifier,
-                            builder: (_, data, __) {
+                            builder: (_, data, _) {
                               if (data == null) {
                                 return ConstrainedBox(
                                   constraints: BoxConstraints(
@@ -3157,50 +3091,9 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
                                               child: SingleChildScrollView(
                                                 controller:
                                                     hoverScrollController,
-                                                child: MarkdownBlock(
-                                                  data: hoverMessage,
-                                                  config: MarkdownConfig.darkConfig.copy(
-                                                    configs: [
-                                                      PConfig(
-                                                        textStyle:
-                                                            _hoverDetailsStyle
-                                                                .textStyle,
-                                                      ),
-                                                      PreConfig(
-                                                        language:
-                                                            _controller
-                                                                .lspConfig
-                                                                ?.languageId
-                                                                .toLowerCase() ??
-                                                            "dart",
-                                                        theme: _editorTheme,
-                                                        textStyle: TextStyle(
-                                                          fontSize:
-                                                              _hoverDetailsStyle
-                                                                  .textStyle
-                                                                  .fontSize,
-                                                        ),
-                                                        styleNotMatched: TextStyle(
-                                                          color:
-                                                              _editorTheme['root']!
-                                                                  .color,
-                                                        ),
-                                                        decoration: BoxDecoration(
-                                                          color: _editorTheme['root']!
-                                                              .backgroundColor!,
-                                                          borderRadius:
-                                                              BorderRadius.zero,
-                                                          border: Border.all(
-                                                            width: 0.2,
-                                                            color:
-                                                                _editorTheme['root']!
-                                                                    .color ??
-                                                                Colors.grey,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
+                                                child: JinjaHtmlWidget(
+                                                  htmlContent: hoverMessage
+                                                      .toString(),
                                                 ),
                                               ),
                                             ),
@@ -3669,6 +3562,8 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   final _dtap = DoubleTapGestureRecognizer();
   final _onetap = TapGestureRecognizer();
   late final double _gutterPadding;
+  int?
+  _hoveredBreakpointLine; // 0-indexed line currently hovered in breakpoint column
   late final Paint _caretPainter;
   late final Paint _bracketHighlightPainter;
   late ui.ParagraphStyle _paragraphStyle;
@@ -3859,10 +3754,14 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       if (_gutterStyle.gutterWidth != null) {
         _gutterWidth = gutterStyle.gutterWidth!;
       } else {
+        final breakpointColumnWidth = _gutterStyle.showBreakpoints
+            ? fontSize * 1.5
+            : 0;
         final digits = controller.lineCount.toString().length;
         final digitWidth = digits * _gutterPadding * 0.6;
         final foldIconSpace = enableFolding ? fontSize + 4 : 0;
-        _gutterWidth = digitWidth + foldIconSpace + _gutterPadding;
+        _gutterWidth =
+            breakpointColumnWidth + digitWidth + foldIconSpace + _gutterPadding;
       }
     } else {
       _gutterWidth = 0;
@@ -4509,10 +4408,14 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
 
       if (enableGutter && gutterStyle.gutterWidth == null) {
         final fontSize = textStyle?.fontSize ?? 14.0;
+        final breakpointColumnWidth = gutterStyle.showBreakpoints
+            ? fontSize * 1.5
+            : 0;
         final digits = newLineCount.toString().length;
         final digitWidth = digits * _gutterPadding * 0.6;
         final foldIconSpace = enableFolding ? fontSize + 4 : 0;
-        _gutterWidth = digitWidth + foldIconSpace + _gutterPadding;
+        _gutterWidth =
+            breakpointColumnWidth + digitWidth + foldIconSpace + _gutterPadding;
       }
 
       if (enableFolding) {
@@ -4563,6 +4466,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
         controller.foldings = adjustedControllerFoldings;
         controller.adjustLspFoldRangesForLineChange(editLine, lineDelta);
       }
+
+      // Shift breakpoints when line count changes
+      controller.shiftBreakpointsForLineChange(insertionLine, lineDelta);
 
       _deferLayout();
     } else if (affectedLine != null) {
@@ -6513,18 +6419,85 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
           color: lineNumberColor,
         );
 
+        // Calculate breakpoint column width
+        final fontSize = textStyle?.fontSize ?? 14.0;
+        final breakpointColumnWidth = gutterStyle.showBreakpoints
+            ? fontSize * 1.5
+            : 0;
+
+        // Draw breakpoint circle if enabled and line is not folded
+        if (gutterStyle.showBreakpoints && !_isLineFolded(i)) {
+          final breakpointLine1Indexed = i + 1; // Convert to 1-indexed
+          final hasBreakpoint = controller.breakpoints.contains(
+            breakpointLine1Indexed,
+          );
+          final isHovered = _hoveredBreakpointLine == i;
+
+          if (hasBreakpoint || isHovered) {
+            final breakpointX = isRTL
+                ? gutterX + _gutterWidth - breakpointColumnWidth / 2
+                : gutterX + breakpointColumnWidth / 2;
+            final breakpointY =
+                offset.dy +
+                (innerPadding?.top ?? 0) +
+                contentTop +
+                visualYOffset -
+                vscrollController.offset +
+                lineHeight / 2;
+
+            if (hasBreakpoint) {
+              // Draw filled circle
+              final circlePaint = Paint()
+                ..color = gutterStyle.breakpointColor
+                ..style = PaintingStyle.fill;
+              canvas.drawCircle(
+                Offset(breakpointX, breakpointY),
+                4.0,
+                circlePaint,
+              );
+
+              // Draw highlight ring if hovered
+              if (isHovered) {
+                final ringPaint = Paint()
+                  ..color = gutterStyle.breakpointColor.withOpacity(0.3)
+                  ..style = PaintingStyle.stroke
+                  ..strokeWidth = 2.0;
+                canvas.drawCircle(
+                  Offset(breakpointX, breakpointY),
+                  6.0,
+                  ringPaint,
+                );
+              }
+            } else if (isHovered) {
+              // Draw preview circle at 50% opacity
+              final previewPaint = Paint()
+                ..color = gutterStyle.breakpointColor.withOpacity(0.5)
+                ..style = PaintingStyle.fill;
+              canvas.drawCircle(
+                Offset(breakpointX, breakpointY),
+                4.0,
+                previewPaint,
+              );
+            }
+          }
+        }
+
         final lineNumPara = _buildLineNumberParagraph(
           (i + 1).toString(),
           lineNumberStyle,
         );
         final numWidth = lineNumPara.longestLine;
 
+        // Shift line number X offset right by breakpoint column width
+        final lineNumberXOffset = breakpointColumnWidth;
+
         canvas.drawParagraph(
           lineNumPara,
           offset +
               Offset(
                 (isRTL ? size.width - _gutterWidth : 0) +
-                    (_gutterWidth - numWidth) / 2 -
+                    lineNumberXOffset +
+                    (_gutterWidth - lineNumberXOffset - numWidth) / 2 -
                     (enableFolding ? (lineNumberStyle.fontSize ?? 14) / 2 : 0),
                 (innerPadding?.top ?? 0) +
                     contentTop +
@@ -9144,6 +9117,37 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     final textOffset = _getTextOffsetFromPosition(contentPosition);
 
     if (event is PointerHoverEvent) {
+      // Handle breakpoint column hover
+      if (enableGutter && gutterStyle.showBreakpoints) {
+        final fontSize = textStyle?.fontSize ?? 14.0;
+        final breakpointColumnWidth = fontSize * 1.5;
+        final gutterX = isRTL ? size.width - _gutterWidth : 0;
+        final isInBreakpointColumn = isRTL
+            ? localPosition.dx >= gutterX &&
+                  localPosition.dx <= gutterX + breakpointColumnWidth
+            : localPosition.dx >= gutterX &&
+                  localPosition.dx <= gutterX + breakpointColumnWidth;
+
+        if (isInBreakpointColumn) {
+          final hoverY =
+              localPosition.dy +
+              vscrollController.offset -
+              (innerPadding?.top ?? 0);
+          if (hoverY >= 0) {
+            final hoveredLine = _findVisibleLineByYPosition(hoverY);
+            if (_hoveredBreakpointLine != hoveredLine) {
+              _hoveredBreakpointLine = hoveredLine;
+              markNeedsPaint();
+            }
+          }
+        } else {
+          if (_hoveredBreakpointLine != null) {
+            _hoveredBreakpointLine = null;
+            markNeedsPaint();
+          }
+        }
+      }
+
       if (hoverNotifier.value == null) {
         _hoverTimer?.cancel();
       }
@@ -9219,6 +9223,28 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       final gutterClickArea = isRTL
           ? localPosition.dx > size.width - _gutterWidth
           : localPosition.dx < _gutterWidth;
+
+      // Handle breakpoint column click/tap (before folding check)
+      if (!readOnly &&
+          enableGutter &&
+          gutterStyle.showBreakpoints &&
+          gutterClickArea) {
+        final fontSize = textStyle?.fontSize ?? 14.0;
+        final breakpointColumnWidth = fontSize * 1.5;
+        final gutterX = isRTL ? size.width - _gutterWidth : 0;
+        final isInBreakpointColumn = isRTL
+            ? localPosition.dx >= gutterX &&
+                  localPosition.dx <= gutterX + breakpointColumnWidth
+            : localPosition.dx >= gutterX &&
+                  localPosition.dx <= gutterX + breakpointColumnWidth;
+
+        if (isInBreakpointColumn) {
+          if (clickY < 0) return;
+          final clickedLine = _findVisibleLineByYPosition(clickY);
+          controller.toggleBreakpoint(clickedLine + 1); // Convert to 1-indexed
+          return;
+        }
+      }
 
       if (enableFolding && enableGutter && gutterClickArea) {
         if (clickY < 0) return;
