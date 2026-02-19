@@ -45,6 +45,8 @@ class AppLogger {
   /// Custom prefix to add to all log messages.
   String? customPrefix;
 
+  bool displayLog = false;
+
   AppLogger._internal();
 
   /// Sets the minimum log level. Messages below this level will be filtered.
@@ -163,6 +165,9 @@ class AppLogger {
     StackTrace? stackTrace,
     Map<String, dynamic>? data,
   }) {
+    if (!displayLog) {
+      return;
+    }
     // Filter out messages below the minimum level
     if (_shouldLog(level)) {
       final buffer = StringBuffer();
