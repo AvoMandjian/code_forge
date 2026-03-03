@@ -326,7 +326,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
         widget.horizontalScrollController ?? ScrollController();
     _vscrollController = widget.verticalScrollController ?? ScrollController();
     _editorTheme = widget.editorTheme ?? vs2015Theme;
-    _language = widget.language ?? langDart;
+    _language = widget.language ?? _controller.currentLanguage ?? langDart;
     _controller.setLanguage(_language);
     initializeLanguageSpecificSuggestions(
       currentLanguage: _language,
@@ -719,10 +719,7 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
   TextSpan _buildSuggestionLabelTextSpan(String label, List<int>? matchRanges) {
     final baseStyle =
         _suggestionStyle.labelTextStyle ??
-        TextStyle(
-          fontSize: widget.textStyle?.fontSize ?? 14,
-          color: _editorTheme['root']?.color ?? Colors.black,
-        );
+        TextStyle(fontSize: 14, color: Colors.black);
 
     // No match ranges - return plain text
     if (matchRanges == null || matchRanges.isEmpty) {
@@ -759,7 +756,9 @@ class _CodeForgeState extends State<CodeForge> with TickerProviderStateMixin {
             text: char,
             style: baseStyle.copyWith(
               fontWeight: FontWeight.bold,
-              color: Colors.blue,
+              color: Color(
+                int.parse('#F1330D'.substring(1, 7), radix: 16) + 0xFF000000,
+              ),
             ),
           ),
         );
@@ -3604,7 +3603,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   int? _cachedMagnifiedLine, _cachedMagnifiedOffset;
   List<ui.Paragraph>? _cachedSelectionMagnifierParagraphs;
   int? _cachedSelectionMagnifierStartLine, _cachedSelectionMagnifierEndLine;
-  int? _ghostTextAnchorLine, _highlightedLine;
+  int? _ghostTextAnchorLine, _highlightedLine, _errorLine;
   int _lastAppliedSemanticVersion = -1, _lastDocumentVersion = -1;
   int _previousLineCount = 0;
   int _ghostTextLineCount = 0, _cachedLineCount = 0;
@@ -4144,9 +4143,11 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
       );
     } else if (caretY + caretHeight >= vScrollOffset + viewportHeight) {
       final targetOffset = caretY + caretHeight - viewportHeight;
-      vscrollController.jumpTo(
-        targetOffset.clamp(0, vscrollController.position.maxScrollExtent),
-      );
+      try {
+        vscrollController.jumpTo(
+          targetOffset.clamp(0, vscrollController.position.maxScrollExtent),
+        );
+      } catch (_) {}
     }
 
     if (isRTL) {
@@ -4795,6 +4796,7 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     final targetY = _getLineYOffset(line, hasActiveFolds);
     final viewportHeight = vscrollController.position.viewportDimension;
     final maxScroll = vscrollController.position.maxScrollExtent;
+
     double scrollTarget = targetY - (viewportHeight / 2) + (_lineHeight / 2);
 
     scrollTarget = scrollTarget.clamp(0.0, maxScroll);
@@ -4806,9 +4808,39 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
           curve: Curves.easeInOut,
         )
         .then((_) {
-          _highlightedLine = line;
+          _highlightedLine = line - 1;
           lineHighlightController.forward(from: 0.0);
+          _errorLine = line - 1;
         });
+  }
+
+  OverlayEntry? _overlayEntry;
+  void _showTooltip(Offset position) {
+    if (_overlayEntry != null) return;
+
+    _overlayEntry = OverlayEntry(
+      builder: (context) => Positioned(
+        left: position.dx + 10,
+        top: position.dy + 10,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.red),
+            ),
+            child: SelectableText(
+              controller.errorMessage ?? '',
+              style: const TextStyle(color: Colors.red),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    Overlay.of(context).insert(_overlayEntry!);
   }
 
   void _foldWithChildren(FoldRange parentFold) {
@@ -5657,6 +5689,15 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     );
 
     _drawLineHighlight(
+      canvas,
+      offset,
+      firstVisibleLine,
+      lastVisibleLine,
+      firstVisibleLineY,
+      hasActiveFolds,
+    );
+
+    _drawErrorHighlight(
       canvas,
       offset,
       firstVisibleLine,
@@ -8217,6 +8258,67 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     canvas.drawRect(Rect.fromLTWH(screenX, screenY, width, lineHeight), paint);
   }
 
+  Rect? _errorRect;
+  void _drawErrorHighlight(
+    Canvas canvas,
+    Offset offset,
+    int firstVisibleLine,
+    int lastVisibleLine,
+    double firstVisibleLineY,
+    bool hasActiveFolds,
+  ) {
+    if (_errorLine == null || _lineHighlightAnimation == null) return;
+
+    final highlightLine = _errorLine!;
+
+    if (highlightLine < firstVisibleLine || highlightLine > lastVisibleLine) {
+      return;
+    }
+
+    if (hasActiveFolds && _isLineFolded(highlightLine)) return;
+
+    if (controller.errorMessage == null) {
+      _errorLine = null;
+      return;
+    }
+
+    final lineY = _getLineYOffset(highlightLine, hasActiveFolds);
+    final lineHeight = lineWrap
+        ? _getWrappedLineHeight(highlightLine)
+        : _lineHeight;
+
+    final screenY =
+        offset.dy + (innerPadding?.top ?? 0) + lineY - vscrollController.offset;
+    final screenX =
+        offset.dx +
+        _gutterWidth +
+        (innerPadding?.left ?? 0) -
+        (lineWrap ? 0 : _effectiveHScroll);
+
+    final highlightColor = (Colors.red).withValues(alpha: 0.5);
+
+    final paint = Paint()
+      ..color = highlightColor
+      ..style = PaintingStyle.fill;
+
+    final width = size.width - _gutterWidth - (innerPadding?.horizontal ?? 0);
+    canvas.drawRect(Rect.fromLTWH(screenX, screenY, width, lineHeight), paint);
+    _errorRect = Rect.fromLTWH(screenX, screenY, width, lineHeight);
+  }
+
+  void _handleHover(Offset localPosition) {
+    if (_errorRect != null && _errorRect!.contains(localPosition)) {
+      _showTooltip(localPosition);
+    } else {
+      _overlayEntry?.remove();
+      _hideTooltip();
+    }
+  }
+
+  void _hideTooltip() {
+    _overlayEntry = null;
+  }
+
   void _drawGutterDecorations(
     Canvas canvas,
     Offset offset,
@@ -9119,6 +9221,9 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
     if (event is PointerHoverEvent) {
       // Handle breakpoint column hover
       if (enableGutter && gutterStyle.showBreakpoints) {
+        if (controller.errorMessage != null) {
+          _handleHover(event.localPosition);
+        }
         final fontSize = textStyle?.fontSize ?? 14.0;
         final breakpointColumnWidth = fontSize * 1.5;
         final gutterX = isRTL ? size.width - _gutterWidth : 0;
@@ -9127,7 +9232,6 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
                   localPosition.dx <= gutterX + breakpointColumnWidth
             : localPosition.dx >= gutterX &&
                   localPosition.dx <= gutterX + breakpointColumnWidth;
-
         if (isInBreakpointColumn) {
           final hoverY =
               localPosition.dy +

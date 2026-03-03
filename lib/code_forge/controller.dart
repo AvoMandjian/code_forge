@@ -103,6 +103,9 @@ class CodeForgeController implements DeltaTextInputClient {
   /// Used to compute the pivot line for breakpoint shifting.
   int? lastStructuralEditOffset;
 
+  /// Error message from the last failed operation, if any. Can be used for debugging or user feedback.
+  String? errorMessage;
+
   /// Batching flag: indicates breakpoints changed during an undo/redo action.
   bool _pendingBreakpointsChanged = false;
 
@@ -2221,6 +2224,26 @@ class CodeForgeController implements DeltaTextInputClient {
     return _selection.extentOffset - _bufferLineRopeStart;
   }
 
+  void setError(String? error) {
+    int? errorLine;
+    errorMessage = error;
+    if (errorMessage != null) {
+      errorLine = extractErrorLine(errorMessage!);
+    }
+    if (errorLine != null) {
+      scrollToLine(errorLine);
+    }
+  }
+
+  int? extractErrorLine(String error) {
+    final regex = RegExp(r'line\s+(\d+)', caseSensitive: false);
+    final match = regex.firstMatch(error);
+    if (match != null) {
+      return int.tryParse(match.group(1)!);
+    }
+    return null;
+  }
+
   /// Insert text at the current cursor position (or replace selection).
   void insertAtCurrentCursor(
     String textToInsert, {
@@ -2231,7 +2254,7 @@ class CodeForgeController implements DeltaTextInputClient {
     _flushBuffer();
 
     final cursorPosition = selection.extentOffset;
-    final safePosition = cursorPosition.clamp(0, _rope.length);
+    int safePosition = cursorPosition.clamp(0, _rope.length);
     final currentLine = _rope.getLineAtOffset(safePosition);
     final isFolded = foldings.values.any(
       (fold) =>
@@ -2254,7 +2277,7 @@ class CodeForgeController implements DeltaTextInputClient {
     if (replaceTypedChar) {
       final ropeText = _rope.getText();
       final prefix = getCurrentWordPrefix(ropeText, safePosition);
-      final prefixStart = (safePosition - prefix.length).clamp(0, _rope.length);
+      int prefixStart = (safePosition - prefix.length).clamp(0, _rope.length);
 
       AppLogger.instance.debug(
         'Code change: Insert at cursor (replace word)',
@@ -2268,6 +2291,10 @@ class CodeForgeController implements DeltaTextInputClient {
               : textToInsert,
         },
       );
+      if (prefix.contains('if')) {
+        prefixStart -= 2;
+        safePosition += 1;
+      }
       replaceRange(prefixStart, safePosition, textToInsert);
     } else {
       AppLogger.instance.debug(
@@ -3151,7 +3178,9 @@ class CodeForgeController implements DeltaTextInputClient {
 
   /// Sets the scroll callback - called by the render object.
   void setScrollCallback(void Function(int line)? scrollToLine) {
-    _scrollToLineCallback = scrollToLine;
+    if (scrollToLine != null) {
+      _scrollToLineCallback = scrollToLine;
+    }
   }
 
   /// Scrolls the editor view to make the specified line visible.
